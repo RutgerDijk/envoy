@@ -2,7 +2,7 @@
 # Stack Auto-Detection Script
 # Detects which technology stacks are present in the current project
 
-set -e
+# Note: Not using set -e because detect_stack returns 1 when stack not found
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DETECTED_STACKS=()
