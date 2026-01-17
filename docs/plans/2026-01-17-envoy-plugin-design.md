@@ -106,7 +106,8 @@ envoy/
 │   ├── writing-plans/SKILL.md         # Spec → detailed implementation plan
 │   ├── executing-plans/SKILL.md       # Configurable execution
 │   ├── pickup/SKILL.md                # /envoy:pickup <issue> → worktree + load
-│   ├── layered-review/SKILL.md        # CodeRabbit → fresh AI review
+│   ├── layered-review/SKILL.md        # Full 4-layer review process
+│   ├── visual-review/SKILL.md         # Chrome DevTools verification (Layer 3)
 │   ├── using-git-worktrees/SKILL.md   # Isolated workspace creation
 │   ├── verification/SKILL.md          # Verify before claiming done
 │   ├── finishing-branch/SKILL.md      # Complete branch workflow
@@ -118,7 +119,9 @@ envoy/
 │   ├── write-plan.md                  # /envoy:write-plan
 │   ├── execute-plan.md                # /envoy:execute-plan
 │   ├── pickup.md                      # /envoy:pickup <issue-number>
-│   ├── review.md                      # /envoy:review
+│   ├── review.md                      # /envoy:review [--check-docs] [--no-check-docs]
+│   ├── quick-review.md                # /envoy:quick-review (layers 1-2 only)
+│   ├── visual-review.md               # /envoy:visual-review (Chrome DevTools only)
 │   ├── finalize.md                    # /envoy:finalize
 │   ├── wiki-sync.md                   # /envoy:wiki-sync
 │   └── docstrings.md                  # /envoy:docstrings
@@ -379,36 +382,269 @@ Auto-detected: `dotnet`, `react`, `postgresql`, ...
 
 ---
 
-## 7. Layered Review Process
+## 7. Code Standards Enforcement
 
-| Phase | Tool | Scope | Action |
-|-------|------|-------|--------|
-| **1** | CodeRabbit | Static analysis | `coderabbit review --prompt-only --base main` |
-| **2** | Triage | Categorize | Obvious → auto-fix, Ambiguous → ask user |
-| **3** | Commit fixes | Version control | `git commit -m "fix: address code review feedback"` |
-| **4** | Fresh AI Agent | Architectural review | Spawn new agent with no implementation context |
-| **5** | Docs check | Consistency | Agent reviews against current wiki/docs |
-| **6** | Report | Summary | Present findings, get user approval to proceed |
+Envoy uses **soft enforcement** — standards live in documentation and stack profiles, violations are flagged in reviews, but developers retain autonomy. No blocking pre-commit hooks.
 
-### Fresh AI Agent Review Prompt
+### Enforcement Layers
 
-The architectural review agent receives:
+| Layer | Tool | When | Action |
+|-------|------|------|--------|
+| **IDE** | EditorConfig, ESLint | On save | Formatting hints |
+| **Build** | Roslyn Analyzers, TypeScript | Build time | Warnings in output |
+| **Review** | CodeRabbit + Stack Profiles | PR/Review | Flag violations |
+| **AI Review** | Documentation-informed agent | `/envoy:review` | Check against standards docs |
+
+### Standards Sources
+
+| Source | Location | Purpose |
+|--------|----------|---------|
+| Project Standards | `.NET_STANDARDS.md`, `FRONTEND_STANDARDS.md` | Project-specific conventions |
+| Stack Profiles | `stacks/*.md` | Technology best practices |
+| Awesome-Copilot | Curated instructions | Industry standards |
+| Wiki | `docs/wiki/` | Feature-specific patterns |
+
+---
+
+## 8. Layered Review Process
+
+Envoy uses a **4-layer review process** that combines automated tools, documentation-informed AI, and visual verification.
+
+### Review Flow
+
+```
+/envoy:review [--check-docs] [--no-check-docs]
+                    ↓
+┌─────────────────────────────────────────────────┐
+│  LOAD CONTEXT                                   │
+│  - Detect stack → load stack profiles           │
+│  - Load project standards docs                  │
+│  - Load relevant wiki pages                     │
+│  - Load linked issue/spec acceptance criteria   │
+└─────────────────────────────────────────────────┘
+                    ↓
+Layer 1: CodeRabbit (Static Analysis)
+        - Run: coderabbit review --prompt-only --base main
+        - Security scanning
+        - Style/pattern checks
+        - Triage: obvious → auto-fix, ambiguous → ask user
+                    ↓
+Layer 2: Documentation-Informed AI Review
+        - Fresh agent (no implementation context)
+        - Has: diff, stack profiles, standards docs, wiki
+        - Checks: code follows documented patterns
+        - Checks: consistent with existing codebase
+        - Checks: meets acceptance criteria from spec
+                    ↓
+Layer 3: Visual/Functional Review (Chrome DevTools)
+        - Start app (docker-compose up / npm run dev)
+        - Navigate to affected pages
+        - Take screenshots
+        - Check console for errors/warnings
+        - Check network requests for issues
+        - Verify acceptance criteria visually
+                    ↓
+Layer 4: Documentation Gap Detection
+        - Default: surface-level (missing docstrings, outdated refs)
+        - --check-docs: deep analysis, suggest new docs
+        - --no-check-docs: skip this layer
+                    ↓
+REPORT
+        - Categorize findings: passed / obvious fix / ambiguous
+        - Include doc references for violations
+        - Present documentation gaps found
+        - Get user approval to proceed
+```
+
+### Review Commands
+
+| Command | Layers | Use Case |
+|---------|--------|----------|
+| `/envoy:review` | 1-4 (default doc check) | Full review |
+| `/envoy:review --check-docs` | 1-4 (deep doc check) | Thorough review with doc analysis |
+| `/envoy:review --no-check-docs` | 1-3 | Fast review, skip doc gaps |
+| `/envoy:quick-review` | 1-2 only | Non-UI changes, skip DevTools |
+| `/envoy:visual-review` | 3 only | Manual DevTools verification |
+
+### Layer 1: CodeRabbit
+
+```bash
+coderabbit review --prompt-only --base main
+```
+
+CodeRabbit checks:
+- Security vulnerabilities
+- Code style violations
+- Common anti-patterns
+- Performance issues
+- Test coverage gaps
+
+### Layer 2: Documentation-Informed AI Review
+
+The review agent receives:
 - The diff of changes (`git diff main...HEAD`)
-- Project documentation (`docs/wiki/*`, `README.md`, `*_STANDARDS.md`)
-- Stack profiles relevant to changes
+- Project standards (`*_STANDARDS.md`)
+- Relevant stack profiles (auto-detected)
+- Wiki pages related to changed areas
+- Acceptance criteria from linked spec
 - **NOT** the implementation conversation (prevents bias)
 
 Review checklist:
 1. Does the implementation match the spec?
-2. Are there architectural concerns?
-3. Is the code consistent with project standards?
+2. Does the code follow project standards?
+3. Are there architectural concerns?
 4. Are there security implications?
 5. Is error handling appropriate?
 6. Are there performance concerns?
+7. Is the code consistent with existing patterns?
+
+### Layer 3: Visual/Functional Review (Chrome DevTools)
+
+Uses Chrome DevTools MCP integration to verify the implementation works:
+
+| Check | Tool | Purpose |
+|-------|------|---------|
+| Visual appearance | `take_screenshot` | Does it look right? |
+| Console errors | `list_console_messages` | Any JS errors/warnings? |
+| Network issues | `list_network_requests` | Failed requests? Slow endpoints? |
+| Functional flows | `click`, `fill_form`, `wait_for` | Does the feature work? |
+| Page state | `take_snapshot` | DOM structure correct? |
+| Navigation | `navigate_page` | Routes work correctly? |
+
+**Process:**
+1. Start the application
+2. Navigate to pages affected by changes
+3. Execute key user flows from acceptance criteria
+4. Capture screenshots for visual verification
+5. Check console for errors
+6. Verify network requests succeed
+
+### Layer 4: Documentation Gap Detection
+
+| Mode | Flag | Behavior |
+|------|------|----------|
+| **Default** | (none) | Surface-level: missing docstrings, obvious outdated refs |
+| **Deep** | `--check-docs` | Cross-reference all standards, wiki; suggest new docs |
+| **Skip** | `--no-check-docs` | Skip documentation checking entirely |
+
+Documentation gaps reported:
+- Code patterns not documented in standards
+- New features not reflected in wiki
+- Outdated documentation that contradicts current code
+- Missing API documentation
+- Undocumented configuration options
 
 ---
 
-## 8. Execution Strategies
+## 9. Stack Profile Structure
+
+Each stack profile follows a consistent structure that enables documentation-informed review:
+
+```markdown
+# [Technology] Stack Profile
+
+## Overview
+Brief description of the technology and its role in the stack.
+
+## Best Practices
+- Practice 1: explanation
+- Practice 2: explanation
+- ...
+
+## Common Mistakes to Check
+- [ ] Mistake 1: why it's wrong, what to do instead
+- [ ] Mistake 2: why it's wrong, what to do instead
+- ...
+
+## Review Checklist
+- [ ] Check 1 (references: .NET_STANDARDS.md section X)
+- [ ] Check 2 (references: awesome-copilot/xyz.instructions.md)
+- ...
+
+## Code Examples
+
+### Good Pattern
+```code
+// Example of correct implementation
+```
+
+### Anti-Pattern
+```code
+// Example of what NOT to do
+```
+
+## References
+- Link to project standards doc section
+- Link to awesome-copilot instructions
+- Link to official documentation
+- Link to wiki pages
+```
+
+### Example: dotnet.md
+
+```markdown
+# .NET Stack Profile
+
+## Overview
+.NET 10 with ASP.NET Core for REST APIs, following clean architecture patterns.
+
+## Best Practices
+- Use async/await for all I/O operations
+- Follow repository pattern for data access
+- Use dependency injection for all services
+- Return ActionResult<T> from controllers
+- Use structured logging with Serilog
+
+## Common Mistakes to Check
+- [ ] Sync over async: using .Result or .Wait() instead of await
+- [ ] Missing null checks on nullable reference types
+- [ ] N+1 queries in EF Core (use Include/ThenInclude)
+- [ ] Catching generic Exception instead of specific types
+- [ ] Not disposing IDisposable resources
+- [ ] Hardcoded configuration values
+
+## Review Checklist
+- [ ] Follows .NET_STANDARDS.md naming conventions
+- [ ] Uses Serilog structured logging (not Console.WriteLine)
+- [ ] Has XML documentation on public APIs
+- [ ] Controllers are thin (logic in services)
+- [ ] Async methods end with "Async" suffix
+- [ ] Uses cancellation tokens for async operations
+
+## Code Examples
+
+### Good: Async Controller Action
+```csharp
+[HttpGet("{id}")]
+public async Task<ActionResult<UserDto>> GetUser(int id, CancellationToken ct)
+{
+    var user = await _userService.GetByIdAsync(id, ct);
+    if (user is null) return NotFound();
+    return Ok(user);
+}
+```
+
+### Anti-Pattern: Sync over Async
+```csharp
+// DON'T DO THIS
+[HttpGet("{id}")]
+public ActionResult<UserDto> GetUser(int id)
+{
+    var user = _userService.GetByIdAsync(id).Result; // BLOCKS THREAD
+    return Ok(user);
+}
+```
+
+## References
+- Project: `.NET_STANDARDS.md`
+- Awesome-Copilot: `csharp.instructions.md`
+- Awesome-Copilot: `aspnet-rest-apis.instructions.md`
+- Microsoft: https://docs.microsoft.com/aspnet/core
+```
+
+---
+
+## 10. Execution Strategies
 
 Plans can specify their execution strategy:
 
@@ -449,7 +685,7 @@ execution:
 
 ---
 
-## 9. Standalone Skills
+## 11. Standalone Skills
 
 These skills can be invoked independently, not just as part of finalization:
 
@@ -467,7 +703,7 @@ These skills can be invoked independently, not just as part of finalization:
 
 ---
 
-## 10. Curated Awesome-Copilot Resources
+## 12. Curated Awesome-Copilot Resources
 
 ### Instructions (Coding Standards)
 
@@ -513,7 +749,7 @@ These skills can be invoked independently, not just as part of finalization:
 
 ---
 
-## 11. Azure Hosting Architecture (Target)
+## 13. Azure Hosting Architecture (Target)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -547,7 +783,7 @@ These skills can be invoked independently, not just as part of finalization:
 
 ---
 
-## 12. Future Stack Modules (YAGNI'd)
+## 14. Future Stack Modules (YAGNI'd)
 
 Reserved for when needed:
 
@@ -559,20 +795,22 @@ Reserved for when needed:
 
 ---
 
-## 13. Success Criteria
+## 15. Success Criteria
 
 Envoy is successful when:
 
 1. **Handoff works** — A developer can `/envoy:pickup 123` and have everything needed to execute without asking questions
 2. **Artifacts are durable** — GitHub issues + spec docs survive context loss, can be resumed days later
-3. **Review catches real issues** — Layered review (CodeRabbit + fresh AI) finds problems the implementer missed
-4. **Stack profiles help** — Auto-detected best practices reduce boilerplate and prevent common mistakes
-5. **Execution is flexible** — Parallel/batch/sequential strategies work for different types of work
-6. **Wiki stays in sync** — Documentation updates flow to GitHub wiki without manual intervention
+3. **Review catches real issues** — 4-layer review (CodeRabbit → Doc-informed AI → Visual → Doc gaps) finds problems the implementer missed
+4. **Visual verification works** — Chrome DevTools catches UI bugs, console errors, and network issues
+5. **Stack profiles help** — Auto-detected best practices reduce boilerplate and prevent common mistakes
+6. **Execution is flexible** — Parallel/batch/sequential strategies work for different types of work
+7. **Wiki stays in sync** — Documentation updates flow to GitHub wiki without manual intervention
+8. **Doc gaps are surfaced** — Review identifies missing or outdated documentation
 
 ---
 
-## 14. Implementation Priority
+## 16. Implementation Priority
 
 ### Phase 1: Core Skills
 1. `brainstorming/SKILL.md` — The starting point
@@ -582,29 +820,30 @@ Envoy is successful when:
 
 ### Phase 2: Execution & Review
 5. `executing-plans/SKILL.md` — Configurable execution
-6. `layered-review/SKILL.md` — CodeRabbit + fresh AI
-7. `verification/SKILL.md` — Verify before done
+6. `layered-review/SKILL.md` — Full 4-layer review process
+7. `visual-review/SKILL.md` — Chrome DevTools verification
+8. `verification/SKILL.md` — Verify before done
 
 ### Phase 3: Finalization
-8. `finishing-branch/SKILL.md` — Complete workflow
-9. `wiki-sync/SKILL.md` — Standalone wiki sync
-10. `docstrings/SKILL.md` — Standalone docstrings
+9. `finishing-branch/SKILL.md` — Complete workflow
+10. `wiki-sync/SKILL.md` — Standalone wiki sync
+11. `docstrings/SKILL.md` — Standalone docstrings
 
 ### Phase 4: Stack Profiles
-11. Core stacks: dotnet, react, typescript, postgresql
-12. Testing stacks: testing-dotnet, testing-playwright
-13. Infrastructure stacks: docker-compose, azure-*, bicep, github-actions
-14. Supporting stacks: remaining profiles
+12. Core stacks: dotnet, react, typescript, postgresql
+13. Testing stacks: testing-dotnet, testing-playwright
+14. Infrastructure stacks: docker-compose, azure-*, bicep, github-actions
+15. Supporting stacks: remaining profiles
 
 ### Phase 5: Polish
-15. Templates (github-issue.md, spec-doc.md, plan-doc.md)
-16. Agents (curated from awesome-copilot)
-17. Commands (all /envoy:* commands)
-18. Documentation and README
+16. Templates (github-issue.md, spec-doc.md, plan-doc.md)
+17. Agents (curated from awesome-copilot)
+18. Commands (all /envoy:* commands, including quick-review and visual-review)
+19. Documentation and README
 
 ---
 
-## 15. Open Questions
+## 17. Open Questions
 
 1. **Plan file format** — YAML frontmatter in markdown? Pure YAML? JSON?
 2. **Worktree naming** — Convention for worktree directory names?
@@ -628,10 +867,12 @@ Envoy is successful when:
 | subagent-driven-development | (part of executing-plans) | ~40% | Integrated into execution strategies |
 | test-driven-development | (via stack profiles) | ~60% | TDD guidance in testing-dotnet.md |
 | systematic-debugging | (not included v1) | 0% | Future consideration |
-| requesting-code-review | (part of layered-review) | ~30% | Merged into review workflow |
-| receiving-code-review | (part of layered-review) | ~30% | Merged into review workflow |
+| requesting-code-review | (part of layered-review) | ~30% | Merged into 4-layer review workflow |
+| receiving-code-review | (part of layered-review) | ~30% | Merged into 4-layer review workflow |
 | writing-skills | (not included v1) | 0% | Future consideration |
 | using-superpowers | (README) | ~50% | Documentation only |
+| (none) | visual-review | 0% | **NEW** Chrome DevTools verification |
+| (none) | quick-review | 0% | **NEW** Fast review (layers 1-2 only) |
 
 ---
 
@@ -647,3 +888,4 @@ Envoy is successful when:
 ---
 
 *This design document was created during a brainstorming session on 2026-01-17.*
+*Updated on 2026-01-17 with: code standards enforcement, 4-layer review process, Chrome DevTools visual verification, documentation gap detection, and stack profile structure.*
