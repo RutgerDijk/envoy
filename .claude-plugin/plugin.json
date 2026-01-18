@@ -1,8 +1,18 @@
 {
   "name": "envoy",
   "description": "Professional .NET/React/Azure development workflows with handoff-ready artifacts, 4-layer review, and visual verification",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "Rutger Dijkstra"
-  }
+  },
+  "repository": "https://github.com/RutgerDijk/envoy",
+  "keywords": [
+    "dotnet",
+    "react",
+    "azure",
+    "tdd",
+    "code-review",
+    "workflows",
+    "best-practices"
+  ]
 }

@@ -1,19 +1,10 @@
 ---
-description: Run quick review (CodeRabbit + AI only, skip visual verification)
+name: quick-review
+description: Fast code review (CodeRabbit + AI only, no visual)
 ---
 
-# Quick Review Command
+Use the `envoy:layered-review` skill but only run Layers 1 and 2:
+- Layer 1: CodeRabbit static analysis
+- Layer 2: Documentation-informed AI review
 
-Use the envoy:layered-review skill but only run Layers 1 and 2:
-
-1. **Layer 1:** CodeRabbit static analysis
-2. **Layer 2:** Documentation-informed AI review
-
-Skips:
-- Layer 3 (visual verification)
-- Layer 4 (documentation gaps)
-
-Use this for:
-- Backend-only changes
-- Non-UI changes
-- Quick feedback before full review
+Skip Layer 3 (Visual Review) and Layer 4 (Documentation Gap Detection).

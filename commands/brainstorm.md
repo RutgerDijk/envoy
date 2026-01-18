@@ -1,14 +1,8 @@
 ---
-description: Design a feature and create implementation plan in one flow
+name: brainstorm
+description: Turn an idea into a design doc, implementation plan, and GitHub issue
 ---
 
-# Brainstorm Command
+Use the `envoy:brainstorming` skill exactly as written.
 
-Use the envoy:brainstorming skill to design AND plan the feature described in "$ARGUMENTS".
-
-**Default:** Creates design doc + GitHub issue + implementation plan
-
-**Flags:**
-- `--design-only` — Stop after design doc + issue (no plan)
-
-If no arguments provided, ask: "What would you like to build?"
+Pass any arguments provided by the user to the skill.

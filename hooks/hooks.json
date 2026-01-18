@@ -1,0 +1,10 @@
+{
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "match": "startup|resume|clear|compact",
+      "type": "command",
+      "command": "run-hook.cmd session-start.sh"
+    }
+  ]
+}

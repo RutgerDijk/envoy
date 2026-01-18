@@ -1,20 +1,14 @@
 ---
-description: Run Chrome DevTools visual verification only
+name: visual-review
+description: Chrome DevTools visual verification only
 ---
 
-# Visual Review Command
+Use the `envoy:visual-review` skill exactly as written.
 
-Use the envoy:visual-review skill to verify UI changes with Chrome DevTools.
-
-**Checks:**
-- Screenshots of affected pages
-- Console for errors/warnings
-- Network requests for failures
-- User flow testing
-
-If "$ARGUMENTS" contains URLs or paths, verify those specific pages.
-Otherwise, detect changed frontend files and verify affected pages.
-
-**Requires:**
-- Application running (backend + frontend)
-- Chrome DevTools MCP configured
+This runs only Layer 3 of the review process:
+- Start the application
+- Navigate to affected pages
+- Take screenshots
+- Check console for errors
+- Check network for failures
+- Test user flows
