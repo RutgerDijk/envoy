@@ -157,17 +157,44 @@ The spec may have been moved or deleted. Check:
 Or create a new spec with /envoy:brainstorm.
 ```
 
-## Stack Detection
+## Stack Detection and Loading
 
-After creating the worktree, detect the project stack by checking for:
+After creating the worktree, detect and load stack profiles:
 
-| File | Stack Profile |
-|------|---------------|
+### Step 1: Run Detection Script
+
+```bash
+# From the Envoy plugin directory
+~/.claude/plugins/cache/envoy-marketplace/envoy/*/stacks/detect-stacks.sh --json
+```
+
+Or manually detect by checking for:
+
+| File | Stack Profiles |
+|------|----------------|
 | `*.csproj` | dotnet, entity-framework, testing-dotnet |
-| `package.json` with "react" | react, typescript |
+| `package.json` with "react" | react, typescript, shadcn-radix, react-query |
 | `tsconfig.json` | typescript |
-| `Dockerfile` | docker-compose |
-| `*.bicep` | bicep, azure |
+| `docker-compose*.yml` | docker-compose |
+| `*.bicep` | bicep, azure-container-apps |
 | `.github/workflows/` | github-actions |
 
-Load detected profiles to inform implementation.
+### Step 2: Read Detected Stack Profiles
+
+For each detected stack, read the profile from `stacks/<stack-name>.md`:
+
+```bash
+# Example: If dotnet, react, postgresql detected
+cat stacks/dotnet.md
+cat stacks/react.md
+cat stacks/postgresql.md
+```
+
+### Step 3: Extract Key Information
+
+From each stack profile, note:
+- **Common mistakes** — Avoid these during implementation
+- **Best practices** — Follow these patterns
+- **Review checklist** — Will be checked during review
+
+Keep this context loaded for the implementation phase.

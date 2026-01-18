@@ -23,19 +23,47 @@ Comprehensive 4-layer review combining automated tools, documentation-informed A
 
 Before starting layers, gather context:
 
+### 1. Get Changed Files
+
 ```bash
-# Get changed files
 git diff --name-only main...HEAD
-
-# Detect stack from changed files
-# Load relevant stack profiles from stacks/
-
-# Load project standards
-# - .NET_STANDARDS.md (if backend changes)
-# - FRONTEND_STANDARDS.md (if frontend changes)
-
-# Load acceptance criteria from linked issue/spec
 ```
+
+### 2. Detect and Load Stack Profiles
+
+Based on changed files, load relevant stack profiles:
+
+| Changed File Pattern | Load These Stacks |
+|---------------------|-------------------|
+| `*.cs`, `*.csproj` | dotnet, entity-framework, api-patterns |
+| `*.tsx`, `*.ts` | react, typescript, tailwind |
+| `*.bicep` | bicep, azure-container-apps |
+| `*test*` | testing-dotnet or testing-playwright |
+
+**Read each detected stack profile:**
+```bash
+cat stacks/dotnet.md       # For .NET changes
+cat stacks/react.md        # For React changes
+# etc.
+```
+
+**Extract from each profile:**
+- Common mistakes (check code against these)
+- Review checklist (use in Layer 2)
+
+### 3. Load Project Standards
+
+```bash
+# If backend changes
+cat .NET_STANDARDS.md 2>/dev/null
+
+# If frontend changes
+cat FRONTEND_STANDARDS.md 2>/dev/null
+```
+
+### 4. Load Acceptance Criteria
+
+From linked issue/spec document.
 
 ### Load Known Limitations
 
