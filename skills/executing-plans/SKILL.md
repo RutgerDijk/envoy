@@ -1,6 +1,6 @@
 ---
 name: executing-plans
-description: Execute implementation plans with configurable strategies (parallel, batch, sequential). Use when you have a plan and are ready to implement.
+description: Use when you have an implementation plan and are ready to start coding
 ---
 
 # Executing Implementation Plans
@@ -43,7 +43,17 @@ Detect and load relevant stack profiles for context during execution.
 
 ## Test-Driven Development (TDD)
 
-**Mandatory:** All implementation tasks must follow TDD. Write tests BEFORE implementation code.
+### The Iron Law
+
+**NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST.**
+
+Write code before test? **Delete it. Start over.**
+
+No exceptions:
+- Don't keep as "reference"
+- Don't "adapt" while writing tests
+- Don't look at it
+- **Delete means delete**
 
 ### TDD Cycle for Each Task
 
@@ -64,13 +74,27 @@ For each task:
 
 ### TDD Enforcement
 
-Before writing any implementation code, ask yourself:
+Before writing ANY implementation code, ask:
 - "Do I have a failing test for this behavior?"
-- If NO → Write the test first
+- If NO → **STOP. Write the test first.**
 
-**Violations:**
-- Writing implementation without tests = Stop, write tests first
-- Tests written after implementation = Revert, start with tests
+### Rationalization Table
+
+| Excuse | Reality |
+|--------|---------|
+| "Too simple to test" | Simple code breaks. Test takes 30 seconds. Write it. |
+| "I'll write tests after" | Tests passing immediately prove nothing. Test first shows the test CAN fail. |
+| "I already know how to implement it" | Good. You'll implement it faster after writing the test. |
+| "Existing code has no tests" | You're improving it now. Add tests. |
+| "It's just a small fix" | Small fixes break things. Test first. |
+| "I'm just exploring" | Explore with tests. Delete exploration code. |
+| "Time pressure" | Skipping tests costs MORE time. Always. |
+
+### Violations = Start Over
+
+- Writing implementation without tests → **Delete code, write test first**
+- Tests written after implementation → **Delete both, start with test**
+- "Just this once" → **No. The answer is always no.**
 
 ### Sequential (Default)
 

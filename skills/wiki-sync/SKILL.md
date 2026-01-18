@@ -1,6 +1,6 @@
 ---
 name: wiki-sync
-description: Sync docs/wiki/ to GitHub wiki repository. Use after updating documentation or as part of finalization.
+description: Use after updating documentation in docs/wiki/, or as part of PR finalization
 ---
 
 # Wiki Sync

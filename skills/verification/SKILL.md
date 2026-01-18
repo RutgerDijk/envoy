@@ -11,11 +11,35 @@ description: Verify changes work before claiming done. Use before committing fix
 
 **Announce at start:** "I'm using envoy:verification to verify these changes work."
 
-## Core Principle
+## The Iron Law
 
-> "Evidence before assertions."
+**NO COMPLETION CLAIMS WITHOUT VERIFICATION EVIDENCE.**
 
-Don't say "this should work" — prove it works. Don't say "I fixed it" — show it's fixed.
+Evidence before assertions. Always.
+
+- Don't say "this should work" — **prove it works**
+- Don't say "I fixed it" — **show it's fixed**
+- Don't say "tests should pass" — **run them and show output**
+
+### Red Flags — STOP
+
+If you catch yourself saying:
+- "It should be fixed"
+- "I believe this works"
+- "I didn't see the error this time"
+- "The change has been made"
+
+**STOP.** These are assertions without evidence. Run verification first.
+
+### Rationalization Table
+
+| Excuse | Reality |
+|--------|---------|
+| "I'm confident this works" | Confidence is not evidence. Run the tests. |
+| "It's a trivial change" | Trivial changes break things. Verify anyway. |
+| "Tests take too long" | Skipping verification takes LONGER when bugs slip through. |
+| "I'll verify after committing" | Unverified commits waste everyone's time. Verify first. |
+| "The code is obviously correct" | Obviously correct code fails all the time. Prove it. |
 
 ## Verification Checklist
 

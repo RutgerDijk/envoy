@@ -1,6 +1,6 @@
 ---
 name: brainstorming
-description: Turn ideas into designs with GitHub issues and implementation plans. Use when starting any new feature or significant change.
+description: Use when starting any new feature, significant change, or when you have an idea that needs design
 ---
 
 # Brainstorming Ideas Into Designs

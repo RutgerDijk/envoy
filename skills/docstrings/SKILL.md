@@ -1,6 +1,6 @@
 ---
 name: docstrings
-description: Add docstrings to public APIs. Use after implementation or as standalone documentation task.
+description: Use when public APIs need documentation, after implementation or before PR creation
 ---
 
 # Add Docstrings

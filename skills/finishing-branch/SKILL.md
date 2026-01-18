@@ -1,6 +1,6 @@
 ---
 name: finishing-branch
-description: Complete a development branch with review, docstrings, wiki sync, and PR creation. Use when implementation is done and ready for merge.
+description: Use when implementation is complete and you're ready to create a PR
 ---
 
 # Finishing a Development Branch

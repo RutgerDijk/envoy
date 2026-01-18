@@ -1,6 +1,6 @@
 ---
 name: pickup
-description: Pick up a GitHub issue, create worktree, and start implementation. Use when ready to implement an issue.
+description: Use when ready to implement a GitHub issue that was created via brainstorming
 ---
 
 # Pickup Issue

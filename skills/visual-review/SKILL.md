@@ -1,6 +1,6 @@
 ---
 name: visual-review
-description: Chrome DevTools visual and functional verification. Use to manually verify UI changes work correctly.
+description: Use when UI changes need visual verification, or to check for console errors and network issues
 ---
 
 # Visual Review with Chrome DevTools

@@ -1,6 +1,6 @@
 ---
 name: layered-review
-description: Run 4-layer code review (CodeRabbit, documentation-informed AI, visual verification, doc gaps). Use after implementation before finalizing.
+description: Use after implementation is complete, before creating PR or finalizing work
 ---
 
 # Layered Review Process

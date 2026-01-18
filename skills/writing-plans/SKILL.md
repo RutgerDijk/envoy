@@ -1,6 +1,6 @@
 ---
 name: writing-plans
-description: Create detailed implementation plans from specs. Use when you have a design doc and need to break it into executable tasks.
+description: Use when you have a design doc or spec and need to create an implementation plan
 ---
 
 # Writing Implementation Plans

@@ -1,6 +1,6 @@
 ---
 name: cleanup
-description: Clean up worktree and feature branch after PR is merged. Use after your PR has been merged to main.
+description: Use after your PR has been merged to main, before starting new work
 ---
 
 # Cleanup After Merge
