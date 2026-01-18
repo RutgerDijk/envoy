@@ -1,0 +1,39 @@
+{
+  "name": "envoy-marketplace",
+  "owner": {
+    "name": "Rutger Dijkstra",
+    "email": "rutger@example.com"
+  },
+  "metadata": {
+    "description": "Professional .NET/React/Azure development workflows for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "envoy",
+      "source": ".",
+      "description": "Professional .NET/React/Azure development workflows with handoff-ready artifacts, 4-layer review, and visual verification",
+      "version": "1.0.0",
+      "author": {
+        "name": "Rutger Dijkstra"
+      },
+      "repository": "https://github.com/RutgerDijk/envoy",
+      "license": "MIT",
+      "keywords": [
+        "dotnet",
+        "react",
+        "azure",
+        "workflows",
+        "code-review",
+        "planning",
+        "tdd"
+      ],
+      "category": "productivity",
+      "tags": [
+        "enterprise",
+        "full-stack",
+        "devops"
+      ]
+    }
+  ]
+}
