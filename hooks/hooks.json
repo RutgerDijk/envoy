@@ -1,10 +1,15 @@
 {
-  "hooks": [
-    {
-      "event": "SessionStart",
-      "match": "startup|resume|clear|compact",
-      "type": "command",
-      "command": "run-hook.cmd session-start.sh"
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
 }
