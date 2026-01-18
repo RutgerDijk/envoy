@@ -66,8 +66,8 @@ gh issue create --title "<Feature Name>" --body "$(cat <<'EOF'
 
 ```bash
 # Create isolated workspace
-git worktree add ../envoy-worktrees/<branch-name> -b feature/<branch-name>
-cd ../envoy-worktrees/<branch-name>
+git worktree add .worktrees/<branch-name> -b feature/<branch-name>
+cd .worktrees/<branch-name>
 claude
 /envoy:pickup <issue-number>
 ```

@@ -50,8 +50,8 @@ TOPIC=$(echo "<issue-title>" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 
 Use envoy:using-git-worktrees:
 
 ```bash
-git worktree add ../envoy-worktrees/$TOPIC -b feature/$TOPIC
-cd ../envoy-worktrees/$TOPIC
+git worktree add .worktrees/$TOPIC -b feature/$TOPIC
+cd .worktrees/$TOPIC
 ```
 
 ### Step 5: Load Context
@@ -64,7 +64,7 @@ cd ../envoy-worktrees/$TOPIC
 
 "**Workspace ready for issue #<number>: <title>**
 
-- **Worktree:** `../envoy-worktrees/<topic>`
+- **Worktree:** `.worktrees/<topic>`
 - **Branch:** `feature/<topic>`
 - **Spec:** `<spec-path>`
 - **Stack profiles:** `<detected-stacks>`
@@ -104,13 +104,13 @@ You can still create a worktree manually and work from the issue description.
 ### Worktree Already Exists
 
 ```
-Worktree for this issue already exists at: ../envoy-worktrees/<topic>
+Worktree for this issue already exists at: .worktrees/<topic>
 
 To continue working:
-  cd ../envoy-worktrees/<topic>
+  cd .worktrees/<topic>
 
 To start fresh:
-  git worktree remove ../envoy-worktrees/<topic>
+  git worktree remove .worktrees/<topic>
   Then run /envoy:pickup <number> again
 ```
 

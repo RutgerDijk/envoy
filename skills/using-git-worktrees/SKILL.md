@@ -15,20 +15,20 @@ Create isolated git worktrees for feature development. Keeps main workspace clea
 
 ### Step 1: Determine Worktree Location
 
-Default location: `../envoy-worktrees/<branch-name>`
+Default location: `.worktrees/<branch-name>`
 
-This keeps worktrees alongside the main repo but separate.
+This keeps worktrees inside the repo in a `.worktrees/` folder (add to `.gitignore`).
 
 ### Step 2: Create Worktree with New Branch
 
 ```bash
-git worktree add ../envoy-worktrees/<branch-name> -b feature/<branch-name>
+git worktree add .worktrees/<branch-name> -b feature/<branch-name>
 ```
 
 ### Step 3: Navigate to Worktree
 
 ```bash
-cd ../envoy-worktrees/<branch-name>
+cd .worktrees/<branch-name>
 ```
 
 ### Step 4: Verify Setup
@@ -44,7 +44,7 @@ Expected: On `feature/<branch-name>` in worktree directory.
 
 | Type | Pattern | Example |
 |------|---------|---------|
-| Worktree dir | `../envoy-worktrees/<topic>` | `../envoy-worktrees/user-auth` |
+| Worktree dir | `.worktrees/<topic>` | `.worktrees/user-auth` |
 | Feature branch | `feature/<topic>` | `feature/user-auth` |
 | Bugfix branch | `fix/<topic>` | `fix/login-error` |
 | Refactor branch | `refactor/<topic>` | `refactor/api-cleanup` |
@@ -85,10 +85,10 @@ After merging the feature branch, remove the worktree:
 
 ```bash
 # From main repo
-git worktree remove ../envoy-worktrees/<branch-name>
+git worktree remove .worktrees/<branch-name>
 
 # Or force remove if dirty
-git worktree remove --force ../envoy-worktrees/<branch-name>
+git worktree remove --force .worktrees/<branch-name>
 ```
 
 Then optionally delete the branch:
