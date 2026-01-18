@@ -31,35 +31,35 @@ brainstorm → pickup → review → finalize → cleanup
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  1. BRAINSTORM                                                       │
-│     /envoy:brainstorm "Add user profile editing"                     │
-│     → Socratic dialogue → Design doc → GitHub Issue → Plan           │
+│  1. BRAINSTORM                                                      │
+│     /envoy:brainstorm "Add user profile editing"                    │
+│     → Socratic dialogue → Design doc → GitHub Issue → Plan          │
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  2. PICKUP                                                           │
-│     /envoy:pickup 123                                                │
-│     → Creates worktree → Loads context → Executes plan with TDD      │
+│  2. PICKUP                                                          │
+│     /envoy:pickup 123                                               │
+│     → Creates worktree → Loads context → Executes plan with TDD     │
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  3. REVIEW                                                           │
-│     /envoy:review                                                    │
-│     → CodeRabbit → AI Review → Visual Review → Doc Gaps              │
+│  3. REVIEW                                                          │
+│     /envoy:review                                                   │
+│     → CodeRabbit → AI Review → Visual Review → Doc Gaps             │
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  4. FINALIZE                                                         │
-│     /envoy:finalize                                                  │
-│     → Docstrings → Wiki sync → Create PR                             │
+│  4. FINALIZE                                                        │
+│     /envoy:finalize                                                 │
+│     → Docstrings → Wiki sync → Create PR                            │
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
                         [ PR Review & Merge ]
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  5. CLEANUP                                                          │
-│     /envoy:cleanup                                                   │
-│     → Remove worktree → Delete feature branch                        │
+│  5. CLEANUP                                                         │
+│     /envoy:cleanup                                                  │
+│     → Remove worktree → Delete feature branch                       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
