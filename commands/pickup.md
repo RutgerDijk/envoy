@@ -1,10 +1,15 @@
 ---
-description: Pick up a GitHub issue and prepare workspace for implementation
+description: Pick up a GitHub issue, create worktree, and start implementation
 ---
 
 # Pickup Command
 
-Use the envoy:pickup skill to prepare issue #$ARGUMENTS for implementation.
+Use the envoy:pickup skill to implement issue #$ARGUMENTS.
+
+**Default behavior:** Creates worktree, loads context, and automatically starts execution if a plan exists.
+
+**Flags:**
+- `--plan-only` — Stop after setup, don't auto-execute
 
 If no issue number provided, show recent issues:
 

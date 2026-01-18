@@ -1,15 +1,22 @@
 ---
 name: pickup
-description: Pick up a GitHub issue and prepare workspace for implementation. Use when another developer created the issue and you're implementing it.
+description: Pick up a GitHub issue, create worktree, and start implementation. Use when ready to implement an issue.
 ---
 
 # Pickup Issue
 
 ## Overview
 
-Pick up a GitHub issue created by envoy:brainstorming. Creates a worktree, loads the linked spec, and prepares for execution.
+Pick up a GitHub issue created by envoy:brainstorming. Creates a worktree, loads context, and **automatically continues to execution** if a plan exists.
 
-**Announce at start:** "I'm using envoy:pickup to prepare issue #<number> for implementation."
+**Announce at start:** "I'm using envoy:pickup to implement issue #<number>."
+
+## Arguments
+
+| Flag | Effect |
+|------|--------|
+| `<issue-number>` | Required: GitHub issue to pick up |
+| `--plan-only` | Stop after setup, don't auto-execute |
 
 ## Process
 
@@ -77,23 +84,30 @@ cd .worktrees/$TOPIC
 2. **Detect project stack** — Auto-load relevant stack profiles
 3. **Check for existing plan** — Look for `*-plan.md` matching the design doc
 
-### Step 6: Report Ready State
+### Step 6: Report Ready State and Continue
 
 "**Workspace ready for issue #<number>: <title>**
 
 - **Worktree:** `.worktrees/<topic>`
 - **Branch:** `feature/<topic>`
 - **Spec:** `<spec-path>`
-- **Stack profiles:** `<detected-stacks>`
-- **Plan exists:** Yes/No
+- **Plan:** `<plan-path>` (or 'None')
+- **Stack profiles:** `<detected-stacks>`"
 
-**Next steps:**"
+### Step 7: Auto-Continue to Execution
 
-If no plan exists:
-"1. `/envoy:write-plan` — Create implementation plan from the spec"
+**If plan exists AND not `--plan-only`:**
+- Announce: "Plan found. Continuing with execution..."
+- Invoke `envoy:executing-plans` with the plan path
+- Continue through the full implementation
 
-If plan exists:
-"1. `/envoy:execute-plan` — Execute the implementation plan"
+**If no plan exists:**
+- Stop and report:
+  "No implementation plan found. Create one first:
+  `/envoy:write-plan <spec-path>`"
+
+**If `--plan-only` flag:**
+- Stop after setup, let user decide next step
 
 ## Error Handling
 
