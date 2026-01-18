@@ -2,6 +2,9 @@
 # Envoy Session Start Hook
 # Injects the using-envoy skill and auto-detects stack profiles
 
+# Prevent terminal escape sequences from leaking through
+exec < /dev/null
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 
