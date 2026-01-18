@@ -57,18 +57,60 @@ mcp__chrome-devtools__list_pages
 
 Select the page running your frontend (usually localhost:5173).
 
-### Step 4: Navigate and Verify Each Page
+### Step 4: Handle Authentication
+
+After navigating to a page, check if you're on a login screen.
+
+**Detection:** Look for login indicators in the screenshot or DOM:
+- Login form with email/password fields
+- "Sign in" or "Log in" buttons
+- Redirect to `/login`, `/auth`, `/signin` URLs
+
+**If login screen detected:**
+
+1. **Ask user for test credentials:**
+   ```
+   "I've hit a login screen. Please provide test credentials:
+   - Email/username:
+   - Password:
+
+   Or tell me if there's a specific test user I should use."
+   ```
+
+2. **Log in using provided credentials:**
+   ```
+   mcp__chrome-devtools__fill_form
+     selector: "input[type='email'], input[name='email'], #email"
+     value: "<provided-email>"
+
+   mcp__chrome-devtools__fill_form
+     selector: "input[type='password'], input[name='password'], #password"
+     value: "<provided-password>"
+
+   mcp__chrome-devtools__click
+     selector: "button[type='submit'], .login-button, button:contains('Sign in')"
+
+   mcp__chrome-devtools__wait_for
+     selector: ".dashboard, .home, [data-authenticated='true']"
+     timeout: 5000
+   ```
+
+3. **Verify login succeeded** — Take screenshot to confirm authenticated state
+
+4. **Continue with review** — Navigate to intended pages
+
+### Step 5: Navigate and Verify Each Page
 
 For each affected page:
 
-#### 4a. Navigate to Page
+#### 5a. Navigate to Page
 
 ```
 mcp__chrome-devtools__navigate_page
   url: "http://localhost:5173/<path>"
 ```
 
-#### 4b. Take Screenshot
+#### 5b. Take Screenshot
 
 ```
 mcp__chrome-devtools__take_screenshot
@@ -76,7 +118,7 @@ mcp__chrome-devtools__take_screenshot
 
 Save/display screenshot for visual inspection.
 
-#### 4c. Check Console Messages
+#### 5c. Check Console Messages
 
 ```
 mcp__chrome-devtools__list_console_messages
@@ -87,7 +129,7 @@ mcp__chrome-devtools__list_console_messages
 - ⚠️ Warnings related to changed code — Should review
 - ℹ️ Info/debug — Usually OK
 
-#### 4d. Check Network Requests
+#### 5d. Check Network Requests
 
 ```
 mcp__chrome-devtools__list_network_requests
@@ -98,7 +140,7 @@ mcp__chrome-devtools__list_network_requests
 - ⚠️ Slow requests (>1000ms)
 - ⚠️ Missing expected requests
 
-### Step 5: Test User Flows
+### Step 6: Test User Flows
 
 For interactive features, test the complete flow:
 
@@ -151,7 +193,7 @@ mcp__chrome-devtools__wait_for
 mcp__chrome-devtools__take_snapshot
 ```
 
-### Step 6: Take DOM Snapshot (Optional)
+### Step 7: Take DOM Snapshot (Optional)
 
 For detailed inspection:
 
