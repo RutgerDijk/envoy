@@ -50,7 +50,16 @@ TOPIC=$(echo "<issue-title>" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 
 Use envoy:using-git-worktrees:
 
 ```bash
+# Ensure .worktrees/ is gitignored
+grep -q "^\.worktrees/$" .gitignore 2>/dev/null || echo ".worktrees/" >> .gitignore
+
+# Create worktree
 git worktree add .worktrees/$TOPIC -b feature/$TOPIC
+
+# Copy Claude settings to worktree
+cp -r .claude .worktrees/$TOPIC/
+
+# Navigate to worktree
 cd .worktrees/$TOPIC
 ```
 

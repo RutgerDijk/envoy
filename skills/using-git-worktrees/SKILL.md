@@ -19,26 +19,43 @@ Default location: `.worktrees/<branch-name>`
 
 This keeps worktrees inside the repo in a `.worktrees/` folder (add to `.gitignore`).
 
-### Step 2: Create Worktree with New Branch
+### Step 2: Ensure .worktrees/ is in .gitignore
+
+```bash
+grep -q "^\.worktrees/$" .gitignore 2>/dev/null || echo ".worktrees/" >> .gitignore
+```
+
+### Step 3: Create Worktree with New Branch
 
 ```bash
 git worktree add .worktrees/<branch-name> -b feature/<branch-name>
 ```
 
-### Step 3: Navigate to Worktree
+### Step 4: Copy Claude Settings
+
+Copy `.claude/` directory to preserve permissions and settings:
+
+```bash
+cp -r .claude .worktrees/<branch-name>/
+```
+
+This ensures the worktree has the same Claude permissions as the main repo.
+
+### Step 5: Navigate to Worktree
 
 ```bash
 cd .worktrees/<branch-name>
 ```
 
-### Step 4: Verify Setup
+### Step 6: Verify Setup
 
 ```bash
 git branch --show-current
 pwd
+ls -la .claude/
 ```
 
-Expected: On `feature/<branch-name>` in worktree directory.
+Expected: On `feature/<branch-name>` in worktree directory with `.claude/` settings.
 
 ## Naming Conventions
 
