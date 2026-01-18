@@ -62,6 +62,8 @@ detect_stack "react-hook-form" "react-hook-form" "content"
 detect_stack "tailwind" "tailwindcss" "content"
 detect_stack "orval" '"orval"' "content"
 detect_stack "application-insights" "ApplicationInsights" "content"
+detect_stack "health-checks" "AddHealthChecks\|HealthChecks" "content"
+detect_stack "openapi" "Swashbuckle\|AddSwaggerGen\|AddEndpointsApiExplorer" "content"
 
 # Security is always applicable
 DETECTED_STACKS+=("security")
