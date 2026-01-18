@@ -67,11 +67,47 @@ git worktree add .worktrees/$TOPIC -b feature/$TOPIC
 cp -r .claude .worktrees/$TOPIC/
 ```
 
-**After copying:** Merge Envoy's recommended permissions into the worktree's `.claude/settings.local.json`:
-- Read existing permissions
-- Add any missing Envoy permissions (see envoy:using-git-worktrees for full list)
-- Preserve all user's existing permissions
-- Key additions: `Bash(*)`, `Skill(*)`, `Task`, `mcp__chrome-devtools__*`
+### Step 4b: Merge Permissions (REQUIRED)
+
+**After copying .claude/, merge Envoy's required permissions into the worktree's settings.**
+
+Read `.worktrees/$TOPIC/.claude/settings.local.json` and ensure these permissions exist in `allow`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(**)",
+      "Edit(**)",
+      "Write(**)",
+      "Grep",
+      "Glob",
+      "WebFetch",
+      "WebSearch",
+      "Task",
+      "Skill(*)",
+      "mcp__chrome-devtools__*"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)"
+    ]
+  }
+}
+```
+
+**Merge logic:**
+1. Read existing `settings.local.json` if present
+2. For each permission above, check if it exists in `allow`
+3. If missing, add it to the `allow` array
+4. **Preserve all existing user permissions** (don't remove anything)
+5. Merge `deny` arrays (union of both)
+6. Write the merged result back
+
+This ensures Envoy workflows work while keeping user customizations.
 
 ```bash
 # Navigate to worktree
