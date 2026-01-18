@@ -13,19 +13,19 @@ Envoy is a Claude Code plugin that provides structured workflows for:
 
 ## Installation
 
-Add to your Claude Code configuration:
-
 ```bash
-# Clone the plugin
-git clone https://github.com/your-org/envoy.git ~/.claude/plugins/envoy
+# Add the marketplace
+/plugin marketplace add RutgerDijk/envoy
 
-# Or add to .claude/settings.json
-{
-  "plugins": [
-    "~/.claude/plugins/envoy"
-  ]
-}
+# Install the plugin
+/plugin install envoy@envoy-marketplace
 ```
+
+Or use the interactive plugin manager:
+```bash
+/plugin
+```
+Then browse to "envoy-marketplace" in the Discover tab.
 
 ## Commands
 
