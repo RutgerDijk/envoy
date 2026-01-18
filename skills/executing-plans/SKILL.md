@@ -41,6 +41,37 @@ Detect and load relevant stack profiles for context during execution.
 
 ## Execution Strategies
 
+## Test-Driven Development (TDD)
+
+**Mandatory:** All implementation tasks must follow TDD. Write tests BEFORE implementation code.
+
+### TDD Cycle for Each Task
+
+```
+For each task:
+  1. RED — Write failing test(s) for the expected behavior
+     - Run tests to confirm they fail
+     - Commit: "test: add tests for <feature>"
+
+  2. GREEN — Write minimal code to make tests pass
+     - Run tests to confirm they pass
+     - Commit: "feat: implement <feature>"
+
+  3. REFACTOR — Clean up while keeping tests green
+     - Run tests after each change
+     - Commit: "refactor: clean up <feature>"
+```
+
+### TDD Enforcement
+
+Before writing any implementation code, ask yourself:
+- "Do I have a failing test for this behavior?"
+- If NO → Write the test first
+
+**Violations:**
+- Writing implementation without tests = Stop, write tests first
+- Tests written after implementation = Revert, start with tests
+
 ### Sequential (Default)
 
 Execute tasks one at a time, in order:
@@ -48,10 +79,12 @@ Execute tasks one at a time, in order:
 ```
 For each task in plan:
   1. Announce: "**Task N: <name>**"
-  2. Execute each step in the task
-  3. Verify completion (run tests, check files)
-  4. Commit changes
-  5. Update progress: "Task N complete. (N/Total)"
+  2. TDD RED: Write failing tests for this task
+  3. TDD GREEN: Execute steps to make tests pass
+  4. TDD REFACTOR: Clean up code
+  5. Verify all tests pass
+  6. Commit changes (test commit + implementation commit)
+  7. Update progress: "Task N complete. (N/Total)"
 ```
 
 **Progress tracking:**

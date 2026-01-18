@@ -37,6 +37,24 @@ git diff --name-only main...HEAD
 # Load acceptance criteria from linked issue/spec
 ```
 
+### Load Known Limitations
+
+**Critical:** Check the spec/plan documents for documented limitations, future enhancements, or out-of-scope items:
+
+```bash
+# Search for documented limitations in spec/plan
+grep -i "future\|enhancement\|out of scope\|not included\|limitation\|deferred\|phase [2-9]\|later" docs/plans/*.md
+```
+
+**Create exclusion list:** Items documented as "future enhancement", "out of scope", or "deferred" should NOT be flagged as bugs. Keep this list for all review layers.
+
+Example exclusions from spec:
+- "Inline editing (future enhancement)"
+- "Caching (Phase 2)"
+- "Mobile support (out of scope)"
+
+These are **not bugs** — they are documented scope boundaries.
+
 ---
 
 ## Layer 1: CodeRabbit Static Analysis
@@ -108,11 +126,19 @@ The agent checks:
 
 1. **Spec compliance** — Does implementation match the design doc?
 2. **Standards compliance** — Does code follow project standards?
-3. **Architectural concerns** — Any structural issues?
-4. **Security implications** — Any vulnerabilities introduced?
-5. **Error handling** — Are errors handled appropriately?
-6. **Performance concerns** — Any obvious performance issues?
-7. **Pattern consistency** — Matches existing codebase patterns?
+3. **TDD compliance** — Were tests written before implementation?
+   - Check git log for test commits preceding implementation commits
+   - Flag if implementation committed without prior test commit
+4. **Test coverage** — Is business logic covered by tests?
+   - Services, repositories, utilities → Must have tests
+   - UI components → Visual review is primary, unit tests optional
+5. **Architectural concerns** — Any structural issues?
+6. **Security implications** — Any vulnerabilities introduced?
+7. **Error handling** — Are errors handled appropriately?
+8. **Performance concerns** — Any obvious performance issues?
+9. **Pattern consistency** — Matches existing codebase patterns?
+
+**Exclusions check:** Before flagging any issue, verify it's not in the documented limitations/future enhancements list from pre-review.
 
 ### Report Format
 
