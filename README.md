@@ -27,6 +27,78 @@ brainstorm → pickup → review → finalize → cleanup
 /plugin install envoy@envoy-marketplace
 ```
 
+## How It Works
+
+### Architecture
+
+```
+envoy/
+├── .claude-plugin/        # Plugin configuration
+│   ├── plugin.json        # Plugin metadata
+│   └── marketplace.json   # Marketplace registration
+├── hooks/                 # Session lifecycle hooks
+│   ├── hooks.json         # Hook registration
+│   └── session-start.sh   # Auto-loads Envoy on startup
+├── lib/                   # Shared utilities
+│   ├── skills-core.js     # Skill discovery & shadowing
+│   └── stack-loader.js    # Stack detection & loading
+├── commands/              # Entry points for /envoy:* commands
+├── agents/                # Specialized agent definitions
+├── skills/                # 19 workflow skills
+├── stacks/                # 25 technology profiles
+└── docs/                  # Anti-patterns & authoring guides
+```
+
+### Session Start Hook
+
+When you start Claude Code, Envoy automatically:
+
+1. **Loads the `using-envoy` skill** - Claude knows about all Envoy capabilities
+2. **Detects your tech stack** - Scans for .csproj, package.json, tsconfig.json, etc.
+3. **Reports detected stacks** - Shows which profiles are relevant
+
+```
+Detected stacks: dotnet, react, typescript, entity-framework, tailwind
+
+When implementing or reviewing code, load the relevant stack profiles
+from `stacks/<stack-name>.md` for best practices and common mistakes.
+```
+
+### Skills System
+
+Skills are structured workflows that Claude follows. Each skill has:
+
+- **Trigger condition** - When to use it ("Use when...")
+- **Iron Laws** - Non-negotiable rules for discipline skills
+- **Rationalization Tables** - Counter common excuses
+- **Step-by-step process** - What to do
+
+**Skill types:**
+- **Rigid** (TDD, debugging, verification) - Follow exactly, no adaptation
+- **Flexible** (brainstorming, planning) - Adapt principles to context
+
+### Stack Profiles
+
+Each stack profile contains:
+
+- **Best Practices** - Patterns to follow
+- **Common Mistakes** - Anti-patterns with fixes
+- **Review Checklist** - What to verify
+
+Profiles are loaded automatically based on detected technologies.
+
+### Personal Skill Shadowing
+
+Create personal skills in `~/.claude/skills/` that override Envoy skills:
+
+```
+~/.claude/skills/
+└── brainstorming/
+    └── SKILL.md    # Your version overrides envoy:brainstorming
+```
+
+Use `envoy:skill-name` prefix to force Envoy's version.
+
 ## The Workflow
 
 ```
@@ -99,29 +171,84 @@ brainstorm → pickup → review → finalize → cleanup
 3. **Visual Review** - Chrome DevTools screenshots, console, network checks
 4. **Doc Gap Detection** - Find missing or outdated documentation
 
+## TDD Enforcement
+
+Envoy enforces Test-Driven Development with an Iron Law:
+
+> **NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST.**
+>
+> Write code before test? Delete it. Start over.
+
+The `executing-plans` skill includes rationalization counters:
+
+| Excuse | Reality |
+|--------|---------|
+| "Too simple to test" | Simple code breaks. Test takes 30 seconds. |
+| "I'll write tests after" | Tests passing immediately prove nothing. |
+| "Time pressure" | Skipping tests costs MORE time. Always. |
+
 ## Skills
 
-Envoy includes skills for common development tasks:
+Envoy includes 19 skills for common development tasks:
 
 | Skill | When to Use |
 |-------|-------------|
-| `envoy:systematic-debugging` | Bug or test failure |
+| `envoy:brainstorming` | Starting any new feature or significant change |
+| `envoy:writing-plans` | Have a design doc, need implementation plan |
+| `envoy:executing-plans` | Have a plan, ready to start coding |
+| `envoy:pickup` | Ready to implement a GitHub issue |
+| `envoy:systematic-debugging` | Bug, test failure, or unexpected behavior |
+| `envoy:verification` | Before committing or claiming done |
+| `envoy:layered-review` | After implementation, before PR |
+| `envoy:finishing-branch` | Implementation complete, ready for PR |
+| `envoy:cleanup` | After PR merged |
 | `envoy:dispatching-parallel-agents` | Multiple independent tasks |
 | `envoy:subagent-driven-development` | Execute plan with fresh agent per task |
-| `envoy:using-git-worktrees` | Create isolated workspace |
+| `envoy:using-git-worktrees` | Need isolated workspace |
 | `envoy:requesting-code-review` | Get feedback on changes |
 | `envoy:receiving-code-review` | Evaluate review feedback |
-| `envoy:verification` | Verify before claiming done |
+| `envoy:visual-review` | UI changes need verification |
+| `envoy:docstrings` | Public APIs need documentation |
+| `envoy:wiki-sync` | Documentation updated |
+| `envoy:using-envoy` | Discover available skills |
 | `envoy:writing-skills` | Create new Envoy skills |
 
 ## Stack Profiles
 
-Best practices, common mistakes, and review checklists for:
+25 technology profiles with best practices, common mistakes, and review checklists:
 
-- **Core**: .NET, React, TypeScript, PostgreSQL
-- **Testing**: xUnit/Moq/FluentAssertions, Playwright
-- **Infrastructure**: Docker, Azure Container Apps, Bicep, GitHub Actions
-- **Supporting**: Entity Framework, Serilog, JWT/OAuth, shadcn/Radix, React Query, Tailwind
+**Core:**
+- .NET, React, TypeScript, PostgreSQL
+
+**Testing:**
+- xUnit/Moq/FluentAssertions, Playwright
+
+**Infrastructure:**
+- Docker Compose, Azure Container Apps, Azure Static Web Apps
+- Azure PostgreSQL, Bicep, GitHub Actions
+
+**Supporting:**
+- Entity Framework, Serilog, JWT/OAuth, API Patterns
+- shadcn/Radix, React Query, React Hook Form, Tailwind
+- Orval, Application Insights, Health Checks, OpenAPI
+
+**Security:**
+- Always loaded for web applications
+
+## Anti-Patterns
+
+Envoy includes documentation of common anti-patterns with gate functions:
+
+```markdown
+BEFORE writing any implementation code:
+  Ask: "Do I have a failing test for this behavior?"
+
+  IF no:
+    STOP
+    Write the test first
+```
+
+See `docs/ANTI-PATTERNS.md` for the full list.
 
 ## Quick Start Example
 
@@ -147,6 +274,16 @@ claude
 > /envoy:cleanup
 # Removes worktree and branch
 ```
+
+## Creating Custom Skills
+
+See `docs/SKILL-AUTHORING-GUIDE.md` for:
+
+- Claude Search Optimization (CSO) for descriptions
+- Persuasion principles (Authority, Commitment, Social Proof)
+- Iron Law pattern with rationalization tables
+- Gate functions for anti-patterns
+- Pressure scenario testing
 
 ## Requirements
 
