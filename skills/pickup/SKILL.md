@@ -58,7 +58,15 @@ git worktree add .worktrees/$TOPIC -b feature/$TOPIC
 
 # Copy Claude settings to worktree
 cp -r .claude .worktrees/$TOPIC/
+```
 
+**After copying:** Merge Envoy's recommended permissions into the worktree's `.claude/settings.local.json`:
+- Read existing permissions
+- Add any missing Envoy permissions (see envoy:using-git-worktrees for full list)
+- Preserve all user's existing permissions
+- Key additions: `Bash(*)`, `Skill(*)`, `Task`, `mcp__chrome-devtools__*`
+
+```bash
 # Navigate to worktree
 cd .worktrees/$TOPIC
 ```

@@ -31,15 +31,53 @@ grep -q "^\.worktrees/$" .gitignore 2>/dev/null || echo ".worktrees/" >> .gitign
 git worktree add .worktrees/<branch-name> -b feature/<branch-name>
 ```
 
-### Step 4: Copy Claude Settings
+### Step 4: Copy and Merge Claude Settings
 
-Copy `.claude/` directory to preserve permissions and settings:
+Copy `.claude/` directory, then merge Envoy's recommended permissions with user's existing ones.
 
 ```bash
+# Copy existing .claude directory
 cp -r .claude .worktrees/<branch-name>/
 ```
 
-This ensures the worktree has the same Claude permissions as the main repo.
+**Merge permissions:** After copying, check if these Envoy-recommended permissions are present in `.worktrees/<branch-name>/.claude/settings.local.json`. Add any that are missing:
+
+**Required permissions for Envoy workflows:**
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(**)",
+      "Edit(**)",
+      "Write(**)",
+      "Grep",
+      "Glob",
+      "WebFetch",
+      "WebSearch",
+      "Task",
+      "Skill(*)",
+      "mcp__chrome-devtools__*"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)"
+    ]
+  }
+}
+```
+
+**Merge logic:**
+1. Read existing `settings.local.json` if present
+2. For each permission in the Envoy list above, check if it exists in `allow`
+3. If missing, add it to the `allow` array
+4. Preserve all existing user permissions (don't remove anything)
+5. Merge `deny` arrays (union of both)
+6. Write the merged result back
+
+This preserves user customizations while ensuring Envoy workflows have the permissions they need.
 
 ### Step 5: Navigate to Worktree
 
