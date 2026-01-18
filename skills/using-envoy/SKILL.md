@@ -27,6 +27,7 @@ When you receive a task, check if any Envoy skill applies:
 | Visual/UI verification | `envoy:visual-review` |
 | Verify before claiming done | `envoy:verification` |
 | Finish branch and create PR | `envoy:finishing-branch` |
+| Clean up after PR merge | `envoy:cleanup` |
 | Add API documentation | `envoy:docstrings` |
 | Sync wiki documentation | `envoy:wiki-sync` |
 | Create new Envoy skill | `envoy:writing-skills` |
@@ -90,3 +91,4 @@ This keeps the user informed and commits you to following the skill.
 | `/envoy:finalize` | Review, docs, wiki, PR |
 | `/envoy:docstrings` | Add API documentation |
 | `/envoy:wiki-sync` | Sync docs to wiki |
+| `/envoy:cleanup` | Remove worktree after PR merge |

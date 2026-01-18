@@ -190,6 +190,7 @@ EOF
 2. Request reviewers
 3. Address any PR feedback
 4. Merge when approved
+5. Run `/envoy:cleanup` to remove worktree and branch
 ```
 
 ## Error Handling
