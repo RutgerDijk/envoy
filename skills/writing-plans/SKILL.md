@@ -109,16 +109,27 @@ Include relevant stack profile references in tasks.
 
 ## After Saving the Plan
 
-Offer execution choice:
+**Always show the exact plan path in the completion message:**
 
-"**Plan complete and saved to `docs/plans/<filename>.md`**
+"**Plan complete!**
+
+**Plan saved to:** `docs/plans/YYYY-MM-DD-<topic>-plan.md`
+**Tasks:** N tasks across M phases
+
+**To execute this plan:**
+```bash
+/envoy:executing-plans docs/plans/YYYY-MM-DD-<topic>-plan.md
+```
 
 **Execution options:**
 
-1. **Subagent-Driven (this session)** — Dispatch fresh agent per task, review between tasks
-2. **Parallel Session (separate)** — Open new session with envoy:executing-plans
+1. **Execute now (this session)** — Run `/envoy:executing-plans <plan-path>`
+2. **Subagent-Driven (this session)** — Dispatch fresh agent per task with reviews
+3. **New session** — Open worktree session and run the command above
 
 Which approach?"
+
+**IMPORTANT:** Always include the exact plan file path in any suggestion to execute.
 
 ## Key Principles
 

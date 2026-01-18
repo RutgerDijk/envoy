@@ -118,15 +118,22 @@ EOF
 
 **Artifacts created:**
 - Design: `docs/plans/<date>-<topic>-design.md`
-- Plan: `docs/plans/<date>-<topic>-plan.md`
+- Plan: `docs/plans/<date>-<topic>-plan.md` (N tasks)
 - Issue: #<number>
 
 **To start implementation:**
+
+Option 1 — New worktree (recommended for larger features):
 ```bash
 /envoy:pickup <issue-number>
 ```
 
-This will create a worktree and begin executing the plan."
+Option 2 — Execute in current session:
+```bash
+/envoy:executing-plans docs/plans/<date>-<topic>-plan.md
+```
+
+**IMPORTANT:** Always include the exact plan file path when suggesting execution."
 
 ## Labels Reference
 
