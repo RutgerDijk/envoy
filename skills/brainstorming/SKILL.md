@@ -1,17 +1,25 @@
 ---
 name: brainstorming
-description: Turn ideas into fully formed designs with GitHub issues and spec docs. Use when starting any new feature or significant change.
+description: Turn ideas into designs with GitHub issues and implementation plans. Use when starting any new feature or significant change.
 ---
 
 # Brainstorming Ideas Into Designs
 
 ## Overview
 
-Help turn ideas into fully formed designs through natural collaborative dialogue. Produces two artifacts:
-1. **GitHub Issue** — Concise summary with labels and acceptance criteria
-2. **Spec Document** — Detailed design in `docs/plans/`
+Turn ideas into fully formed designs AND implementation plans through collaborative dialogue. Produces three artifacts:
+1. **Design Document** — Architecture and decisions in `docs/plans/`
+2. **GitHub Issue** — Tracking with acceptance criteria
+3. **Implementation Plan** — Bite-sized tasks ready for execution
 
-**Announce at start:** "I'm using envoy:brainstorming to design this feature."
+**Announce at start:** "I'm using envoy:brainstorming to design and plan this feature."
+
+## Arguments
+
+| Flag | Effect |
+|------|--------|
+| (none) | Full flow: design → issue → plan |
+| `--design-only` | Stop after design doc + issue (no plan) |
 
 ## The Process
 
@@ -90,17 +98,35 @@ EOF
 )" --label "<labels>"
 ```
 
-### Phase 5: Handoff
+### Phase 5: Create Implementation Plan
 
-After creating artifacts, offer:
+**Unless `--design-only` flag**, automatically continue to create the implementation plan:
 
-"**Artifacts created:**
-- Spec: `docs/plans/<filename>.md`
+1. Announce: "Design complete. Now creating implementation plan..."
+2. Use envoy:writing-plans process to create detailed tasks
+3. Save plan to `docs/plans/YYYY-MM-DD-<topic>-plan.md`
+
+**Plan must include:**
+- Bite-sized tasks (2-5 min each)
+- Exact file paths
+- TDD: test files for each task
+- Execution strategy (parallel/batch/sequential)
+
+### Phase 6: Final Handoff
+
+"**Ready for implementation!**
+
+**Artifacts created:**
+- Design: `docs/plans/<date>-<topic>-design.md`
+- Plan: `docs/plans/<date>-<topic>-plan.md`
 - Issue: #<number>
 
-**Next steps:**
-1. `/envoy:write-plan` — Create detailed implementation plan
-2. Or hand off to another developer with `/envoy:pickup <issue-number>`"
+**To start implementation:**
+```bash
+/envoy:pickup <issue-number>
+```
+
+This will create a worktree and begin executing the plan."
 
 ## Labels Reference
 
