@@ -4,12 +4,18 @@ Professional .NET/React/Azure development workflows for Claude Code.
 
 ## Overview
 
-Envoy is a Claude Code plugin that provides structured workflows for:
+Envoy is a Claude Code plugin that provides a streamlined 5-step workflow from idea to merged PR:
 
-- **Planning**: Turn ideas into GitHub issues + detailed specs through Socratic dialogue
-- **Execution**: Execute implementation plans with configurable strategies
-- **Review**: 4-layer code review with CodeRabbit, AI analysis, visual verification, and documentation gap detection
+```
+brainstorm → pickup → review → finalize → cleanup
+```
+
+**Key features:**
+- **Brainstorming**: Turn ideas into designs + implementation plans through Socratic dialogue
+- **Execution**: TDD-enforced implementation with automatic worktree management
+- **Review**: 4-layer code review (CodeRabbit, AI, Visual, Docs)
 - **Finalization**: Automated docstrings, wiki sync, and PR creation
+- **Cleanup**: Remove worktrees and branches after merge
 
 ## Installation
 
@@ -21,186 +27,126 @@ Envoy is a Claude Code plugin that provides structured workflows for:
 /plugin install envoy@envoy-marketplace
 ```
 
-Or use the interactive plugin manager:
-```bash
-/plugin
+## The Workflow
+
 ```
-Then browse to "envoy-marketplace" in the Discover tab.
+┌─────────────────────────────────────────────────────────────────────┐
+│  1. BRAINSTORM                                                       │
+│     /envoy:brainstorm "Add user profile editing"                     │
+│     → Socratic dialogue → Design doc → GitHub Issue → Plan           │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  2. PICKUP                                                           │
+│     /envoy:pickup 123                                                │
+│     → Creates worktree → Loads context → Executes plan with TDD      │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  3. REVIEW                                                           │
+│     /envoy:review                                                    │
+│     → CodeRabbit → AI Review → Visual Review → Doc Gaps              │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  4. FINALIZE                                                         │
+│     /envoy:finalize                                                  │
+│     → Docstrings → Wiki sync → Create PR                             │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               ▼
+                        [ PR Review & Merge ]
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  5. CLEANUP                                                          │
+│     /envoy:cleanup                                                   │
+│     → Remove worktree → Delete feature branch                        │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ## Commands
 
-### Planning & Design
+### Main Workflow
 
 | Command | Description |
 |---------|-------------|
-| `/envoy:brainstorm` | Turn ideas into GitHub issues + spec documents |
-| `/envoy:write-plan` | Create detailed implementation plan |
-| `/envoy:pickup [issue]` | Pick up a GitHub issue and start implementation |
+| `/envoy:brainstorm` | Design + plan a feature (combines design and planning) |
+| `/envoy:pickup [issue]` | Create worktree + execute plan |
+| `/envoy:review` | Full 4-layer review |
+| `/envoy:finalize` | Docstrings + wiki + PR |
+| `/envoy:cleanup` | Remove worktree and branch after merge |
 
-### Execution
-
-| Command | Description |
-|---------|-------------|
-| `/envoy:execute-plan [path]` | Execute plan with configurable strategy |
-
-### Review
+### Additional Commands
 
 | Command | Description |
 |---------|-------------|
-| `/envoy:review` | Full 4-layer review process |
-| `/envoy:quick-review` | Fast review (CodeRabbit + AI only) |
+| `/envoy:quick-review` | Fast review (AI only, no visual) |
 | `/envoy:visual-review` | Chrome DevTools visual verification |
-
-### Finalization
-
-| Command | Description |
-|---------|-------------|
-| `/envoy:finalize` | Complete branch: review, docs, wiki, PR |
 | `/envoy:docstrings` | Add documentation to public APIs |
 | `/envoy:wiki-sync` | Sync docs/wiki/ to GitHub wiki |
 
-## 4-Layer Review Process
+### Escape Hatches
+
+| Flag | Effect |
+|------|--------|
+| `/envoy:brainstorm --design-only` | Stop after design doc + issue (no plan) |
+| `/envoy:pickup --plan-only` | Stop after worktree setup (no execution) |
+| `/envoy:cleanup --all` | Clean up ALL merged worktrees |
+
+## 4-Layer Review
 
 1. **CodeRabbit Analysis** - Static analysis via `@coderabbitai review`
-2. **Documentation-Informed AI Review** - Fresh agent reviews against project docs, stack profiles
-3. **Chrome DevTools Visual Review** - Screenshots, console, network verification
-4. **Documentation Gap Detection** - Identify missing or outdated documentation
+2. **AI Review** - Fresh agent reviews against project docs and stack profiles
+3. **Visual Review** - Chrome DevTools screenshots, console, network checks
+4. **Doc Gap Detection** - Find missing or outdated documentation
+
+## Skills
+
+Envoy includes skills for common development tasks:
+
+| Skill | When to Use |
+|-------|-------------|
+| `envoy:systematic-debugging` | Bug or test failure |
+| `envoy:dispatching-parallel-agents` | Multiple independent tasks |
+| `envoy:subagent-driven-development` | Execute plan with fresh agent per task |
+| `envoy:using-git-worktrees` | Create isolated workspace |
+| `envoy:requesting-code-review` | Get feedback on changes |
+| `envoy:receiving-code-review` | Evaluate review feedback |
+| `envoy:verification` | Verify before claiming done |
+| `envoy:writing-skills` | Create new Envoy skills |
 
 ## Stack Profiles
 
-Envoy includes best practices, common mistakes, and review checklists for:
+Best practices, common mistakes, and review checklists for:
 
-### Core Stacks
-- .NET, React, TypeScript, PostgreSQL
+- **Core**: .NET, React, TypeScript, PostgreSQL
+- **Testing**: xUnit/Moq/FluentAssertions, Playwright
+- **Infrastructure**: Docker, Azure Container Apps, Bicep, GitHub Actions
+- **Supporting**: Entity Framework, Serilog, JWT/OAuth, shadcn/Radix, React Query, Tailwind
 
-### Testing
-- xUnit/Moq/FluentAssertions, Playwright
-
-### Infrastructure
-- Docker Compose, Azure Container Apps, Azure Static Web Apps
-- Azure PostgreSQL, Bicep, GitHub Actions
-
-### Supporting
-- Entity Framework, Serilog, JWT/OAuth, API Patterns
-- shadcn/Radix, React Query, React Hook Form, Tailwind
-- Orval, Security, Application Insights
-
-## Execution Strategies
-
-Plans can be executed with different strategies:
-
-- **parallel**: Spawn agents for independent tasks
-- **batch**: Execute in phases with review checkpoints
-- **sequential**: Step-by-step with validation
-
-## Project Structure
-
-```
-envoy/
-├── .claude-plugin/
-│   └── plugin.json          # Plugin manifest
-├── skills/                   # Skill definitions
-│   ├── brainstorming/
-│   ├── writing-plans/
-│   ├── pickup/
-│   ├── executing-plans/
-│   ├── layered-review/
-│   ├── visual-review/
-│   ├── verification/
-│   ├── finishing-branch/
-│   ├── wiki-sync/
-│   └── docstrings/
-├── commands/                 # Command shortcuts
-├── stacks/                   # Stack-specific best practices
-│   ├── detect-stacks.sh     # Auto-detection script
-│   ├── dotnet.md
-│   ├── react.md
-│   └── ...
-├── templates/               # Document templates
-│   ├── github-issue.md
-│   ├── spec-doc.md
-│   └── plan-doc.md
-├── agents/                  # Curated agent prompts
-│   ├── code-review.md
-│   ├── test-writer.md
-│   └── security-audit.md
-└── docs/
-    └── plans/              # Implementation plans
-```
-
-## Workflow Example
-
-### 1. Brainstorm a Feature
-
-```
-/envoy:brainstorm Add user profile editing
-```
-
-Creates:
-- GitHub issue with labels and acceptance criteria
-- Spec document at `docs/specs/YYYY-MM-DD-user-profile-editing.md`
-
-### 2. Create Implementation Plan
-
-```
-/envoy:write-plan docs/specs/2024-01-15-user-profile-editing.md
-```
-
-Creates:
-- Implementation plan at `docs/plans/YYYY-MM-DD-user-profile-editing-plan.md`
-- Bite-sized tasks with dependencies
-
-### 3. Pick Up and Implement
-
-```
-/envoy:pickup #123
-```
-
-- Creates git worktree for isolated development
-- Loads spec and plan context
-- Guides through implementation
-
-### 4. Review Changes
-
-```
-/envoy:review
-```
-
-Runs full 4-layer review:
-1. CodeRabbit static analysis
-2. AI review against project documentation
-3. Visual verification with Chrome DevTools
-4. Documentation gap detection
-
-### 5. Finalize and Create PR
-
-```
-/envoy:finalize
-```
-
-- Runs final review
-- Adds docstrings to public APIs
-- Syncs wiki documentation
-- Creates pull request
-
-## Configuration
-
-### Stack Auto-Detection
-
-Envoy automatically detects your project's stack:
+## Quick Start Example
 
 ```bash
-./stacks/detect-stacks.sh
+# Session 1: Planning
+claude
+> /envoy:brainstorm Add coach dashboard with athlete overview
+# ... Socratic dialogue ...
+# Creates: design doc, plan, GitHub Issue #42
+
+# Session 2: Implementation (in worktree)
+> /envoy:pickup 42
+# Creates .worktrees/coach-dashboard
+# Executes plan with TDD...
+
+> /envoy:review
+# 4-layer review, fix issues...
+
+> /envoy:finalize
+# Creates PR #43
+
+# After PR is merged:
+> /envoy:cleanup
+# Removes worktree and branch
 ```
-
-### Custom Stack Profiles
-
-Add project-specific profiles in `stacks/` following the standard format:
-- Detection script
-- Best practices
-- Common mistakes
-- Review checklist
-- Resources
 
 ## Requirements
 
@@ -208,13 +154,6 @@ Add project-specific profiles in `stacks/` following the standard format:
 - GitHub CLI (`gh`) for issue/PR management
 - Chrome with DevTools MCP for visual review (optional)
 - CodeRabbit integration (optional)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Follow existing patterns for skills and commands
-4. Submit a pull request
 
 ## License
 
