@@ -359,17 +359,13 @@ Chrome DevTools MCP enables visual verification by capturing screenshots, consol
 Run this command to check your setup:
 
 ```bash
-# Check prerequisites
-echo "=== Checking Prerequisites ===" && \
-gh --version && \
-node --version && \
-echo "✓ Required tools installed" && \
+echo "=== Required ===" && \
+(command -v gh &>/dev/null && echo "✓ GitHub CLI: $(gh --version | head -1)" || echo "✗ GitHub CLI not found") && \
+(command -v node &>/dev/null && echo "✓ Node.js: $(node --version)" || echo "✗ Node.js not found") && \
 echo "" && \
-echo "=== Optional: CodeRabbit ===" && \
-(gh api repos/:owner/:repo/installation 2>/dev/null && echo "✓ CodeRabbit installed" || echo "⚠ CodeRabbit not detected (Layer 1 will be skipped)") && \
-echo "" && \
-echo "=== Optional: Chrome DevTools MCP ===" && \
-(which mcp-server-chrome-devtools && echo "✓ DevTools MCP installed" || echo "⚠ DevTools MCP not found (Layer 3 will be skipped)")
+echo "=== Optional ===" && \
+(command -v mcp-server-chrome-devtools &>/dev/null && echo "✓ Chrome DevTools MCP installed" || echo "⚠ Chrome DevTools MCP not found (install: npm i -g @anthropic/mcp-server-chrome-devtools)") && \
+echo "ℹ CodeRabbit: Check at github.com/apps/coderabbitai"
 ```
 
 ## License
