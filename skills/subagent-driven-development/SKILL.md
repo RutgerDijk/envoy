@@ -81,11 +81,14 @@ Write code before test? **Delete it. Start over.**
 **TDD Cycle:**
 1. RED — Write failing test(s) for expected behavior
    - Run tests to confirm they FAIL
-   - Commit: `test: add tests for <feature>`
+   - Commit: `test(<scope>): add tests for <feature>`
 2. GREEN — Write MINIMAL code to make tests pass
    - Run tests to confirm they PASS
-   - Commit: `feat: implement <feature>`
+   - Commit: `feat(<scope>): implement <feature>`
 3. REFACTOR — Clean up while keeping tests green
+   - Commit: `refactor(<scope>): clean up <feature>`
+
+**Commit scopes:** `backend`, `frontend`, `api`, `db`, `auth`, `tests`, `docs`
 
 **Requirements:**
 1. Follow TDD cycle above — this is NON-NEGOTIABLE
@@ -157,8 +160,8 @@ Task 1: Add User entity and migration
 [Dispatch implementer with full task text + TDD Iron Law]
 Implementer: "Implemented User entity with EF Core migration.
   Git log:
-  - abc1234 test: add User entity tests
-  - def5678 feat: implement User entity and migration
+  - abc1234 test(backend): add User entity tests
+  - def5678 feat(backend): implement User entity and migration
   3 tests passing."
 
 [Dispatch spec reviewer]
@@ -179,7 +182,7 @@ Code reviewer:
 ```
 [Dispatch implementer]
 Implementer: "Implemented feature. Git log:
-  - xyz9999 feat: implement feature"
+  - xyz9999 feat(frontend): implement feature"
 
 [Dispatch code quality reviewer]
 Code reviewer:

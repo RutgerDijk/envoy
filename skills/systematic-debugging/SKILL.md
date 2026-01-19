@@ -121,12 +121,14 @@ You MUST complete each phase before proceeding to the next.
 1. **Create Failing Test Case**
    - Follow TDD: write test BEFORE fix
    - Test must fail without the fix
-   - Commit: `test: add test for <issue>`
+   - Commit: `test(<scope>): add test for <issue>`
 
 2. **Implement Single Fix**
    - Address the root cause identified
    - ONE change at a time
-   - Commit: `fix: <description>`
+   - Commit: `fix(<scope>): <description>`
+
+**Scopes:** `backend`, `frontend`, `api`, `db`, `auth`, `tests`, `docs`
 
 3. **Verify Fix**
    - Test passes now?

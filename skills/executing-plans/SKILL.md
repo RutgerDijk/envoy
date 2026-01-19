@@ -149,15 +149,17 @@ No exceptions:
 For each task:
   1. RED — Write failing test(s) for the expected behavior
      - Run tests to confirm they fail
-     - Commit: "test: add tests for <feature>"
+     - Commit: "test(<scope>): add tests for <feature>"
 
   2. GREEN — Write minimal code to make tests pass
      - Run tests to confirm they pass
-     - Commit: "feat: implement <feature>"
+     - Commit: "feat(<scope>): implement <feature>"
 
   3. REFACTOR — Clean up while keeping tests green
      - Run tests after each change
-     - Commit: "refactor: clean up <feature>"
+     - Commit: "refactor(<scope>): clean up <feature>"
+
+Scopes: backend, frontend, api, db, auth, tests, docs
 ```
 
 ### TDD Enforcement
