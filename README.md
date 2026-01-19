@@ -285,12 +285,92 @@ See `docs/SKILL-AUTHORING-GUIDE.md` for:
 - Gate functions for anti-patterns
 - Pressure scenario testing
 
-## Requirements
+## Prerequisites
 
-- Claude Code CLI
-- GitHub CLI (`gh`) for issue/PR management
-- Chrome with DevTools MCP for visual review (optional)
-- CodeRabbit integration (optional)
+### Required
+
+| Prerequisite | Purpose | Installation |
+|--------------|---------|--------------|
+| Claude Code CLI | Runtime | [Install Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) |
+| GitHub CLI (`gh`) | Issue/PR management | `brew install gh` then `gh auth login` |
+| Node.js 18+ | Hook scripts | `brew install node` |
+
+### Recommended
+
+| Prerequisite | Purpose | Setup |
+|--------------|---------|-------|
+| CodeRabbit | AI code review (Layer 1) | See [CodeRabbit Setup](#coderabbit-setup) |
+| Chrome DevTools MCP | Visual verification (Layer 3) | See [DevTools MCP Setup](#devtools-mcp-setup) |
+
+### CodeRabbit Setup
+
+CodeRabbit provides AI-powered code review for the first layer of Envoy's 4-layer review.
+
+1. **Create account**: Go to [coderabbit.ai](https://coderabbit.ai) and sign up with GitHub
+2. **Install GitHub App**: Add CodeRabbit to your repositories
+3. **Configure** (optional): Add `.coderabbit.yaml` to customize rules:
+   ```yaml
+   reviews:
+     auto_review:
+       enabled: true
+     path_instructions:
+       - path: "**/*.cs"
+         instructions: "Check for .NET best practices"
+       - path: "**/*.tsx"
+         instructions: "Check for React best practices"
+   ```
+
+**Without CodeRabbit**: The review skill will skip Layer 1 and continue with AI review, visual review, and doc gap detection.
+
+### DevTools MCP Setup
+
+Chrome DevTools MCP enables visual verification by capturing screenshots, console logs, and network activity.
+
+1. **Install the MCP server**:
+   ```bash
+   npm install -g @anthropic/mcp-server-chrome-devtools
+   ```
+
+2. **Add to Claude Code settings** (`~/.claude/settings.json`):
+   ```json
+   {
+     "mcpServers": {
+       "chrome-devtools": {
+         "command": "mcp-server-chrome-devtools",
+         "args": []
+       }
+     }
+   }
+   ```
+
+3. **Launch Chrome with debugging**:
+   ```bash
+   # macOS
+   /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
+
+   # Or create an alias
+   alias chrome-debug='/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222'
+   ```
+
+**Without DevTools MCP**: The review skill will skip visual verification (Layer 3) and continue with other layers.
+
+### Verify Setup
+
+Run this command to check your setup:
+
+```bash
+# Check prerequisites
+echo "=== Checking Prerequisites ===" && \
+gh --version && \
+node --version && \
+echo "✓ Required tools installed" && \
+echo "" && \
+echo "=== Optional: CodeRabbit ===" && \
+(gh api repos/:owner/:repo/installation 2>/dev/null && echo "✓ CodeRabbit installed" || echo "⚠ CodeRabbit not detected (Layer 1 will be skipped)") && \
+echo "" && \
+echo "=== Optional: Chrome DevTools MCP ===" && \
+(which mcp-server-chrome-devtools && echo "✓ DevTools MCP installed" || echo "⚠ DevTools MCP not found (Layer 3 will be skipped)")
+```
 
 ## License
 
