@@ -338,7 +338,7 @@ Chrome DevTools MCP enables visual verification by capturing screenshots, consol
 
 1. **Install the MCP server**:
    ```bash
-   npm install -g @anthropic/mcp-server-chrome-devtools
+   npm install -g chrome-devtools-mcp
    ```
 
 2. **Add to Claude Code settings** (`~/.claude/settings.json`):
@@ -346,7 +346,7 @@ Chrome DevTools MCP enables visual verification by capturing screenshots, consol
    {
      "mcpServers": {
        "chrome-devtools": {
-         "command": "mcp-server-chrome-devtools",
+         "command": "chrome-devtools-mcp",
          "args": []
        }
      }
@@ -375,7 +375,7 @@ echo "=== Required ===" && \
 echo "" && \
 echo "=== Optional ===" && \
 (command -v coderabbit &>/dev/null && echo "✓ CodeRabbit CLI installed" || echo "⚠ CodeRabbit CLI not found (install: curl -fsSL https://cli.coderabbit.ai/install.sh | sh)") && \
-(command -v mcp-server-chrome-devtools &>/dev/null && echo "✓ Chrome DevTools MCP installed" || echo "⚠ Chrome DevTools MCP not found (install: npm i -g @anthropic/mcp-server-chrome-devtools)")
+(command -v chrome-devtools-mcp &>/dev/null && echo "✓ Chrome DevTools MCP installed" || echo "⚠ Chrome DevTools MCP not found (install: npm i -g chrome-devtools-mcp)")
 ```
 
 ## License
