@@ -306,8 +306,16 @@ See `docs/SKILL-AUTHORING-GUIDE.md` for:
 
 CodeRabbit provides AI-powered code review for the first layer of Envoy's 4-layer review.
 
-1. **Create account**: Go to [coderabbit.ai](https://coderabbit.ai) and sign up with GitHub
-2. **Install GitHub App**: Add CodeRabbit to your repositories
+1. **Install the CLI**:
+   ```bash
+   curl -fsSL https://cli.coderabbit.ai/install.sh | sh
+   ```
+
+2. **Authenticate**:
+   ```bash
+   coderabbit auth login
+   ```
+
 3. **Configure** (optional): Add `.coderabbit.yaml` to customize rules:
    ```yaml
    reviews:
@@ -319,6 +327,8 @@ CodeRabbit provides AI-powered code review for the first layer of Envoy's 4-laye
        - path: "**/*.tsx"
          instructions: "Check for React best practices"
    ```
+
+**Alternative**: Install the [GitHub App](https://github.com/apps/coderabbitai) for automatic PR reviews.
 
 **Without CodeRabbit**: The review skill will skip Layer 1 and continue with AI review, visual review, and doc gap detection.
 
@@ -364,8 +374,8 @@ echo "=== Required ===" && \
 (command -v node &>/dev/null && echo "✓ Node.js: $(node --version)" || echo "✗ Node.js not found") && \
 echo "" && \
 echo "=== Optional ===" && \
-(command -v mcp-server-chrome-devtools &>/dev/null && echo "✓ Chrome DevTools MCP installed" || echo "⚠ Chrome DevTools MCP not found (install: npm i -g @anthropic/mcp-server-chrome-devtools)") && \
-echo "ℹ CodeRabbit: Check at github.com/apps/coderabbitai"
+(command -v coderabbit &>/dev/null && echo "✓ CodeRabbit CLI installed" || echo "⚠ CodeRabbit CLI not found (install: curl -fsSL https://cli.coderabbit.ai/install.sh | sh)") && \
+(command -v mcp-server-chrome-devtools &>/dev/null && echo "✓ Chrome DevTools MCP installed" || echo "⚠ Chrome DevTools MCP not found (install: npm i -g @anthropic/mcp-server-chrome-devtools)")
 ```
 
 ## License
