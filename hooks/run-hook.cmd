@@ -27,6 +27,9 @@ exit /b 1
 CMDEOF
 
 # Unix shell section
+# Prevent terminal escape sequences from leaking
+exec < /dev/null
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_NAME="$1"
 
