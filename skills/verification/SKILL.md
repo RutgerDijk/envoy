@@ -11,7 +11,7 @@ description: Verify changes work before claiming done. Use before committing fix
 
 **Announce at start:** "I'm using envoy:verification to verify these changes work."
 
-## The Iron Law
+## The Iron Laws
 
 **NO COMPLETION CLAIMS WITHOUT VERIFICATION EVIDENCE.**
 
@@ -20,6 +20,40 @@ Evidence before assertions. Always.
 - Don't say "this should work" — **prove it works**
 - Don't say "I fixed it" — **show it's fixed**
 - Don't say "tests should pass" — **run them and show output**
+
+**WORKAROUNDS ARE NOT FIXES.**
+
+If verification "passes" because you:
+- Commented out failing code
+- Disabled lint rules or tests
+- Used type suppressions (`@ts-ignore`, `any`, `!`)
+- Added empty catch blocks
+- Suppressed warnings (`#pragma warning disable`, `[SuppressMessage]`)
+- Used `default!` or null-forgiving operator in C#
+- Used `dynamic` or `object` instead of proper types
+- Disabled or deleted failing tests
+
+**You have NOT fixed the issue. You have hidden it.**
+
+Return to the problem. Fix it properly.
+
+## The Gate Function
+
+```
+BEFORE claiming any status:
+
+1. IDENTIFY: What command proves this claim?
+2. RUN: Execute the command (fresh, complete)
+3. READ: Full output, check exit code, count failures
+4. VERIFY: Does output confirm the claim?
+   - If NO: State actual status with evidence
+   - If YES: State claim WITH evidence
+5. CHECK: Did I use any shortcuts to make it pass?
+   - If YES: That's not a fix. Return to debugging.
+   - If NO: Proceed
+
+Skip any step = lying, not verifying
+```
 
 ### Red Flags — STOP
 
@@ -40,6 +74,11 @@ If you catch yourself saying:
 | "Tests take too long" | Skipping verification takes LONGER when bugs slip through. |
 | "I'll verify after committing" | Unverified commits waste everyone's time. Verify first. |
 | "The code is obviously correct" | Obviously correct code fails all the time. Prove it. |
+| "I commented out the failing test" | You broke verification. Uncomment it and fix the code. |
+| "I disabled the lint rule" | You hid the problem. Re-enable and fix the code. |
+| "It passes now (with @ts-ignore)" | No it doesn't. Remove the suppression and fix the type. |
+| "The warning doesn't matter" | Then why did you suppress it? Understand it, then decide. |
+| "It works even though tests fail" | Tests exist because manual verification misses things. Fix the tests. |
 
 ## Verification Checklist
 
