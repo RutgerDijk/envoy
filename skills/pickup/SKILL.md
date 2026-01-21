@@ -61,12 +61,19 @@ Extract the path: `docs/plans/YYYY-MM-DD-<topic>-design.md`
 
 ### Step 4: Create Topic Name
 
-Convert issue title to branch-friendly name:
+Convert issue title to branch-friendly name, including issue number for GitHub auto-linking:
 
 ```bash
-# "Add User Authentication" → "add-user-authentication"
-TOPIC=$(echo "<issue-title>" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
+# Issue #42: "Add User Authentication" → "42-add-user-authentication"
+ISSUE_NUMBER=<issue-number>
+TOPIC_NAME=$(echo "<issue-title>" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
+TOPIC="${ISSUE_NUMBER}-${TOPIC_NAME}"
 ```
+
+Including the issue number in the branch name:
+- **Auto-links** the branch to the issue in GitHub's "Development" section
+- **Makes it easy** to identify which issue a branch belongs to
+- **Enables** GitHub to show branch status on the issue page
 
 ### Step 5: Create Worktree
 
@@ -76,12 +83,15 @@ Use envoy:using-git-worktrees:
 # Ensure .worktrees/ is gitignored
 grep -q "^\.worktrees/$" .gitignore 2>/dev/null || echo ".worktrees/" >> .gitignore
 
-# Create worktree
+# Create worktree with issue-linked branch name
+# Example: .worktrees/42-add-user-authentication with branch feature/42-add-user-authentication
 git worktree add .worktrees/$TOPIC -b feature/$TOPIC
 
 # Copy Claude settings to worktree
 cp -r .claude .worktrees/$TOPIC/
 ```
+
+The branch `feature/42-add-user-authentication` will automatically appear in the issue's "Development" section on GitHub.
 
 ### Step 5b: Merge Permissions (REQUIRED)
 
@@ -142,12 +152,14 @@ cd .worktrees/$TOPIC
 
 | Item | Value |
 |------|-------|
-| Issue status | 🚀 In Progress |
-| Worktree | `.worktrees/<topic>` |
-| Branch | `feature/<topic>` |
+| Issue | #<number> 🚀 In Progress |
+| Branch | `feature/<number>-<topic>` (linked to issue) |
+| Worktree | `.worktrees/<number>-<topic>` |
 | Spec | `<spec-path>` |
 | Plan | `<plan-path>` (or 'None') |
-| Stack profiles | `<detected-stacks>` |"
+| Stack profiles | `<detected-stacks>` |
+
+The branch is now visible in the issue's "Development" section on GitHub."
 
 ### Step 8: Auto-Continue to Execution
 
