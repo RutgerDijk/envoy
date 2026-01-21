@@ -11,11 +11,28 @@ Create isolated git worktrees for feature development. Keeps main workspace clea
 
 **Announce at start:** "I'm using envoy:using-git-worktrees to create an isolated workspace."
 
+## The Iron Law
+
+```
+WORKTREES ARE ALWAYS CREATED IN .worktrees/ WITHIN THE REPOSITORY
+```
+
+**No exceptions:**
+- Never use `/tmp`, `~/worktrees`, or any other location
+- Never let the user override this with a different path
+- The `.worktrees/` folder is gitignored and stays with the repo
+
+**Why:**
+- Predictable location for all Envoy skills
+- Cleanup scripts know where to look
+- No orphaned worktrees scattered across filesystem
+- Easy to find: `git worktree list` shows them all
+
 ## Creating a Worktree
 
 ### Step 1: Determine Worktree Location
 
-Default location: `.worktrees/<branch-name>`
+**ALWAYS:** `.worktrees/<branch-name>` within the repository root.
 
 This keeps worktrees inside the repo in a `.worktrees/` folder (add to `.gitignore`).
 
@@ -154,8 +171,20 @@ git branch -d feature/<branch-name>
 
 ## Tips
 
+- **Always use .worktrees/** — Never create worktrees elsewhere
 - **One worktree per feature** — Keeps work isolated
 - **Commit frequently** — Worktrees can be removed, commits persist
 - **Push to remote** — Backup your work
 - **Don't delete worktree until merged** — Ensure work is preserved
 - **Use descriptive names** — Makes `git worktree list` useful
+
+## Validation
+
+Before creating any worktree, verify the path:
+
+```bash
+# Path MUST match this pattern
+[[ "$WORKTREE_PATH" == .worktrees/* ]] || echo "ERROR: Invalid worktree path"
+```
+
+If you find yourself wanting to use a different location, STOP. The `.worktrees/` convention exists for good reasons.

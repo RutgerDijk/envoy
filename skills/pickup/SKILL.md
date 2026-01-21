@@ -77,13 +77,14 @@ Including the issue number in the branch name:
 
 ### Step 5: Create Worktree
 
-Use envoy:using-git-worktrees:
+Use envoy:using-git-worktrees. **Worktrees are ALWAYS created in `.worktrees/`** — no exceptions.
 
 ```bash
 # Ensure .worktrees/ is gitignored
 grep -q "^\.worktrees/$" .gitignore 2>/dev/null || echo ".worktrees/" >> .gitignore
 
 # Create worktree with issue-linked branch name
+# ALWAYS in .worktrees/ - never use /tmp or other locations
 # Example: .worktrees/42-add-user-authentication with branch feature/42-add-user-authentication
 git worktree add .worktrees/$TOPIC -b feature/$TOPIC
 
