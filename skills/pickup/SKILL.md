@@ -23,15 +23,31 @@ Pick up a GitHub issue created by envoy:brainstorming. Creates a worktree, loads
 ### Step 1: Fetch Issue Details
 
 ```bash
-gh issue view <issue-number> --json title,body,labels
+gh issue view <issue-number> --json title,body,labels,state
 ```
 
 Parse the response to extract:
 - Title (for branch naming)
 - Body (for linked spec path)
 - Labels (for context)
+- State (to verify it's open)
 
-### Step 2: Extract Linked Spec
+### Step 2: Set Issue to In Progress
+
+Mark the issue as being actively worked on:
+
+```bash
+# Add "in progress" label (create if doesn't exist)
+gh issue edit <issue-number> --add-label "in progress"
+
+# If your project uses GitHub Projects, move to "In Progress" column
+# gh project item-edit --project-id <id> --id <item-id> --field-id <status-field> --single-select-option-id <in-progress-id>
+
+# Add a comment to track when work started
+gh issue comment <issue-number> --body "🚀 Started working on this issue in branch \`feature/$TOPIC\`"
+```
+
+### Step 3: Extract Linked Spec
 
 Look for the "Linked Spec" section in the issue body:
 
@@ -43,7 +59,7 @@ Look for the "Linked Spec" section in the issue body:
 
 Extract the path: `docs/plans/YYYY-MM-DD-<topic>-design.md`
 
-### Step 3: Create Topic Name
+### Step 4: Create Topic Name
 
 Convert issue title to branch-friendly name:
 
@@ -52,7 +68,7 @@ Convert issue title to branch-friendly name:
 TOPIC=$(echo "<issue-title>" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
 ```
 
-### Step 4: Create Worktree
+### Step 5: Create Worktree
 
 Use envoy:using-git-worktrees:
 
@@ -67,7 +83,7 @@ git worktree add .worktrees/$TOPIC -b feature/$TOPIC
 cp -r .claude .worktrees/$TOPIC/
 ```
 
-### Step 4b: Merge Permissions (REQUIRED)
+### Step 5b: Merge Permissions (REQUIRED)
 
 **After copying .claude/, merge Envoy's required permissions into the worktree's settings.**
 
@@ -114,23 +130,26 @@ This ensures Envoy workflows work while keeping user customizations.
 cd .worktrees/$TOPIC
 ```
 
-### Step 5: Load Context
+### Step 6: Load Context
 
 1. **Read the linked spec document** — Understand what needs to be built
 2. **Detect project stack** — Auto-load relevant stack profiles
 3. **Check for existing plan** — Look for `*-plan.md` matching the design doc
 
-### Step 6: Report Ready State and Continue
+### Step 7: Report Ready State and Continue
 
 "**Workspace ready for issue #<number>: <title>**
 
-- **Worktree:** `.worktrees/<topic>`
-- **Branch:** `feature/<topic>`
-- **Spec:** `<spec-path>`
-- **Plan:** `<plan-path>` (or 'None')
-- **Stack profiles:** `<detected-stacks>`"
+| Item | Value |
+|------|-------|
+| Issue status | 🚀 In Progress |
+| Worktree | `.worktrees/<topic>` |
+| Branch | `feature/<topic>` |
+| Spec | `<spec-path>` |
+| Plan | `<plan-path>` (or 'None') |
+| Stack profiles | `<detected-stacks>` |"
 
-### Step 7: Auto-Continue to Execution
+### Step 8: Auto-Continue to Execution
 
 **If plan exists AND not `--plan-only`:**
 - Announce: "Plan found. Continuing with execution..."
