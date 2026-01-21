@@ -73,7 +73,32 @@ git branch -d "$BRANCH"
 git push origin --delete "$BRANCH"
 ```
 
-### Step 6: Verify Cleanup
+### Step 6: Close Linked Issue
+
+Find and close the GitHub issue linked to this PR:
+
+```bash
+# Get the PR number for this branch
+PR_NUMBER=$(gh pr list --head "$BRANCH" --state merged --json number --jq '.[0].number')
+
+# Get the linked issue number from the PR body
+ISSUE_NUMBER=$(gh pr view "$PR_NUMBER" --json body --jq '.body' | grep -oE 'Closes #[0-9]+|Fixes #[0-9]+|Resolves #[0-9]+' | grep -oE '[0-9]+' | head -1)
+
+if [ -n "$ISSUE_NUMBER" ]; then
+  # Close the issue if not already closed
+  ISSUE_STATE=$(gh issue view "$ISSUE_NUMBER" --json state --jq '.state')
+  if [ "$ISSUE_STATE" != "CLOSED" ]; then
+    gh issue close "$ISSUE_NUMBER" --comment "Completed via PR #$PR_NUMBER"
+    echo "✓ Issue #$ISSUE_NUMBER closed"
+  else
+    echo "✓ Issue #$ISSUE_NUMBER already closed"
+  fi
+else
+  echo "⚠ No linked issue found in PR"
+fi
+```
+
+### Step 7: Verify Cleanup
 
 ```bash
 # Worktree removed
@@ -82,9 +107,13 @@ git worktree list
 # Branch deleted
 git branch -a | grep "$BRANCH"
 # Should return nothing
+
+# Issue closed
+gh issue view "$ISSUE_NUMBER" --json state --jq '.state'
+# Should show: CLOSED
 ```
 
-### Step 7: Report Completion
+### Step 9: Report Completion
 
 ```
 **Cleanup complete**
@@ -94,8 +123,10 @@ git branch -a | grep "$BRANCH"
 | Worktree | ✓ Removed |
 | Local branch | ✓ Deleted |
 | Remote branch | ✓ Deleted |
+| Issue #<number> | ✓ Closed |
 
 You're now on `main` with a clean workspace.
+Ready for next task.
 ```
 
 ## Error Handling
