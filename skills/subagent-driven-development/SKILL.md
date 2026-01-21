@@ -185,7 +185,7 @@ Review this implementation for code quality.
 ```
 You: I'm using envoy:subagent-driven-development to execute this plan.
 
-[Read plan file: docs/plans/user-auth-plan.md]
+[Read spec file: docs/plans/user-auth.md]
 [Extract 5 tasks, create TodoWrite]
 
 Task 1: Add User entity and migration

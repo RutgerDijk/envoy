@@ -11,17 +11,18 @@ Execute implementation plans created by envoy:writing-plans. Supports three exec
 
 **Announce at start:** "I'm using envoy:executing-plans to implement this plan."
 
-## Load the Plan
+## Load the Spec
 
-### Step 1: Find the Plan
+### Step 1: Find the Spec
 
-If plan path provided, use it. Otherwise:
+If spec path provided, use it. Otherwise:
 
 ```bash
-# Find most recent plan for current branch
-BRANCH=$(git branch --show-current)
-ls -t docs/plans/*-plan.md | head -1
+# Find most recent spec in docs/plans/
+ls -t docs/plans/*.md | head -1
 ```
+
+The spec file contains both design AND implementation tasks in one document.
 
 ### Step 2: Parse Execution Strategy
 

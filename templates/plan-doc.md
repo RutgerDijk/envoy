@@ -1,24 +1,33 @@
-# Implementation Plan Template
+# Spec Document Template
 
-Save as: `docs/plans/YYYY-MM-DD-feature-name-plan.md`
+Save as: `docs/plans/YYYY-MM-DD-feature-name.md`
 
 ---
 
 ```markdown
-# Implementation Plan: Feature Name
+# Feature Name
 
-> Reference: [Spec Document](../specs/YYYY-MM-DD-feature-name.md) | [GitHub Issue](#123)
+> **For Claude:** Use envoy:executing-plans to implement this spec task-by-task.
+>
+> GitHub Issue: #123
 
 ## Overview
 
-Brief summary of what will be implemented.
+Brief summary of what will be implemented and why.
 
-## Prerequisites
+## Architecture
 
-- [ ] Spec document approved
-- [ ] GitHub issue created
-- [ ] Dependencies identified
-- [ ] Environment ready
+Technical approach, key decisions, and components involved.
+
+## Acceptance Criteria
+
+- [ ] Criterion 1
+- [ ] Criterion 2
+- [ ] Criterion 3
+
+---
+
+## Implementation Plan
 
 ## Execution Strategy
 

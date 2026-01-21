@@ -54,10 +54,12 @@ Look for the "Linked Spec" section in the issue body:
 ```
 ## Linked Spec
 
-[View full design](docs/plans/YYYY-MM-DD-<topic>-design.md)
+[View full spec](docs/plans/YYYY-MM-DD-<topic>.md)
 ```
 
-Extract the path: `docs/plans/YYYY-MM-DD-<topic>-design.md`
+Extract the path: `docs/plans/YYYY-MM-DD-<topic>.md`
+
+The spec file contains both the design AND implementation tasks in one document.
 
 ### Step 4: Create Topic Name
 
@@ -143,9 +145,9 @@ cd .worktrees/$TOPIC
 
 ### Step 6: Load Context
 
-1. **Read the linked spec document** — Understand what needs to be built
+1. **Read the linked spec document** — Contains both design AND implementation tasks
 2. **Detect project stack** — Auto-load relevant stack profiles
-3. **Check for existing plan** — Look for `*-plan.md` matching the design doc
+3. **Check for Implementation Plan section** — Verify spec has tasks to execute
 
 ### Step 7: Report Ready State and Continue
 
@@ -156,23 +158,22 @@ cd .worktrees/$TOPIC
 | Issue | #<number> 🚀 In Progress |
 | Branch | `feature/<number>-<topic>` (linked to issue) |
 | Worktree | `.worktrees/<number>-<topic>` |
-| Spec | `<spec-path>` |
-| Plan | `<plan-path>` (or 'None') |
+| Spec | `<spec-path>` (design + N tasks) |
 | Stack profiles | `<detected-stacks>` |
 
 The branch is now visible in the issue's "Development" section on GitHub."
 
 ### Step 8: Auto-Continue to Execution
 
-**If plan exists AND not `--plan-only`:**
-- Announce: "Plan found. Continuing with execution..."
-- Invoke `envoy:executing-plans` with the plan path
+**If spec has Implementation Plan section AND not `--plan-only`:**
+- Announce: "Spec has implementation tasks. Continuing with execution..."
+- Invoke `envoy:executing-plans` with the spec path
 - Continue through the full implementation
 
-**If no plan exists:**
+**If spec has no Implementation Plan section:**
 - Stop and report:
-  "No implementation plan found. Create one first:
-  `/envoy:write-plan <spec-path>`"
+  "Spec has no implementation tasks. Add them first:
+  `/envoy:writing-plans <spec-path>`"
 
 **If `--plan-only` flag:**
 - Stop after setup, let user decide next step
@@ -222,7 +223,18 @@ The spec may have been moved or deleted. Check:
 - `docs/plans/` for similar files
 - Git history for the file
 
-Or create a new spec with /envoy:brainstorm.
+Or create a new spec with /envoy:brainstorming.
+```
+
+### Spec Has No Implementation Tasks
+
+```
+Spec found but has no Implementation Plan section: <path>
+
+The spec only contains design, not implementation tasks.
+
+To add tasks:
+  /envoy:writing-plans <spec-path>
 ```
 
 ## Stack Detection and Loading

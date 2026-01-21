@@ -79,7 +79,7 @@ HEAD_SHA=$(git rev-parse HEAD)
 
 [Dispatch code-reviewer subagent]
   What: Verification and repair functions for data index
-  Spec: Task 2 from docs/plans/feature-plan.md
+  Spec: Task 2 from docs/plans/feature.md
   Base: a7981ec
   Head: 3df7661
 

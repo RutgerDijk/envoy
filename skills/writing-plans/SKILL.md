@@ -1,34 +1,45 @@
 ---
 name: writing-plans
-description: Use when you have a design doc or spec and need to create an implementation plan
+description: Use when you have a spec and need to add implementation tasks to it
 ---
 
 # Writing Implementation Plans
 
 ## Overview
 
-Create comprehensive implementation plans from design documents. Plans assume the implementing engineer has zero context — document everything needed.
+Add implementation tasks to an existing spec document, or create a new spec with tasks. Plans assume the implementing engineer has zero context — document everything needed.
 
 **Announce at start:** "I'm using envoy:writing-plans to create the implementation plan."
 
-## Plan Document Header
+## Spec Document Structure
 
-Every plan MUST start with:
+Specs combine design and implementation in one file:
 
 ```markdown
-# [Feature Name] Implementation Plan
+# [Feature Name]
 
-> **For Claude:** REQUIRED SUB-SKILL: Use envoy:executing-plans to implement this plan task-by-task.
+> **For Claude:** Use envoy:executing-plans to implement this spec task-by-task.
 
-**Goal:** [One sentence describing what this builds]
+## Overview
 
-**Architecture:** [2-3 sentences about approach]
+[One sentence describing what this builds]
 
-**Tech Stack:** [Key technologies/libraries]
+## Architecture
 
-**Design Document:** `docs/plans/<design-doc>.md`
+[2-3 sentences about approach, key technologies]
+
+## Acceptance Criteria
+
+- [ ] Criterion 1
+- [ ] Criterion 2
 
 ---
+
+## Implementation Plan
+
+**Execution Strategy:** parallel | batch | sequential
+
+[Tasks go here...]
 ```
 
 ## Bite-Sized Task Granularity
@@ -107,29 +118,29 @@ grep -l "react" package.json 2>/dev/null
 
 Include relevant stack profile references in tasks.
 
-## After Saving the Plan
+## After Saving the Spec
 
-**Always show the exact plan path in the completion message:**
+**Always show the exact spec path in the completion message:**
 
-"**Plan complete!**
+"**Spec complete!**
 
-**Plan saved to:** `docs/plans/YYYY-MM-DD-<topic>-plan.md`
+**Spec saved to:** `docs/plans/YYYY-MM-DD-<topic>.md`
 **Tasks:** N tasks across M phases
 
-**To execute this plan:**
+**To execute this spec:**
 ```bash
-/envoy:executing-plans docs/plans/YYYY-MM-DD-<topic>-plan.md
+/envoy:executing-plans docs/plans/YYYY-MM-DD-<topic>.md
 ```
 
 **Execution options:**
 
-1. **Execute now (this session)** — Run `/envoy:executing-plans <plan-path>`
+1. **Execute now (this session)** — Run `/envoy:executing-plans <spec-path>`
 2. **Subagent-Driven (this session)** — Dispatch fresh agent per task with reviews
 3. **New session** — Open worktree session and run the command above
 
 Which approach?"
 
-**IMPORTANT:** Always include the exact plan file path in any suggestion to execute.
+**IMPORTANT:** Always include the exact spec file path in any suggestion to execute.
 
 ## Key Principles
 
