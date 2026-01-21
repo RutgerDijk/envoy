@@ -336,24 +336,19 @@ CodeRabbit provides AI-powered code review for the first layer of Envoy's 4-laye
 
 Chrome DevTools MCP enables visual verification by capturing screenshots, console logs, and network activity.
 
-1. **Install the MCP server**:
-   ```bash
-   npm install -g chrome-devtools-mcp
-   ```
-
-2. **Add to Claude Code settings** (`~/.claude/settings.json`):
+1. **Add to MCP config** (`~/.mcp.json`):
    ```json
    {
      "mcpServers": {
        "chrome-devtools": {
-         "command": "chrome-devtools-mcp",
-         "args": []
+         "command": "npx",
+         "args": ["chrome-devtools-mcp@latest"]
        }
      }
    }
    ```
 
-3. **Launch Chrome with debugging**:
+2. **Launch Chrome with debugging**:
    ```bash
    # macOS
    /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
@@ -375,7 +370,7 @@ echo "=== Required ===" && \
 echo "" && \
 echo "=== Optional ===" && \
 (command -v coderabbit &>/dev/null && echo "✓ CodeRabbit CLI installed" || echo "⚠ CodeRabbit CLI not found (install: curl -fsSL https://cli.coderabbit.ai/install.sh | sh)") && \
-(command -v chrome-devtools-mcp &>/dev/null && echo "✓ Chrome DevTools MCP installed" || echo "⚠ Chrome DevTools MCP not found (install: npm i -g chrome-devtools-mcp)")
+(test -f ~/.mcp.json && grep -q "chrome-devtools-mcp" ~/.mcp.json && echo "✓ Chrome DevTools MCP configured" || echo "⚠ Chrome DevTools MCP not configured (add to ~/.mcp.json)")
 ```
 
 ## License
