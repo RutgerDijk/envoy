@@ -112,12 +112,45 @@ Review this implementation for spec compliance.
 **Original spec:** <task specification>
 **Changes:** git diff <base_sha>..<head_sha>
 
-**Check:**
-1. Does implementation match ALL spec requirements?
-2. Is anything MISSING from the spec?
-3. Is anything EXTRA that wasn't requested?
+---
 
-**Return:** ✅ Spec compliant OR ❌ Issues: <list>
+**CRITICAL: Do Not Trust the Report**
+
+The implementer's summary describes what they BELIEVE they did, not what the code ACTUALLY does.
+
+Your job is skeptical verification:
+- READ THE CODE YOURSELF
+- Don't trust claims like "3 tests passing" — verify test output
+- Don't trust "all requirements met" — check each one against code
+- Implementers rationalize. Code doesn't lie.
+
+---
+
+**Verification Process:**
+
+1. **List spec requirements** — Extract EVERY requirement from the original spec
+2. **For EACH requirement:**
+   - Find the code that implements it (file:line)
+   - If you can't find it → MISSING
+   - If code exists but doesn't match spec → WRONG
+3. **Check for extras:**
+   - Any code/behavior NOT in the spec?
+   - YAGNI violation = issue
+4. **Check for TDD evidence:**
+   - Does git log show test commit before implementation commit?
+   - If not → FAIL (TDD violation trumps all)
+
+**Return format:**
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| <req 1> | ✅/❌ | <file:line or MISSING> |
+| <req 2> | ✅/❌ | <file:line or MISSING> |
+
+Extras found: <list or "none">
+TDD compliance: ✅/❌
+
+**Final verdict:** ✅ Spec compliant OR ❌ Issues: <numbered list>
 ```
 
 ## Code Quality Reviewer Prompt
@@ -230,5 +263,9 @@ You: "TDD violation detected. Delete your implementation and start over:
 - `envoy:finishing-branch` — Complete development after all tasks
 
 **Subagents should use:**
+- `envoy:test-driven-development` — TDD Iron Law applies to all tasks
 - `envoy:systematic-debugging` — For investigating issues
-- TDD cycle from `envoy:executing-plans`
+- `envoy:pressure-test-scenarios` — All scenarios apply during execution
+
+**Reviewers should apply:**
+- `envoy:receiving-code-review` — Skeptical evaluation of implementer claims

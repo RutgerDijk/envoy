@@ -84,6 +84,37 @@ IF reviewer suggests "implementing properly" or adding features:
   IF used: Then implement properly
 ```
 
+**Common YAGNI violations from reviewers:**
+- "Add error handling for edge case X" → Does X happen in practice?
+- "Make this configurable" → Is configuration actually needed?
+- "Add logging here" → Is anyone going to read these logs?
+- "This should be more generic" → Are there other use cases today?
+
+**The test:** Would removing this code break anything that works today? If no → YAGNI.
+
+## Technical Verification Before Implementation
+
+```
+BEFORE implementing ANY suggestion:
+
+1. REPRODUCE: Can you see the problem the reviewer claims?
+   - If claim is "this will break when X", test X
+   - If claim is "performance issue", measure it
+
+2. CONTEXT: Does reviewer have full context?
+   - Check if they see the test file
+   - Check if they see related code
+   - Check git history for WHY current approach exists
+
+3. ALTERNATIVES: Is their suggestion the best fix?
+   - Their fix may be correct but suboptimal
+   - You know this codebase better than external reviewers
+
+4. INTEGRATION: Does fix work with existing code?
+   - Run tests before and after
+   - Check related functionality
+```
+
 ## Implementation Order
 
 ```
@@ -142,3 +173,10 @@ When feedback IS correct:
 **External feedback = suggestions to evaluate, not orders to follow.**
 
 Verify. Question. Then implement.
+
+## Integration with Envoy
+
+**Related skills:**
+- `envoy:verification` — Verify fixes after implementing feedback
+- `envoy:systematic-debugging` — If feedback reveals bug, debug properly
+- `envoy:pressure-test-scenarios` — Scenarios 7, 8, 9 test review discipline

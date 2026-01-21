@@ -250,8 +250,60 @@ Watch for these redirections from the user:
 | **3. Hypothesis** | Form theory, test minimally | Confirmed or new hypothesis |
 | **4. Implementation** | Create test, fix, verify | Bug resolved, tests pass |
 
+## Supporting Techniques
+
+These techniques are part of systematic debugging and available in this directory:
+
+| Technique | When to Use | File |
+|-----------|-------------|------|
+| **Root Cause Tracing** | Bug appears deep in call stack, need to trace backward | `root-cause-tracing.md` |
+| **Defense-in-Depth** | After fixing, add validation at every layer | `defense-in-depth.md` |
+| **Condition-Based Waiting** | Flaky tests with arbitrary delays | `condition-based-waiting.md` |
+
+### Root Cause Tracing
+
+When error is deep in call stack:
+1. Find immediate cause
+2. Ask: "What called this?"
+3. Keep tracing up
+4. Fix at the SOURCE, not the symptom
+
+See `root-cause-tracing.md` for detailed process with .NET/React examples.
+
+### Defense-in-Depth
+
+After finding root cause, add validation at EVERY layer:
+1. Entry point (Controller/Form)
+2. Business logic (Service)
+3. Environment guards
+4. Debug instrumentation
+
+See `defense-in-depth.md` for the 4-layer pattern.
+
+### Condition-Based Waiting
+
+For flaky tests, replace arbitrary delays with condition polling:
+
+```csharp
+// ❌ await Task.Delay(500);
+// ✅ await WaitForAsync(() => GetResult(), r => r != null, "result");
+```
+
+See `condition-based-waiting.md` for implementation patterns.
+
 ## Integration with Envoy
 
-After fixing, use:
+**After debugging:**
 - `envoy:verification` — Verify fix before claiming success
 - `envoy:layered-review` — Review changes before finalizing
+
+**Related skills:**
+- `envoy:test-driven-development` — Write failing test before fix (Phase 4)
+- `envoy:executing-plans` — TDD enforcement during implementation
+- `envoy:pressure-test-scenarios` — Scenarios 1, 10, 11, 12 test debugging discipline
+
+**Stack profiles to consult:**
+- `stacks/dotnet.md` — Common .NET debugging patterns
+- `stacks/react.md` — Common React debugging patterns
+- `stacks/testing-dotnet.md` — xUnit/FluentAssertions patterns
+- `stacks/playwright.md` — E2E test debugging
