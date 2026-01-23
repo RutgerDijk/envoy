@@ -47,37 +47,34 @@ gh issue edit <issue-number> --add-label "in progress"
 gh issue comment <issue-number> --body "🚀 Started working on this issue in branch \`feature/$TOPIC\`"
 ```
 
-### Step 3: Extract Linked Spec
+### Step 3: Extract Feature Branch
 
-Look for the "Linked Spec" section in the issue body:
+Look for the "Feature Branch" section in the issue body:
 
 ```
-## Linked Spec
+## Feature Branch
 
-[View full spec](docs/plans/YYYY-MM-DD-<topic>.md)
+`feature/42-add-user-authentication` — spec is committed here, ready for implementation
 ```
 
-Extract the path: `docs/plans/YYYY-MM-DD-<topic>.md`
+Extract the branch name: `feature/42-add-user-authentication`
 
-The spec file contains both the design AND implementation tasks in one document.
+Also extract the spec path from the "Linked Spec" section (points to file on the branch).
 
-### Step 4: Create Topic Name
+### Step 4: Fetch Feature Branch
 
-Convert issue title to branch-friendly name, including issue number for GitHub auto-linking:
+The feature branch was created by brainstorming and contains the spec. Fetch it:
 
 ```bash
-# Issue #42: "Add User Authentication" → "42-add-user-authentication"
-ISSUE_NUMBER=<issue-number>
-TOPIC_NAME=$(echo "<issue-title>" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
-TOPIC="${ISSUE_NUMBER}-${TOPIC_NAME}"
+# Fetch the feature branch from remote
+git fetch origin feature/<issue-number>-<topic>
+
+# Extract topic for worktree directory name
+TOPIC="<issue-number>-<topic>"
+BRANCH="feature/$TOPIC"
 ```
 
-Including the issue number in the branch name:
-- **Auto-links** the branch to the issue in GitHub's "Development" section
-- **Makes it easy** to identify which issue a branch belongs to
-- **Enables** GitHub to show branch status on the issue page
-
-### Step 5: Create Worktree
+### Step 5: Create Worktree from Existing Branch
 
 Use envoy:using-git-worktrees. **Worktrees are ALWAYS created in `.worktrees/`** — no exceptions.
 
@@ -85,16 +82,15 @@ Use envoy:using-git-worktrees. **Worktrees are ALWAYS created in `.worktrees/`**
 # Ensure .worktrees/ is gitignored
 grep -q "^\.worktrees/$" .gitignore 2>/dev/null || echo ".worktrees/" >> .gitignore
 
-# Create worktree with issue-linked branch name
+# Create worktree from EXISTING remote branch (not -b for new branch)
 # ALWAYS in .worktrees/ - never use /tmp or other locations
-# Example: .worktrees/42-add-user-authentication with branch feature/42-add-user-authentication
-git worktree add .worktrees/$TOPIC -b feature/$TOPIC
+git worktree add .worktrees/$TOPIC origin/$BRANCH
 
 # Copy Claude settings to worktree
 cp -r .claude .worktrees/$TOPIC/
 ```
 
-The branch `feature/42-add-user-authentication` will automatically appear in the issue's "Development" section on GitHub.
+**Note:** We use `origin/$BRANCH` without `-b` because the branch already exists on remote (created by brainstorming).
 
 ### Step 5b: Merge Permissions (REQUIRED)
 
@@ -156,12 +152,12 @@ cd .worktrees/$TOPIC
 | Item | Value |
 |------|-------|
 | Issue | #<number> 🚀 In Progress |
-| Branch | `feature/<number>-<topic>` (linked to issue) |
+| Branch | `feature/<number>-<topic>` (fetched from remote) |
 | Worktree | `.worktrees/<number>-<topic>` |
 | Spec | `<spec-path>` (design + N tasks) |
 | Stack profiles | `<detected-stacks>` |
 
-The branch is now visible in the issue's "Development" section on GitHub."
+The spec was created during brainstorming and is already committed to the feature branch."
 
 ### Step 8: Auto-Continue to Execution
 
@@ -192,13 +188,36 @@ Check:
 Run `gh issue list` to see available issues.
 ```
 
-### No Linked Spec
+### No Feature Branch
 
 ```
-Issue #<number> has no linked spec document.
+Issue #<number> has no feature branch specified.
 
-This issue may not have been created with /envoy:brainstorm.
-You can still create a worktree manually and work from the issue description.
+This issue may not have been created with /envoy:brainstorming.
+
+Options:
+1. Create spec and branch manually:
+   /envoy:brainstorming (start fresh)
+
+2. Work directly from issue description:
+   git checkout -b feature/<number>-<topic>
+   git worktree add .worktrees/<topic> feature/<number>-<topic>
+```
+
+### Feature Branch Not Found on Remote
+
+```
+Feature branch not found: feature/<number>-<topic>
+
+The branch may have been deleted or not pushed.
+
+Check:
+- git branch -r | grep <topic>
+- Was the brainstorming completed successfully?
+
+To create the branch manually:
+  git checkout -b feature/<number>-<topic>
+  git push -u origin feature/<number>-<topic>
 ```
 
 ### Worktree Already Exists

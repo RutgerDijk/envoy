@@ -218,9 +218,39 @@ Every task MUST follow Red-Green-Refactor:
 
 Reference `stacks/*.md` for detailed patterns.
 
-**Create GitHub Issue:**
+### Phase 4b: Create Feature Branch and Push Spec
+
+**After writing spec, before creating issue:**
 
 ```bash
+# 1. Create topic name from feature title
+TOPIC=$(echo "<feature-title>" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
+
+# 2. Create feature branch from main
+git checkout -b feature/$TOPIC
+
+# 3. Commit the spec document
+git add docs/plans/YYYY-MM-DD-<topic>.md
+git commit -m "docs(plans): add spec for $TOPIC"
+
+# 4. Push branch to remote
+git push -u origin feature/$TOPIC
+
+# 5. Return to main branch
+git checkout main
+```
+
+**Why push before creating issue:**
+- Spec link in issue points to actual file on the branch
+- Anyone can fetch the branch to see the spec
+- Spec stays on feature branch, not polluting main
+
+### Phase 4c: Create GitHub Issue
+
+```bash
+# Get the branch name for the spec link
+BRANCH="feature/$TOPIC"
+
 gh issue create --title "<Feature Name>" --body "$(cat <<'EOF'
 ## Summary
 
@@ -228,7 +258,11 @@ gh issue create --title "<Feature Name>" --body "$(cat <<'EOF'
 
 ## Linked Spec
 
-[View full spec](docs/plans/YYYY-MM-DD-<topic>.md)
+[View full spec](https://github.com/<owner>/<repo>/blob/feature/<topic>/docs/plans/YYYY-MM-DD-<topic>.md)
+
+## Feature Branch
+
+`feature/<topic>` — spec is committed here, ready for implementation
 
 ## Quick Start
 
@@ -248,27 +282,44 @@ EOF
 )" --label "<labels>"
 ```
 
+**After issue is created**, update the branch name to include issue number:
+
+```bash
+# Get the issue number from the created issue
+ISSUE_NUMBER=<newly-created-issue-number>
+
+# Rename local branch
+git branch -m feature/$TOPIC feature/${ISSUE_NUMBER}-${TOPIC}
+
+# Delete old remote branch and push renamed one
+git push origin --delete feature/$TOPIC
+git push -u origin feature/${ISSUE_NUMBER}-${TOPIC}
+
+# Update issue with correct branch reference
+gh issue edit $ISSUE_NUMBER --body "$(updated body with correct branch name)"
+```
+
 ### Phase 5: Final Handoff
 
 "**Ready for implementation!**
 
 **Artifacts created:**
-- Spec: `docs/plans/<date>-<topic>.md` (design + N tasks)
+- Spec: `docs/plans/<date>-<topic>.md` (on feature branch)
+- Branch: `feature/<issue-number>-<topic>` (pushed to remote)
 - Issue: #<number>
 
 **To start implementation:**
 
-Option 1 — New worktree (recommended for larger features):
 ```bash
 /envoy:pickup <issue-number>
 ```
 
-Option 2 — Execute in current session:
-```bash
-/envoy:executing-plans docs/plans/<date>-<topic>.md
-```
+This will:
+1. Fetch the feature branch
+2. Create a worktree in `.worktrees/<issue-number>-<topic>`
+3. Auto-continue to execution if spec has tasks
 
-**IMPORTANT:** Always include the exact spec file path when suggesting execution."
+**IMPORTANT:** The spec lives on the feature branch, not main."
 
 ## Labels Reference
 

@@ -42,11 +42,26 @@ This keeps worktrees inside the repo in a `.worktrees/` folder (add to `.gitigno
 grep -q "^\.worktrees/$" .gitignore 2>/dev/null || echo ".worktrees/" >> .gitignore
 ```
 
-### Step 3: Create Worktree with New Branch
+### Step 3: Create Worktree
+
+**Option A: From existing remote branch (pickup flow):**
+
+```bash
+# Fetch the branch first
+git fetch origin feature/<branch-name>
+
+# Create worktree from existing branch (no -b flag)
+git worktree add .worktrees/<branch-name> origin/feature/<branch-name>
+```
+
+**Option B: Create new branch (manual flow):**
 
 ```bash
 git worktree add .worktrees/<branch-name> -b feature/<branch-name>
 ```
+
+Use Option A when picking up an issue (branch already exists from brainstorming).
+Use Option B when starting fresh without a pre-created branch.
 
 ### Step 4: Copy and Merge Claude Settings
 
