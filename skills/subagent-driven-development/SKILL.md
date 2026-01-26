@@ -160,7 +160,7 @@ Review this implementation for code quality.
 
 **What was implemented:** <summary>
 **Changes:** git diff <base_sha>..<head_sha>
-**Stack profiles:** Load relevant from stacks/
+**Stack profiles:** Load relevant from ../../stacks/
 
 **Check:**
 1. **TDD compliance (CRITICAL):**

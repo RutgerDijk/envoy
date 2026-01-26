@@ -42,7 +42,7 @@ Review this implementation.
 **Base commit:** <BASE_SHA>
 **Head commit:** <HEAD_SHA>
 
-**Stack context:** Load relevant profiles from stacks/
+**Stack context:** Load relevant profiles from ../../stacks/
 
 **Review for:**
 1. Spec compliance - does it meet requirements?

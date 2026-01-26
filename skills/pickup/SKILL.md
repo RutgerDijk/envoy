@@ -280,13 +280,13 @@ Or manually detect by checking for:
 
 ### Step 2: Read Detected Stack Profiles
 
-For each detected stack, read the profile from `stacks/<stack-name>.md`:
+For each detected stack, read the profile from `../../stacks/<stack-name>.md`:
 
 ```bash
 # Example: If dotnet, react, postgresql detected
-cat stacks/dotnet.md
-cat stacks/react.md
-cat stacks/postgresql.md
+cat ../../stacks/dotnet.md
+cat ../../stacks/react.md
+cat ../../stacks/postgresql.md
 ```
 
 ### Step 3: Extract Key Information

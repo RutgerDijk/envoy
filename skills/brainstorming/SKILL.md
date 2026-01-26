@@ -216,7 +216,7 @@ Every task MUST follow Red-Green-Refactor:
 | React | Vitest + Testing Library | `test()`, `render()`, `screen.getByText()` |
 | Node | Jest | `describe()`, `it()`, `expect()` |
 
-Reference `stacks/*.md` for detailed patterns.
+Reference `../../stacks/*.md` for detailed patterns.
 
 ### Phase 4b: Create Feature Branch and Push Spec
 

@@ -139,7 +139,7 @@ You MUST complete each phase before proceeding to the next.
    - What works that's similar to what's broken?
 
 2. **Compare Against References**
-   - Check stack profiles in `stacks/` for common mistakes
+   - Check stack profiles in `../../stacks/` for common mistakes
    - Read the relevant profile completely
 
 3. **Identify Differences**
@@ -303,7 +303,7 @@ See `condition-based-waiting.md` for implementation patterns.
 - `envoy:pressure-test-scenarios` — Scenarios 1, 10, 11, 12 test debugging discipline
 
 **Stack profiles to consult:**
-- `stacks/dotnet.md` — Common .NET debugging patterns
-- `stacks/react.md` — Common React debugging patterns
-- `stacks/testing-dotnet.md` — xUnit/FluentAssertions patterns
-- `stacks/playwright.md` — E2E test debugging
+- `../../stacks/dotnet.md` — Common .NET debugging patterns
+- `../../stacks/react.md` — Common React debugging patterns
+- `../../stacks/testing-dotnet.md` — xUnit/FluentAssertions patterns
+- `../../stacks/testing-playwright.md` — E2E test debugging

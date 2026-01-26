@@ -292,9 +292,9 @@ Can't check all boxes? **You skipped TDD. Start over.**
 - `envoy:pressure-test-scenarios` — Scenarios 4, 5 test TDD discipline
 
 **Stack profiles:**
-- `stacks/testing-dotnet.md` — xUnit, Moq, FluentAssertions patterns
-- `stacks/playwright.md` — E2E testing patterns
-- `stacks/react.md` — React Testing Library patterns
+- `../../stacks/testing-dotnet.md` — xUnit, Moq, FluentAssertions patterns
+- `../../stacks/testing-playwright.md` — E2E testing patterns
+- `../../stacks/react.md` — React Testing Library patterns
 
 ## Example: Bug Fix with TDD
 

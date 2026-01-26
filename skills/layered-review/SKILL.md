@@ -42,8 +42,8 @@ Based on changed files, load relevant stack profiles:
 
 **Read each detected stack profile:**
 ```bash
-cat stacks/dotnet.md       # For .NET changes
-cat stacks/react.md        # For React changes
+cat ../../stacks/dotnet.md       # For .NET changes
+cat ../../stacks/react.md        # For React changes
 # etc.
 ```
 
