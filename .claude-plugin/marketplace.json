@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Professional .NET/React/Azure development workflows for Claude Code",
-    "version": "1.0.0"
+    "version": "1.2.0"
   },
   "plugins": [
     {
@@ -15,8 +15,8 @@
         "source": "github",
         "repo": "RutgerDijk/envoy"
       },
-      "description": "Professional .NET/React/Azure development workflows with handoff-ready artifacts, 4-layer review, and visual verification",
-      "version": "1.0.0",
+      "description": "Professional .NET/React/Azure development workflows with handoff-ready artifacts, 5-layer review, and visual verification",
+      "version": "1.2.0",
       "author": {
         "name": "Rutger Dijkstra"
       },

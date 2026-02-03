@@ -1,7 +1,7 @@
 {
   "name": "envoy",
-  "description": "Professional .NET/React/Azure development workflows with handoff-ready artifacts, 4-layer review, and visual verification",
-  "version": "1.1.9",
+  "description": "Professional .NET/React/Azure development workflows with handoff-ready artifacts, 5-layer review, and visual verification",
+  "version": "1.2.0",
   "author": {
     "name": "Rutger Dijkstra"
   },
