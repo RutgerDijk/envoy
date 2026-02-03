@@ -7,7 +7,7 @@ description: Use after implementation is complete, before creating PR or finaliz
 
 ## Overview
 
-Comprehensive 4-layer review combining automated tools, documentation-informed AI review, Chrome DevTools visual verification, and documentation gap detection.
+Comprehensive 5-layer review combining automated linting, static analysis tools, documentation-informed AI review, Chrome DevTools visual verification, and documentation gap detection.
 
 **Announce at start:** "I'm using envoy:layered-review to review these changes."
 
@@ -82,6 +82,31 @@ Example exclusions from spec:
 - "Mobile support (out of scope)"
 
 These are **not bugs** — they are documented scope boundaries.
+
+---
+
+## Layer 0: Automated Linting
+
+Run linting before deeper analysis to catch basic issues early.
+
+### Run Lint
+
+```bash
+npm run lint
+```
+
+### Handle Failures
+
+**If lint passes:** Continue to Layer 1.
+
+**If lint fails:**
+- Fix auto-fixable issues: `npm run lint -- --fix` (if supported)
+- Fix remaining issues manually
+- Commit fixes:
+  ```bash
+  git add -p
+  git commit -m "fix: address lint errors"
+  ```
 
 ---
 
@@ -281,6 +306,7 @@ Combine all layer results:
 
 | Layer | Status | Issues |
 |-------|--------|--------|
+| 0. Lint | ✓ | 0 errors |
 | 1. CodeRabbit | ✓ | 3 fixed, 1 needs decision |
 | 2. AI Review | ⚠ | 2 concerns |
 | 3. Visual | ✓ | 1 warning |
@@ -304,8 +330,8 @@ Combine all layer results:
 
 | Command | Layers Run |
 |---------|------------|
-| `/envoy:review` | 1, 2, 3, 4 (default doc check) |
-| `/envoy:review --check-docs` | 1, 2, 3, 4 (deep doc check) |
-| `/envoy:review --no-check-docs` | 1, 2, 3 |
-| `/envoy:quick-review` | 1, 2 only |
+| `/envoy:review` | 0, 1, 2, 3, 4 (default doc check) |
+| `/envoy:review --check-docs` | 0, 1, 2, 3, 4 (deep doc check) |
+| `/envoy:review --no-check-docs` | 0, 1, 2, 3 |
+| `/envoy:quick-review` | 0, 1, 2 only |
 | `/envoy:visual-review` | 3 only |

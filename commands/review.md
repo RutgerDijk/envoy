@@ -1,6 +1,6 @@
 ---
 name: review
-description: Run comprehensive 4-layer code review
+description: Run comprehensive 5-layer code review
 ---
 
 Use the `envoy:layered-review` skill exactly as written.
