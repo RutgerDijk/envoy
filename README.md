@@ -1,10 +1,10 @@
 # Envoy
 
-Professional .NET/React/Azure development workflows for Claude Code.
+Professional .NET/React/Azure development workflows for **Claude Code** and **GitHub Copilot**.
 
 ## Overview
 
-Envoy is a Claude Code plugin that provides a streamlined 5-step workflow from idea to merged PR:
+Envoy provides a streamlined 5-step workflow from idea to merged PR:
 
 ```
 brainstorm → pickup → review → finalize → cleanup
@@ -19,6 +19,8 @@ brainstorm → pickup → review → finalize → cleanup
 
 ## Installation
 
+### Claude Code
+
 ```bash
 # Add the marketplace
 /plugin marketplace add RutgerDijk/envoy
@@ -26,6 +28,24 @@ brainstorm → pickup → review → finalize → cleanup
 # Install the plugin
 /plugin install envoy@envoy-marketplace
 ```
+
+### GitHub Copilot
+
+Run the install script from your **project root**:
+
+```bash
+/path/to/envoy/adapters/copilot/install.sh
+```
+
+This copies Envoy workflow templates into your project's `.github/` directory:
+- `.github/copilot-instructions.md` — Always-active workflow instructions
+- `.github/prompts/*.prompt.md` — Slash commands (`/brainstorm`, `/pickup`, `/review`, etc.)
+- `.github/instructions/*.instructions.md` — Stack-specific guidance (auto-activates by file type)
+- `.github/agents/*.agent.md` — Specialized agents (code-reviewer, security-auditor, test-writer)
+
+Commit the `.github/` directory and you're ready to use Envoy in GitHub Copilot Chat.
+
+See [`adapters/copilot/INSTALL.md`](adapters/copilot/INSTALL.md) for full details and options.
 
 ## How It Works
 
@@ -46,7 +66,9 @@ envoy/
 ├── agents/                # Specialized agent definitions
 ├── skills/                # 19 workflow skills
 ├── stacks/                # 25 technology profiles
-└── docs/                  # Anti-patterns & authoring guides
+├── docs/                  # Anti-patterns & authoring guides
+└── adapters/              # Platform adapters
+    └── copilot/           # GitHub Copilot (prompts, instructions, agents)
 ```
 
 ### Session Start Hook
