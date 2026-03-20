@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Add a detailed implementation plan to an existing spec document'
 ---
 

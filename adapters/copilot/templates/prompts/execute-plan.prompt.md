@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Execute an implementation plan from a spec file, task by task with TDD'
 ---
 

@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Sync docs/wiki/ directory to the GitHub wiki repository'
 ---
 

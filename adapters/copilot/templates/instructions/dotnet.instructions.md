@@ -4,6 +4,12 @@ applyTo: '**/*.{cs,csproj,sln}'
 
 # .NET Best Practices
 
+## Formatting
+
+- **3-space indentation** for all C# files (enforced by `.editorconfig`)
+- File-scoped namespaces (`namespace MyNamespace;`)
+- Use `nameof()` instead of magic strings
+
 ## Project Structure (Clean Architecture)
 
 ```
@@ -32,13 +38,26 @@ Layer rules: Domain ← Application ← Infrastructure ← Api. Never reference 
 
 ## Dependency Injection
 
+Use primary constructors for injection:
+
+```csharp
+public class UserService(AppDbContext db, ILogger<UserService> logger) : IUserService
+{
+   public async Task<UserDto?> GetUserAsync(int id, CancellationToken ct)
+   {
+      var user = await db.Users.FindAsync([id], ct);
+      return user is null ? null : new UserDto(user);
+   }
+}
+```
+
 Register via extension methods:
 
 ```csharp
 public static IServiceCollection AddApplicationServices(this IServiceCollection services)
 {
-    services.AddScoped<IUserService, UserService>();
-    return services;
+   services.AddScoped<IUserService, UserService>();
+   return services;
 }
 // In Program.cs:
 builder.Services.AddApplicationServices();

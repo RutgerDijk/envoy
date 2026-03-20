@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Complete branch finalization: review, docstrings, wiki sync, and PR creation'
 ---
 
@@ -37,7 +37,8 @@ Run the `/review` workflow (full 4-layer review).
 Fix all Critical and Important findings:
 
 ```bash
-git add -A
+git status
+git add -p
 git commit -m "fix: address review feedback"
 ```
 
@@ -48,7 +49,8 @@ git commit -m "fix: address review feedback"
 Run the `/docstrings` workflow to add XML documentation to all public C# APIs and JSDoc to exported TypeScript functions.
 
 ```bash
-git add -A
+git status
+git add -p
 git commit -m "docs: add docstrings to public APIs"
 ```
 

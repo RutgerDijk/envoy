@@ -48,11 +48,9 @@ import axios from "axios";
 
 const axiosInstance = axios.create({ baseURL: import.meta.env.VITE_API_URL });
 
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+// Auth tokens are handled via httpOnly cookies — no manual header injection needed.
+// If your API requires bearer tokens, retrieve them from a secure auth provider,
+// not localStorage.
 
 export const customInstance = <T>(config: Parameters<typeof axiosInstance>[0]): Promise<T> => {
   return axiosInstance(config).then((response) => response.data);

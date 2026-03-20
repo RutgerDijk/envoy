@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Pick up a GitHub issue and implement it in a worktree with TDD'
 ---
 

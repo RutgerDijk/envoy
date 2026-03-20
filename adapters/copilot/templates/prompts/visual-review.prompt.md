@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Visual UI verification — inspect layout, responsiveness, and interactions (limited without Chrome DevTools)'
 ---
 

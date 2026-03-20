@@ -9,16 +9,17 @@ applyTo: '**/*.{cs,ts,tsx}'
 Always validate on the server — never trust client input:
 
 ```csharp
-// C# — FluentValidation
-public class CreateUserRequestValidator : AbstractValidator<CreateUserRequest>
+// C# — Data Annotations
+public class CreateUserRequest
 {
-    public CreateUserRequestValidator()
-    {
-        RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(255);
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100).Matches(@"^[\w\s\-']+$");
-        RuleFor(x => x.Password).NotEmpty().MinimumLength(8)
-            .Must(p => p.Any(char.IsUpper) && p.Any(char.IsLower) && p.Any(char.IsDigit));
-    }
+   [Required, EmailAddress, MaxLength(255)]
+   public required string Email { get; init; }
+
+   [Required, MaxLength(100), RegularExpression(@"^[\w\s\-']+$")]
+   public required string Name { get; init; }
+
+   [Required, MinLength(8)]
+   public required string Password { get; init; }
 }
 ```
 

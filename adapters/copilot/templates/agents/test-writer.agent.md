@@ -1,6 +1,6 @@
 ---
 name: Test Writer
-description: Writes comprehensive tests for .NET (xUnit/FluentAssertions/Moq) and React (Vitest/Testing Library) + Playwright e2e
+description: Writes comprehensive tests for .NET (xUnit/FluentAssertions/InMemoryDb) and React (Vitest/Testing Library) + Playwright e2e
 version: 1.0
 ---
 
@@ -18,43 +18,28 @@ Examples:
 - `GetUser_WhenNotFound_ReturnsNull`
 - `SubmitForm_WithInvalidEmail_ShowsValidationError`
 
-## .NET Tests (xUnit + FluentAssertions + Moq)
+## .NET Tests (xUnit + FluentAssertions + InMemory DB)
 
 ### Unit Test Template
 
 ```csharp
 public class UserServiceTests
 {
-    private readonly Mock<IUserRepository> _repositoryMock = new();
-    private readonly UserService _sut;
+   [Fact]
+   public async Task CreateUser_WithValidData_ReturnsCreatedUser()
+   {
+      using var db = TestDbContext.Create();
+      var sut = new UserService(db);
+      var request = new CreateUserRequestBuilder()
+         .WithEmail("test@example.com")
+         .Build();
 
-    public UserServiceTests()
-    {
-        _sut = new UserService(_repositoryMock.Object);
-    }
+      var result = await sut.CreateUserAsync(request, CancellationToken.None);
 
-    [Fact]
-    public async Task CreateUser_WithValidData_ReturnsCreatedUser()
-    {
-        // Arrange
-        var request = new CreateUserRequestBuilder()
-            .WithEmail("test@example.com")
-            .Build();
-        _repositoryMock
-            .Setup(r => r.EmailExistsAsync(request.Email, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-        _repositoryMock
-            .Setup(r => r.AddAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((User u, CancellationToken _) => u);
-
-        // Act
-        var result = await _sut.CreateUserAsync(request, CancellationToken.None);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Email.Should().Be(request.Email);
-        _repositoryMock.Verify(r => r.AddAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Once);
-    }
+      result.Should().NotBeNull();
+      result.Email.Should().Be(request.Email);
+      db.Users.Should().ContainSingle(u => u.Email == "test@example.com");
+   }
 }
 ```
 
@@ -146,7 +131,7 @@ For each piece of new code, write tests for:
 
 - [ ] Test name describes state and expected behavior
 - [ ] Single assertion concept per test (may have multiple `.Should()` lines for one thing)
-- [ ] Arrange > Act > Assert structure
+- [ ] Arrange > Act > Assert structure (no `// Arrange` / `// Act` / `// Assert` comments)
 - [ ] No shared mutable state between tests
 - [ ] No `Thread.Sleep` or `Task.Delay` without a fake clock
 - [ ] Tests don't depend on execution order

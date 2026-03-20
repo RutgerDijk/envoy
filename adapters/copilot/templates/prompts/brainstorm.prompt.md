@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Turn an idea into a GitHub issue + spec document with implementation plan'
 ---
 

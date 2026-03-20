@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Fast AI-only code review during development (no lint or static analysis)'
 ---
 

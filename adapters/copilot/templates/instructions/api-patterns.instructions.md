@@ -10,43 +10,34 @@ applyTo: '**/{*Controller.cs,*Endpoint.cs}'
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-public class UsersController : ControllerBase
+public class UsersController(IUserService userService, ILogger<UsersController> logger) : ControllerBase
 {
-    private readonly IUserService _userService;
-    private readonly ILogger<UsersController> _logger;
+   [HttpGet]
+   [ProducesResponseType(typeof(PagedResult<UserDto>), StatusCodes.Status200OK)]
+   public async Task<ActionResult<PagedResult<UserDto>>> GetUsers(
+      [FromQuery] UserFilter filter, CancellationToken ct)
+   {
+      var result = await userService.GetUsersAsync(filter, ct);
+      return Ok(result);
+   }
 
-    public UsersController(IUserService userService, ILogger<UsersController> logger)
-    {
-        _userService = userService;
-        _logger = logger;
-    }
+   [HttpGet("{id:int}")]
+   [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
+   [ProducesResponseType(StatusCodes.Status404NotFound)]
+   public async Task<ActionResult<UserDto>> GetUser(int id, CancellationToken ct)
+   {
+      var user = await userService.GetUserAsync(id, ct);
+      return user is null ? NotFound() : Ok(user);
+   }
 
-    [HttpGet]
-    [ProducesResponseType(typeof(PagedResult<UserDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<UserDto>>> GetUsers(
-        [FromQuery] UserFilter filter, CancellationToken ct)
-    {
-        var result = await _userService.GetUsersAsync(filter, ct);
-        return Ok(result);
-    }
-
-    [HttpGet("{id:int}")]
-    [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<UserDto>> GetUser(int id, CancellationToken ct)
-    {
-        var user = await _userService.GetUserAsync(id, ct);
-        return user is null ? NotFound() : Ok(user);
-    }
-
-    [HttpPost]
-    [ProducesResponseType(typeof(UserDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<UserDto>> CreateUser(CreateUserRequest request, CancellationToken ct)
-    {
-        var user = await _userService.CreateUserAsync(request, ct);
-        return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
-    }
+   [HttpPost]
+   [ProducesResponseType(typeof(UserDto), StatusCodes.Status201Created)]
+   [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+   public async Task<ActionResult<UserDto>> CreateUser(CreateUserRequest request, CancellationToken ct)
+   {
+      var user = await userService.CreateUserAsync(request, ct);
+      return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
+   }
 }
 ```
 

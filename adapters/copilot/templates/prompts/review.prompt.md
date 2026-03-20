@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Run a full 4-layer code review: lint, AI review, documentation gaps, security'
 ---
 

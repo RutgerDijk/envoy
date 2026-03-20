@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Remove worktree and feature branch after a PR has been merged'
 ---
 

@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: 'Add XML documentation (C#) or JSDoc (TypeScript) to all public APIs'
 ---
 
@@ -97,6 +97,7 @@ dotnet build
 Then commit:
 
 ```bash
-git add -A
+git status
+git add -p
 git commit -m "docs: add docstrings to public APIs"
 ```
