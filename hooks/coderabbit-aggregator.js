@@ -46,6 +46,11 @@ function getLevel(prCount) {
   return 'detected';
 }
 
+/**
+ * Hook entry point. Aggregates CodeRabbit comment categories across PRs
+ * and graduates them through detection levels.
+ * @param {string|object} rawInput - Session data from Claude Code (JSON string or object)
+ */
 function run(rawInput) {
   try {
     const input = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;

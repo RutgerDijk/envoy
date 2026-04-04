@@ -21,6 +21,11 @@ const USER_CORRECTIONS_DIR = path.join(
 );
 const USER_CORRECTIONS_PATH = path.join(USER_CORRECTIONS_DIR, 'corrections.md');
 
+/**
+ * Hook entry point. Classifies user prompts via Haiku to detect corrections,
+ * then saves them to project or user correction files.
+ * @param {string|object} rawInput - User prompt data from Claude Code (JSON string or object)
+ */
 function run(rawInput) {
   try {
     const input = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;

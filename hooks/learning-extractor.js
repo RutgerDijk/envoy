@@ -28,6 +28,11 @@ function getLevel(count) {
   return 'detected';
 }
 
+/**
+ * Hook entry point. Extracts review findings, updates graduated pattern
+ * levels, archives stale patterns, and emits automation suggestions.
+ * @param {string|object} rawInput - Session data from Claude Code (JSON string or object)
+ */
 function run(rawInput) {
   try {
     const input = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;
