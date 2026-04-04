@@ -17,6 +17,7 @@ brainstorm → pickup → implement → cleanup-pass → review → finalize →
 - **Finalization**: Create PR, handle GitHub CodeRabbit comments, verify, ship
 - **Cleanup**: Remove worktrees and branches after merge
 - **Hooks**: Config protection, batch lint, cost tracking, learning extraction
+- **Self-learning**: Graduated patterns, cross-PR CodeRabbit aggregation, user correction detection
 - **Token optimization**: ~60% cost savings via Sonnet AI review, selective stack loading, regex-first parsing
 - **Advanced patterns**: Eval harness, search-first, cleanup pass, iterative retrieval, completion signals
 
@@ -69,10 +70,16 @@ envoy/
 │   ├── post-pr-poll.js         # Triggers CodeRabbit polling
 │   ├── cost-tracker.js         # Async JSONL token logging
 │   └── learning-extractor.js   # Async review pattern learning
+├── memory/                # Team learnings (committed, shared via git)
+│   ├── review-learnings.md     # Graduated patterns from AI review
+│   ├── coderabbit-patterns.md  # Cross-PR CodeRabbit categories
+│   └── corrections.md          # Team coding preferences
 ├── lib/                   # Shared utilities
 │   ├── skills-core.js     # Skill discovery & shadowing
 │   ├── stack-loader.js    # Stack detection, selective loading
 │   ├── coderabbit-parser.js    # Regex-first CodeRabbit comment parser
+│   ├── learning-loader.js      # Load confirmed patterns & corrections
+│   ├── automation-suggester.js # Suggest hooks/rules for 5x patterns
 │   └── loop-safeguards.js      # Completion signal threshold for loops
 ├── contexts/              # Phase-specific context fragments
 │   ├── review.md               # Review phase constraints
@@ -236,6 +243,8 @@ Envoy uses hooks for automation without polluting the context window:
 | `stop-batch-lint` | Stop | Runs lint once across all session edits |
 | `cost-tracker` | Stop (async) | Logs token usage to JSONL for optimization |
 | `learning-extractor` | Stop (async) | Saves recurring review patterns to memory |
+| `coderabbit-aggregator` | Stop (async) | Tracks CodeRabbit categories across PRs |
+| `correction-detector` | UserPromptSubmit | Detects user corrections via Haiku classification |
 
 ### Hook Profiles
 
@@ -248,6 +257,38 @@ Control which hooks run via `ENVOY_HOOK_PROFILE`:
 | `strict` | All hooks + verification gates | Maximum safety |
 
 Override individual hooks: `ENVOY_DISABLED_HOOKS=cost-tracker,learning-extractor`
+
+## Self-Learning System
+
+Envoy creates a feedback loop where each review cycle is cheaper than the last:
+
+```
+implement (with confirmed patterns + corrections loaded)
+  → fewer issues introduced
+    → review finds fewer issues
+      → CodeRabbit flags fewer things
+        → corrections decrease over time
+          → patterns that stop appearing get archived
+```
+
+### Graduated Patterns
+
+Patterns from AI review and CodeRabbit graduate through levels:
+
+| Level | Trigger | Action |
+|-------|---------|--------|
+| Detected | Seen 1x | Logged only |
+| Confirmed | Seen 3x | Injected into implementation prompts |
+| Automated | Seen 5x | Suggest hook/lint rule to user |
+| Archived | 5 clean reviews | Removed (re-promoted if it reappears) |
+
+### User Correction Learning
+
+When you correct Claude's behavior, Haiku classifies the correction:
+- **Project-specific** (references files, APIs, project patterns) → `memory/corrections.md` (team-shared)
+- **Universal** (language/framework practices) → `~/.claude/learnings/corrections.md` (personal)
+
+Both are loaded before implementation and review, so Claude doesn't repeat the same mistake.
 
 ## TDD Enforcement
 
