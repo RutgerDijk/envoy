@@ -30,17 +30,35 @@ gh api repos/$OWNER/$REPO/pulls/<pr-number>/comments \
   --jq '.[] | select(.user.login == "coderabbitai" or .user.login == "github-actions[bot]") | {id, path, line, body, created_at, in_reply_to_id}'
 ```
 
-### Step 2: Parse Each Comment
+### Step 2: Parse Each Comment (Regex-First)
 
-For each CodeRabbit comment, extract:
+Use `lib/coderabbit-parser.js` for regex-first parsing — avoids LLM tokens for 95%+ of comments:
 
-| Field | Source |
-|-------|--------|
-| File path | `.path` |
-| Line number | `.line` or `.original_line` |
-| Severity | Parse from body (🔴 critical, 🟡 warning, 🔵 nitpick, 💡 suggestion) |
-| Suggestion | Parse code blocks or description |
-| Thread ID | `.id` (for replies) |
+```javascript
+const { parseComments } = require('../../lib/coderabbit-parser');
+const result = parseComments(comments);
+// result.parsed — array of { path, line, severity, suggestion, category, confidence, needsLLM }
+// result.regexRate — e.g., "96%"
+```
+
+**For comments where `needsLLM: true` (confidence < 0.95):**
+Send to a Haiku agent for structured extraction (cheap fallback):
+
+```
+Agent({
+  model: "haiku",
+  description: "Parse CodeRabbit comment",
+  prompt: `Extract from this CodeRabbit comment:
+  - file path
+  - line number
+  - severity (critical/warning/suggestion/nitpick)
+  - suggested fix
+
+  Comment: <body>
+
+  Output as JSON.`
+})
+```
 
 ### Step 3: Categorize Findings
 
@@ -52,6 +70,11 @@ Group by severity but **address ALL of them**:
 4. **Nitpick** (🔵) — Style, naming, minor improvements
 
 **No skipping.** Every finding gets addressed.
+
+Report parsing efficiency:
+```
+Parsed 12 comments: 11 by regex (92%), 1 by Haiku fallback
+```
 
 ### Step 4: Apply Fixes
 
