@@ -34,6 +34,16 @@
             "_profiles": ["standard", "strict"]
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" post-pr-poll",
+            "_profiles": ["standard", "strict"]
+          }
+        ]
       }
     ],
     "Stop": [
