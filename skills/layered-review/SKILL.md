@@ -62,11 +62,15 @@ const mistakes = loadStackSection('dotnet', 'Common Mistakes');
 
 ### 4. Load Known Review Patterns
 
-```bash
-cat memory/review-learnings.md 2>/dev/null
+```javascript
+const { loadConfirmedPatterns, loadCorrections } = require('../../lib/learning-loader');
+const patterns = loadConfirmedPatterns(detectedStacks);
+const corrections = loadCorrections();
 ```
 
-If patterns exist, check them first — known patterns can be flagged immediately. This is a cheap local check before the AI review.
+Load confirmed patterns from both `memory/review-learnings.md` AND `memory/coderabbit-patterns.md`. If patterns exist, check them first — known patterns can be flagged immediately. This is a cheap local check before the AI review.
+
+Also load corrections — items in corrections are team decisions, not bugs. Do not flag these during review.
 
 ### 5. Load Acceptance Criteria
 
