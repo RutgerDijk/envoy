@@ -76,6 +76,18 @@ Old approach: finalize re-ran all local reviews (duplicate tokens).
 
 New approach: `/review` runs locally, `/finalize` only handles PR + GitHub CodeRabbit. Zero duplication.
 
+### 10. Learning-Based Prevention
+
+Patterns that recur across reviews are loaded into implementing agents as reminders, preventing issues before they happen:
+
+| Scenario | Without Learning | With Learning | Savings |
+|----------|-----------------|---------------|---------|
+| Known pattern caught in review | ~500 tokens (find + fix) | ~0 (prevented at impl) | 100% |
+| Recurring CodeRabbit comment | ~200 tokens/PR (parse + fix) | ~0 (prevented or automated) | 100% |
+| User repeating same correction | Full correction each time | ~0 (loaded as context) | 100% |
+
+New costs: ~100 tokens per loaded pattern, ~200 tokens per Haiku correction classification. Net effect is strongly positive after 2-3 review cycles.
+
 ## Measuring Token Usage
 
 The cost-tracker hook logs every session to `~/.claude/metrics/envoy-costs.jsonl`:

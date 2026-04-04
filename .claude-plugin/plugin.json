@@ -1,7 +1,7 @@
 {
   "name": "envoy",
   "description": "Professional development workflows with token-optimized review, hooks, and autonomous agent patterns",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": {
     "name": "Rutger Dijkstra"
   },

@@ -28,6 +28,8 @@ const HOOK_PROFILES = {
   'cost-tracker':           ['minimal', 'standard', 'strict'],
   'learning-extractor':     ['standard', 'strict'],
   'post-pr-poll':           ['standard', 'strict'],
+  'coderabbit-aggregator':  ['standard', 'strict'],
+  'correction-detector':    ['standard', 'strict'],
 };
 
 /**

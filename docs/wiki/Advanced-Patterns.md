@@ -95,6 +95,57 @@ Applied in:
 - CodeRabbit re-poll cycles (`finishing-branch` skill)
 - Any autonomous polling loop
 
+## Graduated Learning
+
+**Lib:** `lib/learning-loader.js`, `hooks/learning-extractor.js`
+
+Patterns from AI review and CodeRabbit graduate through levels based on occurrence count:
+
+| Level | Trigger | Action |
+|-------|---------|--------|
+| Detected | Seen 1x | Logged in `memory/review-learnings.md` |
+| Confirmed | Seen 3x | Injected into implementing agent prompt |
+| Automated | Seen 5x | Suggest hook/lint rule to user |
+| Archived | 5 clean reviews | Removed from active patterns |
+
+Confirmed patterns are loaded by `executing-plans` before each task:
+```
+Known patterns (avoid these):
+- [dotnet] Always check null on API response DTOs before mapping
+- [react] Use useCallback for event handlers passed as props
+```
+
+Archived patterns that reappear get re-promoted to detected, restarting the graduation cycle.
+
+## Cross-PR CodeRabbit Aggregation
+
+**Hook:** `hooks/coderabbit-aggregator.js`
+
+Async Stop hook that runs after finalize sessions. Tracks which CodeRabbit comment categories recur across PRs and graduates them through the same levels.
+
+```
+PR #3: CodeRabbit flags "unused import" (2x), "missing await" (1x)
+PR #4: CodeRabbit flags "unused import" (3x)
+  → "unused import": 2 PRs → detected → logged
+  → After 1 more PR: 3 PRs → confirmed → implementation reminder
+```
+
+Storage: `memory/coderabbit-patterns.md`, tagged with stack for selective loading.
+
+## User Correction Learning
+
+**Hook:** `hooks/correction-detector.js`
+
+UserPromptSubmit hook that classifies user messages via Haiku:
+- **Is this a correction?** (yes/no)
+- **Scope?** project-specific or universal
+- **One-line rule summary**
+
+Project corrections → `memory/corrections.md` (team-shared, committed)
+User corrections → `~/.claude/learnings/corrections.md` (personal)
+
+Both are loaded by `executing-plans` and `layered-review` to avoid repeating the same mistakes.
+
 ## Regex-First Parsing
 
 **Lib:** `lib/coderabbit-parser.js`

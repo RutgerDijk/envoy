@@ -40,6 +40,31 @@ execution:
 
 Detect and load relevant stack profiles for context during execution.
 
+### Step 3b: Load Implementation Reminders
+
+Before executing tasks, load confirmed patterns and team corrections so implementing agents avoid known issues:
+
+```javascript
+const { loadConfirmedPatterns, loadCorrections, formatReminders } = require('../../lib/learning-loader');
+const patterns = loadConfirmedPatterns(detectedStacks); // e.g., ['dotnet', 'react']
+const corrections = loadCorrections();
+const reminders = formatReminders(patterns, corrections);
+```
+
+If reminders are non-empty, include them in each implementing agent's prompt:
+
+```
+**Known patterns (avoid these):**
+- [dotnet] Always check null on API response DTOs before mapping
+- [react] Use useCallback for event handlers passed as props
+
+**Team corrections:**
+- Use IResult not ActionResult in this API
+- DTOs go in the Contracts folder
+```
+
+This is a cheap injection (~100 tokens per pattern) that prevents recurring issues at implementation time rather than catching them in review.
+
 ### Step 4: Analyze Dependencies
 
 **Before executing ANY plan, analyze task dependencies to identify parallelization opportunities.**

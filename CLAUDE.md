@@ -15,6 +15,7 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 - `contexts/` — Phase-specific context fragments (review.md, implement.md, research.md)
 - `adapters/copilot/` — GitHub Copilot integration (prompts, instructions, agents)
 - `templates/` — Example artifacts (plan docs, spec docs, issue templates)
+- `memory/` — Team learnings (graduated patterns, CodeRabbit aggregation, corrections) — committed to repo
 - `docs/` — Anti-patterns guide and skill authoring reference
 
 ## Conventions
@@ -47,7 +48,17 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 - Registration in `hooks/hooks.json` with `_profiles` annotation
 - Three profiles: `minimal`, `standard` (default), `strict`
 - Control via `ENVOY_HOOK_PROFILE` and `ENVOY_DISABLED_HOOKS` env vars
-- Async hooks (cost-tracker, learning-extractor) never block or pollute context
+- Async hooks (cost-tracker, learning-extractor, coderabbit-aggregator) never block or pollute context
+
+### Graduated Learning
+- Patterns graduate through levels: detected (1-2x) → confirmed (3-4x) → automated (5+x) → archived
+- `memory/review-learnings.md` stores review patterns with embedded JSON data
+- `memory/coderabbit-patterns.md` stores cross-PR CodeRabbit patterns
+- `memory/corrections.md` stores project-specific team corrections
+- `~/.claude/learnings/corrections.md` stores personal universal corrections
+- `lib/learning-loader.js` provides `loadConfirmedPatterns()`, `loadCorrections()`, `formatReminders()`
+- `lib/automation-suggester.js` generates prevention suggestions for 5x patterns
+- Archived patterns (not seen in 5 reviews) get re-promoted if they reappear
 
 ### Context Fragments
 - Phase-specific context in `contexts/` (review.md, implement.md, research.md)
