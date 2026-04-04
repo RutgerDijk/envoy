@@ -1,6 +1,6 @@
 ---
 name: pressure-test-scenarios
-description: Reference scenarios for testing skill discipline under pressure - not directly invoked
+description: Use when testing whether skills maintain discipline under pressure scenarios
 ---
 
 # Pressure Test Scenarios

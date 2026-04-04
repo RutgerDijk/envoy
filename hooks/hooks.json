@@ -6,10 +6,78 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" session-start.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" session-start.sh",
+            "_profiles": ["minimal", "standard", "strict"]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" config-protection",
+            "_profiles": ["minimal", "standard", "strict"]
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" post-edit-accumulator",
+            "_profiles": ["standard", "strict"]
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" post-pr-poll",
+            "_profiles": ["standard", "strict"]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" stop-batch-lint",
+            "_profiles": ["standard", "strict"]
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" cost-tracker",
+            "_profiles": ["minimal", "standard", "strict"],
+            "_async": true
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" learning-extractor",
+            "_profiles": ["standard", "strict"],
+            "_async": true
           }
         ]
       }
     ]
+  },
+  "_profileDocs": {
+    "minimal": "config-protection + cost-tracker only — lowest token overhead",
+    "standard": "all hooks enabled (default)",
+    "strict": "all hooks + additional verification gates"
+  },
+  "_envVars": {
+    "ENVOY_HOOK_PROFILE": "minimal | standard | strict (default: standard)",
+    "ENVOY_DISABLED_HOOKS": "comma-separated hook names to skip regardless of profile"
   }
 }

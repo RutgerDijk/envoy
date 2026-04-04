@@ -7,13 +7,11 @@ description: Use when implementation is complete and you're ready to create a PR
 
 ## Overview
 
-Complete workflow for finishing implementation: run review, add docstrings, sync wiki, create PR.
+Ship the work: create PR, handle GitHub CodeRabbit comments, verify, done. This skill assumes `/envoy:review` has already been run — it does NOT re-run local reviews.
 
-**Announce at start:** "I'm using envoy:finishing-branch to prepare this work for PR."
+**Announce at start:** "I'm using envoy:finishing-branch to create a PR and ship this work."
 
 ## Preconditions
-
-Before starting, verify all preconditions:
 
 ```bash
 # 1. On a feature branch (not main/master)
@@ -25,8 +23,7 @@ fi
 
 # 2. Working directory is clean
 if [[ -n $(git status --porcelain) ]]; then
-  echo "ERROR: Working directory has uncommitted changes"
-  echo "Commit or stash changes before finalizing"
+  echo "ERROR: Uncommitted changes — commit or stash first"
   exit 1
 fi
 
@@ -35,33 +32,11 @@ dotnet test
 npm test
 ```
 
-**If any precondition fails, stop and resolve before continuing.**
+**If any precondition fails, stop and resolve.**
 
 ## Process
 
-### Step 1: Run Full Review
-
-Use envoy:layered-review for comprehensive 4-layer review:
-
-```
-/envoy:review
-```
-
-This runs:
-1. CodeRabbit static analysis
-2. Documentation-informed AI review
-3. Chrome DevTools visual verification
-4. Documentation gap detection
-
-**Fix any issues found before proceeding.**
-
-After fixing:
-```bash
-git add -A
-git commit -m "fix: address review feedback"
-```
-
-### Step 2: Add Docstrings
+### Step 1: Docstrings
 
 Use envoy:docstrings to document public APIs:
 
@@ -69,75 +44,31 @@ Use envoy:docstrings to document public APIs:
 /envoy:docstrings
 ```
 
-This adds:
-- C#: XML documentation (`/// <summary>`)
-- TypeScript: JSDoc comments (`/** */`)
-
-After adding docstrings:
 ```bash
-git add -A
+git add -p
 git commit -m "docs: add docstrings to public APIs"
 ```
 
-### Step 3: Update Documentation
+### Step 2: Update Documentation
 
-Check if documentation updates are needed:
-
+If needed:
 1. **New features** → Add to relevant wiki pages
 2. **API changes** → Update API docs
 3. **Configuration changes** → Update setup docs
 
-If docs/wiki/ was updated:
 ```bash
 git add docs/wiki/
 git commit -m "docs: update wiki documentation"
 ```
 
-### Step 4: Sync Wiki to GitHub
-
-Use envoy:wiki-sync to push documentation:
-
-```
-/envoy:wiki-sync
-```
-
-This syncs `docs/wiki/` to the GitHub wiki repository.
-
-### Step 5: Final Verification
-
-Run one more verification:
-
-```bash
-# All tests pass
-dotnet test
-npm test
-
-# Build succeeds
-dotnet build
-npm run build
-
-# Lint passes
-npm run lint
-```
-
-### Step 6: Push Branch
+### Step 3: Push and Create PR
 
 ```bash
 git push -u origin HEAD
 ```
 
-### Step 7: Create Pull Request
-
-Get PR format from existing PRs:
-
 ```bash
-gh pr list --limit 5 --state merged --json title,body
-```
-
-Create PR matching the repository's format:
-
-```bash
-gh pr create --title "<title>" --body "$(cat <<'EOF'
+gh pr create --title "<title>" --body "$(cat <<'PREOF'
 ## Summary
 
 <Brief description of changes>
@@ -145,52 +76,190 @@ gh pr create --title "<title>" --body "$(cat <<'EOF'
 ## Changes
 
 - **Implementation:** <main work summary>
-- **Code review:** <issues addressed>
 - **Documentation:** <what was updated>
 
 ## Test Plan
 
 - [ ] Unit tests pass
 - [ ] E2E tests pass
-- [ ] Manual verification completed
 - [ ] Visual review passed
 
 ## Linked Issue
 
 Closes #<issue-number>
 
-## Screenshots
-
-<If UI changes, include before/after screenshots>
-
 ---
 
 *Created with Envoy*
-EOF
+PREOF
 )"
 ```
 
-### Step 8: Report Completion
+Save the PR number.
+
+### Step 4: Poll for GitHub CodeRabbit Comments
+
+GitHub CodeRabbit App reviews the PR asynchronously. Poll for comments:
+
+```bash
+OWNER=$(gh repo view --json owner -q '.owner.login')
+REPO=$(gh repo view --json name -q '.name')
+PR_NUMBER=<number>
+
+# Wait briefly for CodeRabbit to start (usually 1-2 minutes)
+# Then poll for comments
+gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
+  --jq '.[] | select(.user.login == "coderabbitai") | {id, path, line, body}'
+```
+
+If no comments after 3-5 minutes, CodeRabbit may not be installed or the PR is clean. Continue to verification.
+
+### Step 5: Address All CodeRabbit Findings
+
+**No skipping — address everything including nitpicks.**
+
+For each CodeRabbit comment:
+1. Read the suggestion
+2. Apply the fix (or explain why not)
+3. Commit
+
+```bash
+git add -p
+git commit -m "fix: address CodeRabbit feedback — <summary>"
+```
+
+### Step 6: Reply and Resolve Each Comment
+
+```bash
+# Reply with fix + commit hash
+COMMIT=$(git rev-parse --short HEAD)
+gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments/<id>/replies \
+  --method POST \
+  --field body="Fixed in \`$COMMIT\`. <explanation>"
+```
+
+Resolve threads via GraphQL:
+
+```bash
+gh api graphql -f query='
+  mutation {
+    resolveReviewThread(input: {threadId: "<thread-node-id>"}) {
+      thread { isResolved }
+    }
+  }
+'
+```
+
+For suggestions not applied:
+```bash
+gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments/<id>/replies \
+  --method POST \
+  --field body="Not applied: <reason>. The current approach <explanation>."
+```
+
+### Step 7: Push Fixes
+
+```bash
+git push
+```
+
+### Step 8: Re-poll (Max 3 Cycles, with Completion Signal)
+
+After pushing, CodeRabbit may leave new comments on the fixes. Use the **completion signal protocol** from `lib/loop-safeguards.js`:
+
+"No new comments" must be confirmed 3 consecutive times (`ENVOY_LOOP_COMPLETE`) before the loop stops — a single check could miss comments still being posted.
+
+```bash
+LAST_PUSH=$(git log -1 --format=%cI)
+NEW_COMMENTS=$(gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
+  --jq "[.[] | select(.user.login == \"coderabbitai\") | select(.created_at > \"$LAST_PUSH\")] | length")
+
+if [ "$NEW_COMMENTS" -eq 0 ]; then
+  echo "ENVOY_LOOP_COMPLETE — no new comments (check N/3)"
+else
+  echo "New comments found: $NEW_COMMENTS — reset completion counter"
+fi
+```
+
+**If new comments:** address → reply → resolve → push → re-poll. Reset completion counter.
+
+**Max 3 address-and-push cycles.** After 3 cycles with remaining issues:
+
+```
+**Escalation: CodeRabbit cycle limit reached**
+
+After 3 cycles, these comments remain unresolved:
+- <comment 1>
+- <comment 2>
+
+Please review and decide how to proceed.
+```
+
+### Step 9: Final Verification
+
+Run envoy:verification with evidence:
+
+```bash
+# Tests
+dotnet test
+npm test
+
+# Build
+dotnet build
+npm run build
+
+# Lint
+npm run lint
+
+# Health check
+curl -sf http://localhost:5000/health && echo "✓ Backend" || echo "✗ Backend"
+curl -sf http://localhost:5173 && echo "✓ Frontend" || echo "✗ Frontend"
+
+# Zero unresolved PR conversations
+gh api graphql -f query='
+  query {
+    repository(owner: "'$OWNER'", name: "'$REPO'") {
+      pullRequest(number: '$PR_NUMBER') {
+        reviewThreads(first: 100) {
+          nodes { isResolved }
+        }
+      }
+    }
+  }
+' --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length'
+```
+
+**All checks must pass with evidence.**
+
+### Step 10: Wiki Sync
+
+```
+/envoy:wiki-sync
+```
+
+### Step 11: Report
 
 ```
 **Branch finalized**
 
 | Step | Status |
 |------|--------|
-| Review | ✓ Passed (issues fixed) |
 | Docstrings | ✓ Added |
+| PR | ✓ Created (#<number>) |
+| GitHub CodeRabbit | ✓ <N> comments resolved |
+| Verification | ✓ Tests, build, lint, health pass |
+| Unresolved conversations | 0 |
 | Wiki | ✓ Synced |
-| Tests | ✓ Passing |
-| PR | ✓ Created |
+| CodeRabbit cycles | <N>/3 used |
 
 **Pull Request:** <URL>
 
 **Next steps:**
 1. Wait for CI to pass
-2. Request reviewers
-3. Address any PR feedback
+2. Request human reviewers
+3. Address any human feedback
 4. Merge when approved
-5. Run `/envoy:cleanup` to remove worktree and branch
+5. `/envoy:cleanup` to remove worktree and branch
 ```
 
 ## Error Handling
@@ -203,19 +272,15 @@ EOF
 Failed tests:
 - <test names>
 
-Fix the failing tests before finalizing.
+Fix tests before finalizing.
 ```
 
-### Review Has Blocking Issues
+### PR Creation Fails
 
 ```
-**Cannot finalize: Review issues**
+**PR creation failed:** <error>
 
-Blocking issues:
-- <issue 1>
-- <issue 2>
-
-Address these issues before creating PR.
+Try: gh pr create --web
 ```
 
 ### Wiki Sync Conflict
@@ -223,43 +288,17 @@ Address these issues before creating PR.
 ```
 **Wiki sync conflict**
 
-GitHub wiki has changes not in docs/wiki/.
-
 Options:
 1. Overwrite with docs/wiki/ content
 2. Merge manually
 3. Skip wiki sync
-
-Choice?
-```
-
-### PR Creation Fails
-
-```
-**PR creation failed**
-
-Error: <error message>
-
-Try manually:
-gh pr create --web
 ```
 
 ## Checklist
 
-Use this checklist to track progress:
-
-- [ ] **Preconditions:** On feature branch, clean state, tests pass
-- [ ] **Review:** 4-layer review completed, issues fixed
+- [ ] **Preconditions:** Feature branch, clean state, tests pass
 - [ ] **Docstrings:** Public APIs documented
-- [ ] **Wiki:** Documentation updated and synced
-- [ ] **Verification:** Final test run passed
-- [ ] **Push:** Branch pushed to remote
-- [ ] **PR:** Pull request created
-
-## Tips
-
-- **Don't rush** — Quality PRs get merged faster
-- **Small PRs** — Easier to review, fewer issues
-- **Good commit messages** — Help reviewers understand changes
-- **Link the issue** — Maintains traceability
-- **Screenshots for UI** — Worth a thousand words
+- [ ] **PR created**
+- [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved
+- [ ] **Verification:** Tests, build, lint, health, zero unresolved
+- [ ] **Wiki:** Synced

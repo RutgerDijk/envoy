@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Verify changes work before claiming done. Use before committing fixes or completing tasks. Evidence before assertions.
+description: Use when changes need verification before committing or claiming a task is complete
 ---
 
 # Verification Before Completion
@@ -80,7 +80,7 @@ If you catch yourself saying:
 | "The warning doesn't matter" | Then why did you suppress it? Understand it, then decide. |
 | "It works even though tests fail" | Tests exist because manual verification misses things. Fix the tests. |
 
-## Verification Checklist
+## Full Verification Checklist
 
 ### For Any Code Change
 
@@ -103,89 +103,125 @@ If you catch yourself saying:
 - [ ] **Error states handled** — Graceful failure
 - [ ] **Tests cover scenarios** — Unit and/or integration tests
 
+### Application Health Check
+
+After any non-trivial change, verify the application is still running:
+
+```bash
+# Backend health check
+curl -sf http://localhost:5000/health && echo "✓ Backend healthy" || echo "✗ Backend health check failed"
+
+# Frontend health check
+curl -sf http://localhost:5173 && echo "✓ Frontend healthy" || echo "✗ Frontend health check failed"
+
+# Or check process is running
+pgrep -f "dotnet run" > /dev/null && echo "✓ Backend running" || echo "✗ Backend not running"
+pgrep -f "vite" > /dev/null && echo "✓ Frontend running" || echo "✗ Frontend not running"
+```
+
+### PR Conversation Check
+
+If a PR exists, verify zero unresolved conversations:
+
+```bash
+OWNER=$(gh repo view --json owner -q '.owner.login')
+REPO=$(gh repo view --json name -q '.name')
+PR_NUMBER=<number>
+
+# Count unresolved review threads
+UNRESOLVED=$(gh api graphql -f query='
+  query {
+    repository(owner: "'$OWNER'", name: "'$REPO'") {
+      pullRequest(number: '$PR_NUMBER') {
+        reviewThreads(first: 100) {
+          nodes { isResolved }
+        }
+      }
+    }
+  }
+' --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length')
+
+echo "Unresolved PR conversations: $UNRESOLVED"
+```
+
+### New CodeRabbit Comments Check
+
+After pushing fixes, verify no new CodeRabbit comments appeared:
+
+```bash
+# Get comments since last push
+LAST_PUSH=$(git log -1 --format=%cI)
+gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
+  --jq "[.[] | select(.user.login == \"coderabbitai\") | select(.created_at > \"$LAST_PUSH\")] | length"
+```
+
+## Fix-and-Verify Cycle (Max 3, with Completion Signal)
+
+When addressing review findings, use a bounded cycle with the **completion signal protocol** from `lib/loop-safeguards.js`:
+
+A single "I'm done" could be hallucinated. Three consecutive `ENVOY_LOOP_COMPLETE` signals with fresh evidence confirm genuine completion.
+
+```
+CYCLE = 0
+MAX_CYCLES = 3
+COMPLETION_COUNT = 0
+
+while CYCLE < MAX_CYCLES:
+  1. Run full verification suite
+  2. If ALL checks pass AND zero unresolved comments:
+     → Output: ENVOY_LOOP_COMPLETE with evidence
+     → COMPLETION_COUNT += 1
+     → If COMPLETION_COUNT >= 3: DONE (genuinely complete)
+     → Else: Run verification AGAIN (fresh check)
+  3. If new CodeRabbit comments appeared:
+     → COMPLETION_COUNT = 0 (reset!)
+     → Address findings, push, increment CYCLE
+  4. If verification failed:
+     → COMPLETION_COUNT = 0 (reset!)
+     → Fix the issue, re-verify
+
+if CYCLE >= MAX_CYCLES:
+  → ESCALATE to user with remaining issues
+```
+
+### Escalation Format
+
+```
+**Escalation: Verification cycle limit reached**
+
+After 3 fix-and-verify cycles, these issues remain:
+
+| Issue | Status | Details |
+|-------|--------|---------|
+| <issue 1> | Unresolved | <details> |
+| <issue 2> | Unresolved | <details> |
+
+Completed verification evidence:
+- Tests: ✓ 147/147 passing
+- Build: ✓ Clean
+- Lint: ✓ Clean
+- Health: ✓ Backend + Frontend responding
+
+Please review the remaining items and decide how to proceed.
+```
+
 ## Verification Commands
 
 ### Backend (.NET)
 
 ```bash
-# Run all tests
 cd backend && dotnet test
-
-# Run specific test project
-dotnet test HybridFit.Api.Tests
-
-# Run tests with filter
-dotnet test --filter "FullyQualifiedName~UserService"
-
-# Build (catches compilation errors)
 dotnet build
-
-# Check for warnings
 dotnet build --warnaserror
 ```
 
 ### Frontend (React/TypeScript)
 
 ```bash
-# Type checking
 cd frontend && npx tsc --noEmit
-
-# Linting
 npm run lint
-
-# Unit tests (if configured)
 npm test
-
-# E2E tests
 npm run test:e2e
-```
-
-### E2E (Playwright)
-
-```bash
-# Run all E2E tests
-cd frontend && npm run test:e2e
-
-# Run specific test file
-npx playwright test tests/user-flow.spec.ts
-
-# Run in headed mode (see the browser)
-npx playwright test --headed
-
-# Run with UI mode (interactive)
-npx playwright test --ui
-```
-
-## Verification Patterns
-
-### Pattern 1: Test-Driven Verification
-
-```
-1. Write/identify the test that should pass
-2. Run it — confirm it fails (if new test)
-3. Make the change
-4. Run it — confirm it passes
-5. Run full suite — confirm no regression
-```
-
-### Pattern 2: Manual Verification
-
-```
-1. Start the application
-2. Navigate to the affected feature
-3. Perform the action
-4. Observe the result
-5. Compare to expected behavior
-6. Document the verification
-```
-
-### Pattern 3: Before/After Comparison
-
-```
-1. Document current (broken) behavior
-2. Make the change
-3. Document new (fixed) behavior
-4. Compare and confirm fix
 ```
 
 ## Evidence Format
@@ -196,95 +232,39 @@ When reporting verification, provide evidence:
 **Verification Complete**
 
 ## Tests
-```
 $ dotnet test
-Passed: 147
-Failed: 0
-Skipped: 0
-```
+Passed: 147, Failed: 0, Skipped: 0
 
 ## Build
-```
 $ dotnet build
-Build succeeded.
-0 Warning(s)
-0 Error(s)
-```
+Build succeeded. 0 Warning(s), 0 Error(s)
 
-## Manual Verification
-- Navigated to /users
-- Created new user "Test User"
-- User appeared in list
-- Clicked on user, details loaded correctly
+## Lint
+$ npm run lint
+No errors found
+
+## Health Check
+$ curl -sf http://localhost:5000/health
+✓ Backend healthy
+$ curl -sf http://localhost:5173
+✓ Frontend healthy
+
+## PR Status
+Unresolved conversations: 0
+New CodeRabbit comments since last push: 0
 
 ## Conclusion
-All verifications passed. Ready to commit.
-```
-
-## Common Verification Failures
-
-### Tests Fail
-
-```
-**Verification Failed: Tests**
-
-Failed tests:
-- UserServiceTests.CreateUser_WithInvalidEmail_ThrowsException
-  Expected: ArgumentException
-  Actual: No exception thrown
-
-Action needed:
-- Add email validation in UserService.CreateUser
-- Re-run verification after fix
-```
-
-### Build Fails
-
-```
-**Verification Failed: Build**
-
-Error: CS1002 - ; expected
-  at UserService.cs:45
-
-Action needed:
-- Fix syntax error at line 45
-- Re-run verification after fix
-```
-
-### Manual Verification Fails
-
-```
-**Verification Failed: Manual Test**
-
-Expected: User list shows new user after creation
-Actual: User list is empty, no error shown
-
-Observations:
-- Network request to POST /api/users succeeded (201)
-- GET /api/users returns empty array
-- Database shows user was NOT inserted
-
-Likely cause: Transaction not committed
-
-Action needed:
-- Check SaveChangesAsync is called
-- Verify DbContext lifecycle
+All verifications passed. Ready for human review.
 ```
 
 ## Never Skip Verification
 
-❌ **Don't say:**
-- "This should fix it"
-- "I updated the code"
-- "The change has been made"
-
-✅ **Do say:**
-- "Tests pass: 147/147"
-- "Verified: user creation works"
-- "Evidence: [screenshot/output]"
+- **Don't say:** "This should fix it", "I updated the code", "The change has been made"
+- **Do say:** "Tests pass: 147/147", "Verified: user creation works", "Evidence: [output]"
 
 ## Integration with Other Skills
 
 - **After executing-plans tasks:** Verify each task
 - **Before layered-review:** Ensure basic verification passes
 - **Before finishing-branch:** Final verification of all changes
+- **During fix-and-verify cycles:** Bounded verification with escalation
