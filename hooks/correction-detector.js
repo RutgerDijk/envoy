@@ -36,6 +36,7 @@ function run(rawInput) {
 
     const today = new Date().toISOString().split('T')[0];
     const rule = classification.rule;
+    if (!rule) return;
 
     if (classification.scope === 'project') {
       saveCorrection(PROJECT_CORRECTIONS_PATH, rule, today, '# Project Corrections');
@@ -69,10 +70,10 @@ Scope heuristic:
 
 Message: "${prompt.replace(/"/g, '\\"').slice(0, 500)}"`;
 
-    // Use Claude CLI to call Haiku
+    // Use Claude CLI to call Haiku — pass prompt via stdin to avoid shell injection
     const result = execSync(
-      `echo ${JSON.stringify(classificationPrompt)} | claude -m haiku --output-format json -p 2>/dev/null`,
-      { encoding: 'utf8', timeout: 10000 }
+      'claude -m haiku --output-format json -p',
+      { encoding: 'utf8', timeout: 10000, input: classificationPrompt }
     );
 
     // Parse the response — look for JSON in the output

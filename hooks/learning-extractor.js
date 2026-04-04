@@ -118,11 +118,14 @@ function run(rawInput) {
     // Output suggestions for newly automated patterns
     if (newlyAutomated.length > 0) {
       try {
-        const { suggestAutomation } = require('../lib/automation-suggester');
+        const { suggestAutomation, formatSuggestion } = require('../lib/automation-suggester');
         for (const [, pattern] of newlyAutomated) {
           const suggestion = suggestAutomation(pattern);
           if (suggestion) {
             pattern.automationSuggestion = suggestion;
+            // Surface to user via hookSpecificOutput
+            const message = formatSuggestion(pattern, suggestion);
+            console.log(JSON.stringify({ hookSpecificOutput: message }));
           }
         }
         // Re-save with suggestions

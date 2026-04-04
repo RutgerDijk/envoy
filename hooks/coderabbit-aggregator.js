@@ -65,7 +65,24 @@ function run(rawInput) {
       const key = finding.category.toLowerCase();
       categoriesInThisSession.add(key);
 
-      if (data.patterns[key]) {
+      // Check if this was archived — re-promote it
+      const archivedIdx = (data.archived || []).findIndex(a => a.key === key);
+      if (archivedIdx !== -1) {
+        const archived = data.archived[archivedIdx];
+        data.archived.splice(archivedIdx, 1);
+        data.patterns[key] = {
+          category: archived.category || finding.category,
+          description: archived.description || finding.category,
+          prCount: 1,
+          level: 'detected',
+          firstSeen: archived.firstSeen || new Date().toISOString(),
+          lastSeen: new Date().toISOString(),
+          stacks: archived.stacks || (finding.stack ? [finding.stack] : ['general']),
+          stack: archived.stack || finding.stack || 'general',
+          example: finding.example || archived.example || '',
+          reviewsSinceLastSeen: 0,
+        };
+      } else if (data.patterns[key]) {
         data.patterns[key].prCount++;
         data.patterns[key].lastSeen = new Date().toISOString();
         data.patterns[key].reviewsSinceLastSeen = 0;
