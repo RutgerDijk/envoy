@@ -7,7 +7,7 @@ description: Use after implementation is complete, before creating PR or finaliz
 
 ## Overview
 
-Comprehensive 5-layer review combining automated linting, static analysis tools, documentation-informed AI review, Chrome DevTools visual verification, and documentation gap detection.
+Comprehensive 5-layer review combining automated linting, static analysis tools, token-optimized AI review (Sonnet), Chrome DevTools visual verification, and documentation gap detection.
 
 **Announce at start:** "I'm using envoy:layered-review to review these changes."
 
@@ -29,9 +29,31 @@ Before starting layers, gather context:
 git diff --name-only main...HEAD
 ```
 
-### 2. Detect and Load Stack Profiles
+### 2. Determine Complexity Tier
 
-Based on changed files, load relevant stack profiles:
+Classify the change to decide review depth:
+
+```bash
+CHANGED=$(git diff --name-only main...HEAD)
+FILE_COUNT=$(echo "$CHANGED" | wc -l)
+CODE_FILES=$(echo "$CHANGED" | grep -v '\.\(md\|txt\|json\|yml\|yaml\)$' | wc -l)
+```
+
+| Tier | Criteria | Layers to Run |
+|------|----------|---------------|
+| **Trivial** | Docs/config only, or ≤2 files with no logic | Layer 0 only (CodeRabbit handles rest on GitHub) |
+| **Small** | 1-3 code files | Layers 0, 2 (Sonnet only) |
+| **Medium** | 4-10 code files | Layers 0, 1, 2, 3, 4 |
+| **Large** | 10+ code files or cross-cutting | Layers 0, 1, 2, 3, 4 (full) |
+
+### 3. Detect and Load Stack Profiles (Selective)
+
+**Only load stacks relevant to changed files, and only the needed section.**
+
+```bash
+# Get changed file extensions
+git diff --name-only main...HEAD
+```
 
 | Changed File Pattern | Load These Stacks |
 |---------------------|-------------------|
@@ -40,48 +62,38 @@ Based on changed files, load relevant stack profiles:
 | `*.bicep` | bicep, azure-container-apps |
 | `*test*` | testing-dotnet or testing-playwright |
 
-**Read each detected stack profile:**
-```bash
-cat ../../stacks/dotnet.md       # For .NET changes
-cat ../../stacks/react.md        # For React changes
-# etc.
+**For review, load only "Common Mistakes" section** (not full profile):
+
+```javascript
+// Use selective loading from lib/stack-loader.js
+const { loadStackSection } = require('../../lib/stack-loader');
+const mistakes = loadStackSection('dotnet', 'Common Mistakes');
 ```
 
-**Extract from each profile:**
-- Common mistakes (check code against these)
-- Review checklist (use in Layer 2)
+### 4. Load Known Review Patterns
 
-### 3. Load Project Standards
+**Check for learned patterns before external review:**
 
 ```bash
-# If backend changes
-cat .NET_STANDARDS.md 2>/dev/null
-
-# If frontend changes
-cat FRONTEND_STANDARDS.md 2>/dev/null
+# Load patterns from memory if exists
+cat memory/review-learnings.md 2>/dev/null
 ```
 
-### 4. Load Acceptance Criteria
+If patterns exist, check them first — known patterns can be flagged immediately without waiting for CodeRabbit or AI review. This is a cheap local check.
+
+### 5. Load Acceptance Criteria
 
 From linked issue/spec document.
 
-### Load Known Limitations
+### 6. Load Known Limitations
 
-**Critical:** Check the spec/plan documents for documented limitations, future enhancements, or out-of-scope items:
+**Critical:** Check the spec/plan documents for documented limitations:
 
 ```bash
-# Search for documented limitations in spec/plan
 grep -i "future\|enhancement\|out of scope\|not included\|limitation\|deferred\|phase [2-9]\|later" docs/plans/*.md
 ```
 
-**Create exclusion list:** Items documented as "future enhancement", "out of scope", or "deferred" should NOT be flagged as bugs. Keep this list for all review layers.
-
-Example exclusions from spec:
-- "Inline editing (future enhancement)"
-- "Caching (Phase 2)"
-- "Mobile support (out of scope)"
-
-These are **not bugs** — they are documented scope boundaries.
+**Create exclusion list:** Items documented as "future enhancement", "out of scope", or "deferred" should NOT be flagged as bugs.
 
 ---
 
@@ -97,7 +109,7 @@ npm run lint
 
 ### Handle Failures
 
-**If lint passes:** Continue to Layer 1.
+**If lint passes:** Continue to next layer based on complexity tier.
 
 **If lint fails:**
 - Fix auto-fixable issues: `npm run lint -- --fix` (if supported)
@@ -108,9 +120,13 @@ npm run lint
   git commit -m "fix: address lint errors"
   ```
 
+**For trivial tier: stop here.** CodeRabbit will handle the rest on GitHub.
+
 ---
 
 ## Layer 1: CodeRabbit Static Analysis
+
+*Skipped for trivial and small tiers.*
 
 ### Run CodeRabbit
 
@@ -132,14 +148,11 @@ Categorize each finding:
 - Architectural suggestions
 - Performance trade-offs
 - Alternative approaches
-- Preference-based feedback
 
 ### Apply Fixes
 
 For obvious fixes:
 ```bash
-# Make the fix
-# Then commit
 git add -p
 git commit -m "fix: address code review feedback
 
@@ -158,87 +171,103 @@ Apply this fix? (y/n/discuss)
 
 ---
 
-## Layer 2: Documentation-Informed AI Review
+## Layer 2: Token-Optimized AI Review (Sonnet)
 
-### Spawn Fresh Agent
+### Spawn Fresh Sonnet Agent
 
-Create a new agent with NO implementation context (prevents bias):
+Create a new **Sonnet** agent with NO implementation context (prevents bias):
 
 ```
-Agent receives:
-- git diff main...HEAD
-- Project standards docs
-- Relevant stack profiles
-- Acceptance criteria from spec
-- NOT the implementation conversation
+Agent({
+  model: "sonnet",
+  description: "AI code review",
+  prompt: `Review the diff. Context provided via files, not inline.
+
+  Read these files:
+  - git diff main...HEAD (the changes)
+  - <spec-path> (acceptance criteria)
+  - <stack-common-mistakes> (patterns to check)
+
+  Focus areas (what CodeRabbit does NOT cover):
+  1. Spec/acceptance criteria compliance
+  2. TDD verification: git log shows test commits before implementation?
+  3. Codebase pattern consistency: read surrounding code, not just diff
+  4. Stack profile common mistakes
+
+  DO NOT check (CodeRabbit handles these):
+  - Style, naming, formatting
+  - Security basics
+  - Common language mistakes
+  - Performance anti-patterns
+
+  Tools allowed: Read, Grep, Glob ONLY (read-only review)
+
+  Output format:
+  - ✓ Check passed: <description>
+  - ⚠ Concern: <file>:<line> — <description>
+  - ✗ Issue: <file>:<line> — <description>
+  `
+})
 ```
+
+**Key differences from previous approach:**
+- Uses **Sonnet** (60% cheaper than Opus)
+- **Restricted tools** — Read, Grep, Glob only (no accidental edits)
+- **Focused scope** — Only checks what CodeRabbit can't
+- **Context via files** — No inline prompt bloat
 
 ### Review Checklist
 
-The agent checks:
+The Sonnet agent checks:
 
 1. **Spec compliance** — Does implementation match the design doc?
-2. **Standards compliance** — Does code follow project standards?
-3. **TDD compliance** — Were tests written before implementation?
+2. **TDD compliance** — Were tests written before implementation?
    - Check git log for test commits preceding implementation commits
    - Flag if implementation committed without prior test commit
-4. **Test coverage** — Is business logic covered by tests?
-   - Services, repositories, utilities → Must have tests
-   - UI components → Visual review is primary, unit tests optional
-5. **Architectural concerns** — Any structural issues?
-6. **Security implications** — Any vulnerabilities introduced?
-7. **Error handling** — Are errors handled appropriately?
-8. **Performance concerns** — Any obvious performance issues?
-9. **Pattern consistency** — Matches existing codebase patterns?
+3. **Codebase pattern consistency** — Matches existing codebase patterns?
+   - Read surrounding files, not just the diff
+4. **Stack common mistakes** — Check against loaded "Common Mistakes" section
 
 **Exclusions check:** Before flagging any issue, verify it's not in the documented limitations/future enhancements list from pre-review.
 
 ### Report Format
 
 ```
-**AI Review Results**
+**AI Review Results (Sonnet)**
 
 ✓ Spec compliance: Implementation matches design
-✓ Standards: Follows .NET_STANDARDS.md
-⚠ Concern: Missing null check in UserService.GetById
-✓ Security: No issues found
-⚠ Suggestion: Consider caching in GetUsers for performance
+✓ TDD: Test commits precede implementation
+⚠ Concern: src/Services/UserService.cs:45 — Missing null check
+✓ Codebase patterns: Consistent with existing code
+✓ Stack checks: No common mistakes found
 
-Issues requiring attention: 2
+Issues requiring attention: 1
+Token cost: ~60% less than Opus review
 ```
 
 ---
 
 ## Layer 3: Visual/Functional Review
 
+*Skipped for trivial tier.*
+
 Use envoy:visual-review skill for Chrome DevTools verification.
 
 ### Process
 
-1. **Start application:**
-   ```bash
-   # Start backend
-   cd backend && dotnet run &
-
-   # Start frontend
-   cd frontend && npm run dev &
-
-   # Wait for startup
-   sleep 10
-   ```
-
+1. **Start application** (if not already running)
 2. **Identify affected pages** from changed files
-
 3. **For each affected page:**
    - Navigate to page
    - Take screenshot
    - Check console for errors
    - Check network for failures
-
-4. **Test user flows** from acceptance criteria:
-   - Fill forms
-   - Click buttons
-   - Verify expected outcomes
+4. **Test user flows** from acceptance criteria
+5. **App health check:**
+   ```bash
+   curl -f http://localhost:5000/health || echo "Backend health check failed"
+   curl -f http://localhost:5173 || echo "Frontend health check failed"
+   ```
 
 ### Report Format
 
@@ -250,7 +279,7 @@ Pages checked: 3
 - /users/new: ✓ OK
 - /users/:id: ⚠ Console warning (React key)
 
-Screenshots: 3 captured
+Health check: ✓ Backend + Frontend responding
 Console errors: 0
 Network failures: 0
 User flows: 2/2 passed
@@ -273,27 +302,10 @@ Comprehensive analysis:
 - Cross-reference all standards documents
 - Check wiki for coverage of new features
 - Identify patterns used but not documented
-- Suggest new documentation
 
 ### Skip Mode (--no-check-docs)
 
 Skip this layer entirely for fast reviews.
-
-### Report Format
-
-```
-**Documentation Gaps**
-
-Missing docstrings:
-- UserService.CreateUser (public method)
-- UserController.Get (public endpoint)
-
-Outdated docs:
-- README.md mentions old API endpoint
-
-Suggested additions:
-- Add wiki page for user management feature
-```
 
 ---
 
@@ -308,17 +320,19 @@ Combine all layer results:
 |-------|--------|--------|
 | 0. Lint | ✓ | 0 errors |
 | 1. CodeRabbit | ✓ | 3 fixed, 1 needs decision |
-| 2. AI Review | ⚠ | 2 concerns |
+| 2. AI Review (Sonnet) | ⚠ | 2 concerns |
 | 3. Visual | ✓ | 1 warning |
 | 4. Docs | ⚠ | 3 gaps |
+
+Complexity tier: Medium
+Token savings: ~60% (Sonnet AI review)
 
 **Action needed:**
 
 1. [ ] CodeRabbit: Decide on architectural suggestion
 2. [ ] AI Review: Add null check in UserService
-3. [ ] AI Review: Consider caching (optional)
-4. [ ] Visual: Fix React key warning
-5. [ ] Docs: Add docstrings to public APIs
+3. [ ] Visual: Fix React key warning
+4. [ ] Docs: Add docstrings to public APIs
 
 **After addressing issues:**
 - `/envoy:finalize` to prepare PR
@@ -335,3 +349,12 @@ Combine all layer results:
 | `/envoy:review --no-check-docs` | 0, 1, 2, 3 |
 | `/envoy:quick-review` | 0, 1, 2 only |
 | `/envoy:visual-review` | 3 only |
+
+### Complexity Tier Quick Reference
+
+| Tier | Layers | AI Model | Cost |
+|------|--------|----------|------|
+| Trivial | 0 | None | ~$0 |
+| Small | 0, 2 | Sonnet | ~$0.05 |
+| Medium | 0-4 | Sonnet | ~$0.15 |
+| Large | 0-4 | Sonnet | ~$0.25 |
