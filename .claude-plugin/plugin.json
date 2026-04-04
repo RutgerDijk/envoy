@@ -1,18 +1,27 @@
 {
   "name": "envoy",
-  "description": "Professional development workflows with token-optimized review, hooks, and autonomous agent patterns",
   "version": "2.1.0",
+  "description": "Plugin-safe Claude Code distribution of Envoy professional development workflows with 25 skills, 25 stack profiles, and self-learning hooks.",
   "author": {
-    "name": "Rutger Dijkstra"
+    "name": "Rutger Dijkstra",
+    "url": "https://github.com/RutgerDijk"
   },
+  "homepage": "https://github.com/RutgerDijk/envoy",
   "repository": "https://github.com/RutgerDijk/envoy",
+  "license": "MIT",
   "keywords": [
+    "claude-code",
+    "skills",
+    "agentic-skills",
+    "plugin-safe",
+    "productivity",
     "dotnet",
     "react",
     "azure",
     "tdd",
     "code-review",
     "workflows",
-    "best-practices"
+    "best-practices",
+    "self-learning"
   ]
 }
