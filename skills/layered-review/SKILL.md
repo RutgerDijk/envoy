@@ -103,23 +103,33 @@ npm run lint
 
 ## Layer 1: Token-Optimized AI Review (Sonnet)
 
-Spawn a fresh **Sonnet** agent with NO implementation context:
+Spawn a fresh **Sonnet** agent with NO implementation context. The agent uses **iterative retrieval** to understand codebase context — not just the diff:
 
 ```
 Agent({
   model: "sonnet",
   description: "AI code review",
-  prompt: `Review the diff. Context provided via files, not inline.
+  prompt: `You are reviewing code changes. Context provided via files, not inline.
 
-  Read these files:
-  - git diff main...HEAD (the changes)
+  FIRST: Read contexts/iterative-retrieval.md for the retrieval protocol.
+
+  THEN: Follow the protocol:
+  1. Read git diff main...HEAD
+  2. Identify related files (imports, callers, shared types)
+  3. Read those files, score relevance (0-1.0)
+  4. If <3 files scored >=0.7, follow one more hop
+  5. Stop when 3+ files have relevance >=0.7 or 3 cycles done
+
+  Report your retrieval context before reviewing.
+
+  Also read:
   - <spec-path> (acceptance criteria)
   - <stack-common-mistakes> (patterns to check)
 
   Focus areas:
   1. Spec/acceptance criteria compliance
   2. TDD verification: git log shows test commits before implementation?
-  3. Codebase pattern consistency: read surrounding code, not just diff
+  3. Codebase pattern consistency (informed by retrieved context)
   4. Stack profile common mistakes
 
   DO NOT check (GitHub CodeRabbit handles these on the PR):
@@ -131,6 +141,10 @@ Agent({
   Tools allowed: Read, Grep, Glob ONLY (read-only review)
 
   Output format:
+  **Retrieval context:**
+  - <file> (<score>) — <reason>
+
+  **Review findings:**
   - ✓ Check passed: <description>
   - ⚠ Concern: <file>:<line> — <description>
   - ✗ Issue: <file>:<line> — <description>
