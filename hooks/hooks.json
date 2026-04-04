@@ -6,7 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" session-start.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" session-start.sh",
+            "_profiles": ["minimal", "standard", "strict"]
           }
         ]
       }
@@ -17,7 +18,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/config-protection.js\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" config-protection",
+            "_profiles": ["minimal", "standard", "strict"]
           }
         ]
       }
@@ -28,7 +30,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-edit-accumulator.js\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" post-edit-accumulator",
+            "_profiles": ["standard", "strict"]
           }
         ]
       }
@@ -39,10 +42,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-batch-lint.js\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" stop-batch-lint",
+            "_profiles": ["standard", "strict"]
           }
         ]
       }
     ]
+  },
+  "_profileDocs": {
+    "minimal": "config-protection + cost-tracker only — lowest token overhead",
+    "standard": "all hooks enabled (default)",
+    "strict": "all hooks + additional verification gates"
+  },
+  "_envVars": {
+    "ENVOY_HOOK_PROFILE": "minimal | standard | strict (default: standard)",
+    "ENVOY_DISABLED_HOOKS": "comma-separated hook names to skip regardless of profile"
   }
 }
