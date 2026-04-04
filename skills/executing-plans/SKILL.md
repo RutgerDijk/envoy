@@ -387,9 +387,87 @@ Even if technically possible, avoid parallel execution when:
 - Critical shared state (auth, global config)
 - First time implementing this type of feature
 
+## Complexity Tiers
+
+Before executing each task, classify its complexity to determine pipeline depth:
+
+| Tier | Criteria | Pipeline |
+|------|----------|----------|
+| **Trivial** | Docs, config, typos, simple renames | implement → verify |
+| **Small** | Single file logic, 1-3 files | implement → test → light review |
+| **Medium** | 4-10 files, multi-component | implement → test → full review |
+| **Large** | 10+ files, cross-cutting, new patterns | research → implement → test → full review |
+
+### Trivial Tasks
+Skip AI review. Just implement, verify tests pass, commit.
+
+### Small Tasks
+Implement with TDD, then dispatch a **Sonnet** reviewer (not the implementing agent):
+
+```
+Agent({
+  model: "sonnet",
+  description: "Review Task N",
+  prompt: "Review the changes in the last commit. Check spec compliance and patterns.
+           Tools: Read, Grep, Glob only.",
+  subagent_type: "general-purpose"
+})
+```
+
+### Medium/Large Tasks
+Full TDD + full parallel review after implementation.
+
+## Tool Restrictions Per Phase
+
+**Restrict tools based on the current phase to prevent mistakes:**
+
+| Phase | Allowed Tools | Rationale |
+|-------|--------------|-----------|
+| **Research** | Read, Grep, Glob | Exploration only, no accidental changes |
+| **Implementation** | Read, Edit, Write, Bash, Grep, Glob | Full access for coding |
+| **Review** | Read, Grep, Glob | Read-only prevents reviewer from "fixing" code |
+| **Verification** | Read, Grep, Glob, Bash | Can run tests but not edit code |
+
+When dispatching subagents, specify tool restrictions in the prompt:
+```
+**Tools:** Read, Grep, Glob only — do NOT use Edit, Write, or Bash
+```
+
+## Fresh Reviewer Per Task
+
+**The implementing agent must NEVER review its own work.**
+
+After completing a task, dispatch a fresh Sonnet reviewer:
+
+```
+Agent({
+  model: "sonnet",
+  description: "Review Task N implementation",
+  prompt: `You are reviewing Task N from the implementation plan.
+
+  Read:
+  - git diff HEAD~1..HEAD (latest changes)
+  - <spec-path> (relevant task section)
+
+  Check:
+  1. Spec compliance
+  2. TDD: test commit exists before implementation
+  3. Pattern consistency with existing code
+  4. Stack common mistakes
+
+  Tools: Read, Grep, Glob ONLY
+
+  Report findings as:
+  - ✓ <check passed>
+  - ⚠ <concern with file:line>
+  - ✗ <issue with file:line>
+  `
+})
+```
+
 ## Progress Tracking
 
-Use TodoWrite to track task progress:
+Use TaskCreate/TaskUpdate to track task progress:
 
 ```
 - [x] Task 1: Create database schema

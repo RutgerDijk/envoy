@@ -13,9 +13,11 @@ brainstorm → pickup → review → finalize → cleanup
 **Key features:**
 - **Brainstorming**: Turn ideas into designs + implementation plans through Socratic dialogue
 - **Execution**: TDD-enforced implementation with automatic worktree management
-- **Review**: 4-layer code review (CodeRabbit, AI, Visual, Docs)
-- **Finalization**: Automated docstrings, wiki sync, and PR creation
+- **Review**: 5-layer code review (Lint, CodeRabbit, Sonnet AI, Visual, Docs) with complexity tiers
+- **Finalization**: PR-first flow — create PR, then parallel reviews, address all findings
 - **Cleanup**: Remove worktrees and branches after merge
+- **Hooks**: Config protection, batch lint, cost tracking, learning extraction
+- **Token optimization**: ~60% cost savings via Sonnet AI review, selective stack loading, complexity tiers
 
 ## Installation
 
@@ -56,15 +58,26 @@ envoy/
 ├── .claude-plugin/        # Plugin configuration
 │   ├── plugin.json        # Plugin metadata
 │   └── marketplace.json   # Marketplace registration
-├── hooks/                 # Session lifecycle hooks
-│   ├── hooks.json         # Hook registration
-│   └── session-start.sh   # Auto-loads Envoy on startup
+├── hooks/                 # Session lifecycle hooks & automation
+│   ├── hooks.json         # Hook registration (profile-annotated)
+│   ├── hook-runner.js     # Profile-aware hook execution
+│   ├── session-start.sh   # Auto-loads Envoy on startup
+│   ├── config-protection.js    # Blocks linter config modifications
+│   ├── post-edit-accumulator.js # Tracks edits for batched lint
+│   ├── stop-batch-lint.js      # Runs lint once across all edits
+│   ├── post-pr-poll.js         # Triggers CodeRabbit polling
+│   ├── cost-tracker.js         # Async JSONL token logging
+│   └── learning-extractor.js   # Async review pattern learning
 ├── lib/                   # Shared utilities
 │   ├── skills-core.js     # Skill discovery & shadowing
-│   └── stack-loader.js    # Stack detection & loading
+│   └── stack-loader.js    # Stack detection, selective loading
+├── contexts/              # Phase-specific context fragments
+│   ├── review.md          # Review phase constraints
+│   ├── implement.md       # Implementation phase constraints
+│   └── research.md        # Research phase constraints
 ├── commands/              # Entry points for /envoy:* commands
 ├── agents/                # Specialized agent definitions
-├── skills/                # 19 workflow skills
+├── skills/                # 20 workflow skills
 ├── stacks/                # 25 technology profiles
 ├── docs/                  # Anti-patterns & authoring guides
 └── adapters/              # Platform adapters
@@ -137,21 +150,16 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  3. REVIEW                                                          │
-│     /envoy:review                                                   │
-│     → CodeRabbit → AI Review → Visual Review → Doc Gaps             │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  4. FINALIZE                                                        │
+│  3. FINALIZE (PR-first)                                             │
 │     /envoy:finalize                                                 │
-│     → Docstrings → Wiki sync → Create PR                            │
+│     → Docstrings → Create PR → Parallel reviews → Fix all findings  │
+│     → Reply + resolve CodeRabbit comments → Verify → Wiki sync      │
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
                         [ PR Review & Merge ]
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  5. CLEANUP                                                         │
+│  4. CLEANUP                                                         │
 │     /envoy:cleanup                                                  │
 │     → Remove worktree → Delete feature branch                       │
 └─────────────────────────────────────────────────────────────────────┘
@@ -165,8 +173,8 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 |---------|-------------|
 | `/envoy:brainstorm` | Design + plan a feature (combines design and planning) |
 | `/envoy:pickup [issue]` | Create worktree + execute plan |
-| `/envoy:review` | Full 4-layer review |
-| `/envoy:finalize` | Docstrings + wiki + PR |
+| `/envoy:review` | Full 5-layer review with complexity tiers |
+| `/envoy:finalize` | PR-first: create PR → parallel reviews → fix all findings |
 | `/envoy:cleanup` | Remove worktree and branch after merge |
 
 ### Additional Commands
@@ -186,12 +194,45 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 | `/envoy:pickup --plan-only` | Stop after worktree setup (no execution) |
 | `/envoy:cleanup --all` | Clean up ALL merged worktrees |
 
-## 4-Layer Review
+## 5-Layer Review (with Complexity Tiers)
 
+| Tier | Criteria | Layers |
+|------|----------|--------|
+| Trivial | Docs/config only | Lint only (CodeRabbit on GitHub handles rest) |
+| Small | 1-3 code files | Lint + Sonnet AI |
+| Medium | 4-10 files | All 5 layers |
+| Large | 10+ files | All 5 layers with extra scrutiny |
+
+0. **Automated Linting** - `npm run lint` catches basic issues early
 1. **CodeRabbit Analysis** - Static analysis via `@coderabbitai review`
-2. **AI Review** - Fresh agent reviews against project docs and stack profiles
-3. **Visual Review** - Chrome DevTools screenshots, console, network checks
+2. **AI Review (Sonnet)** - Spec compliance, TDD verification, codebase patterns (~60% cheaper than Opus)
+3. **Visual Review** - Chrome DevTools screenshots, console, network, health checks
 4. **Doc Gap Detection** - Find missing or outdated documentation
+
+## Hook System
+
+Envoy uses hooks for automation without polluting the context window:
+
+| Hook | Type | Purpose |
+|------|------|---------|
+| `config-protection` | PreToolUse | Blocks linter/formatter config modifications |
+| `post-edit-accumulator` | PostToolUse | Tracks edited files for batched processing |
+| `post-pr-poll` | PostToolUse | Triggers CodeRabbit polling after PR creation |
+| `stop-batch-lint` | Stop | Runs lint once across all session edits |
+| `cost-tracker` | Stop (async) | Logs token usage to JSONL for optimization |
+| `learning-extractor` | Stop (async) | Saves recurring review patterns to memory |
+
+### Hook Profiles
+
+Control which hooks run via `ENVOY_HOOK_PROFILE`:
+
+| Profile | Hooks | Use Case |
+|---------|-------|----------|
+| `minimal` | config-protection, cost-tracker | Low overhead, essential protection |
+| `standard` | All hooks (default) | Full automation |
+| `strict` | All hooks + verification gates | Maximum safety |
+
+Override individual hooks: `ENVOY_DISABLED_HOOKS=cost-tracker,learning-extractor`
 
 ## TDD Enforcement
 
@@ -211,7 +252,7 @@ The `executing-plans` skill includes rationalization counters:
 
 ## Skills
 
-Envoy includes 19 skills for common development tasks:
+Envoy includes 20 skills for common development tasks:
 
 | Skill | When to Use |
 |-------|-------------|
@@ -229,6 +270,7 @@ Envoy includes 19 skills for common development tasks:
 | `envoy:using-git-worktrees` | Need isolated workspace |
 | `envoy:requesting-code-review` | Get feedback on changes |
 | `envoy:receiving-code-review` | Evaluate review feedback |
+| `envoy:coderabbit-pr-review` | Address + resolve GitHub CodeRabbit PR comments |
 | `envoy:visual-review` | UI changes need verification |
 | `envoy:docstrings` | Public APIs need documentation |
 | `envoy:wiki-sync` | Documentation updated |
