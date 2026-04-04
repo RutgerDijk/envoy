@@ -4,20 +4,21 @@ Professional .NET/React/Azure development workflows for **Claude Code** and **Gi
 
 ## Overview
 
-Envoy provides a streamlined 5-step workflow from idea to merged PR:
+Envoy provides a streamlined workflow from idea to merged PR:
 
 ```
-brainstorm → pickup → review → finalize → cleanup
+brainstorm → pickup → implement → cleanup-pass → review → finalize → cleanup
 ```
 
 **Key features:**
 - **Brainstorming**: Turn ideas into designs + implementation plans through Socratic dialogue
 - **Execution**: TDD-enforced implementation with automatic worktree management
-- **Review**: 5-layer code review (Lint, CodeRabbit, Sonnet AI, Visual, Docs) with complexity tiers
-- **Finalization**: PR-first flow — create PR, then parallel reviews, address all findings
+- **Review**: 4-layer local review (Lint, Sonnet AI, Visual, Docs) with complexity tiers
+- **Finalization**: Create PR, handle GitHub CodeRabbit comments, verify, ship
 - **Cleanup**: Remove worktrees and branches after merge
 - **Hooks**: Config protection, batch lint, cost tracking, learning extraction
-- **Token optimization**: ~60% cost savings via Sonnet AI review, selective stack loading, complexity tiers
+- **Token optimization**: ~60% cost savings via Sonnet AI review, selective stack loading, regex-first parsing
+- **Advanced patterns**: Eval harness, search-first, cleanup pass, iterative retrieval, completion signals
 
 ## Installation
 
@@ -70,14 +71,17 @@ envoy/
 │   └── learning-extractor.js   # Async review pattern learning
 ├── lib/                   # Shared utilities
 │   ├── skills-core.js     # Skill discovery & shadowing
-│   └── stack-loader.js    # Stack detection, selective loading
+│   ├── stack-loader.js    # Stack detection, selective loading
+│   ├── coderabbit-parser.js    # Regex-first CodeRabbit comment parser
+│   └── loop-safeguards.js      # Completion signal threshold for loops
 ├── contexts/              # Phase-specific context fragments
-│   ├── review.md          # Review phase constraints
-│   ├── implement.md       # Implementation phase constraints
-│   └── research.md        # Research phase constraints
+│   ├── review.md               # Review phase constraints
+│   ├── implement.md            # Implementation phase constraints
+│   ├── research.md             # Research phase constraints
+│   └── iterative-retrieval.md  # Multi-cycle retrieval protocol
 ├── commands/              # Entry points for /envoy:* commands
 ├── agents/                # Specialized agent definitions
-├── skills/                # 20 workflow skills
+├── skills/                # 24 workflow skills
 ├── stacks/                # 25 technology profiles
 ├── docs/                  # Anti-patterns & authoring guides
 └── adapters/              # Platform adapters
@@ -263,7 +267,9 @@ The `executing-plans` skill includes rationalization counters:
 
 ## Skills
 
-Envoy includes 20 skills for common development tasks:
+Envoy includes 24 skills:
+
+### Core Workflow
 
 | Skill | When to Use |
 |-------|-------------|
@@ -271,18 +277,42 @@ Envoy includes 20 skills for common development tasks:
 | `envoy:writing-plans` | Have a design doc, need implementation plan |
 | `envoy:executing-plans` | Have a plan, ready to start coding |
 | `envoy:pickup` | Ready to implement a GitHub issue |
-| `envoy:systematic-debugging` | Bug, test failure, or unexpected behavior |
-| `envoy:verification` | Before committing or claiming done |
-| `envoy:layered-review` | After implementation, before PR |
 | `envoy:finishing-branch` | Implementation complete, ready for PR |
 | `envoy:cleanup` | After PR merged |
-| `envoy:dispatching-parallel-agents` | Multiple independent tasks |
-| `envoy:subagent-driven-development` | Execute plan with fresh agent per task |
-| `envoy:using-git-worktrees` | Need isolated workspace |
-| `envoy:requesting-code-review` | Get feedback on changes |
-| `envoy:receiving-code-review` | Evaluate review feedback |
+
+### Quality & Review
+
+| Skill | When to Use |
+|-------|-------------|
+| `envoy:layered-review` | After implementation, before PR |
 | `envoy:coderabbit-pr-review` | Address + resolve GitHub CodeRabbit PR comments |
 | `envoy:visual-review` | UI changes need verification |
+| `envoy:verification` | Before committing or claiming done |
+| `envoy:requesting-code-review` | Get feedback on changes |
+| `envoy:receiving-code-review` | Evaluate review feedback |
+
+### Advanced Patterns
+
+| Skill | When to Use |
+|-------|-------------|
+| `envoy:search-first` | Before implementing, check if solution already exists |
+| `envoy:cleanup-pass` | After implementation, remove AI-generated slop before review |
+| `envoy:eval-harness` | Test whether a skill behaves correctly across scenarios |
+
+### Execution & Orchestration
+
+| Skill | When to Use |
+|-------|-------------|
+| `envoy:dispatching-parallel-agents` | Multiple independent tasks |
+| `envoy:subagent-driven-development` | Execute plan with fresh agent per task |
+| `envoy:systematic-debugging` | Bug, test failure, or unexpected behavior |
+| `envoy:test-driven-development` | Implementing any feature or bugfix |
+
+### Utilities
+
+| Skill | When to Use |
+|-------|-------------|
+| `envoy:using-git-worktrees` | Need isolated workspace |
 | `envoy:docstrings` | Public APIs need documentation |
 | `envoy:wiki-sync` | Documentation updated |
 | `envoy:using-envoy` | Discover available skills |
@@ -340,10 +370,10 @@ claude
 # Executes plan with TDD...
 
 > /envoy:review
-# 4-layer review, fix issues...
+# Local review: lint, Sonnet AI, visual, docs...
 
 > /envoy:finalize
-# Creates PR #43
+# Creates PR #43, handles CodeRabbit comments, verifies
 
 # After PR is merged:
 > /envoy:cleanup
@@ -379,7 +409,7 @@ See `docs/SKILL-AUTHORING-GUIDE.md` for:
 
 ### CodeRabbit Setup
 
-CodeRabbit provides AI-powered code review for the first layer of Envoy's 4-layer review.
+CodeRabbit provides AI-powered code review on your PRs via the GitHub App.
 
 1. **Install the CLI**:
    ```bash
@@ -405,7 +435,7 @@ CodeRabbit provides AI-powered code review for the first layer of Envoy's 4-laye
 
 **Alternative**: Install the [GitHub App](https://github.com/apps/coderabbitai) for automatic PR reviews.
 
-**Without CodeRabbit**: The review skill will skip Layer 1 and continue with AI review, visual review, and doc gap detection.
+**Without CodeRabbit**: The finalize skill skips CodeRabbit comment handling. Local review (Sonnet AI, visual, docs) still runs.
 
 ### DevTools MCP Setup
 
@@ -432,7 +462,7 @@ Chrome DevTools MCP enables visual verification by capturing screenshots, consol
    alias chrome-debug='/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222'
    ```
 
-**Without DevTools MCP**: The review skill will skip visual verification (Layer 3) and continue with other layers.
+**Without DevTools MCP**: The review skill skips visual verification (Layer 2) and continues with other layers.
 
 ### Verify Setup
 

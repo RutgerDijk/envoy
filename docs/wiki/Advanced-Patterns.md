@@ -1,0 +1,108 @@
+# Advanced Patterns
+
+Patterns that make autonomous agent workflows more reliable and efficient.
+
+## Eval Harness
+
+**Skill:** `envoy:eval-harness`
+
+Automated skill testing. Define scenarios in YAML, run them as subagents, get pass/fail metrics.
+
+```yaml
+# tests/scenarios/test-driven-development.yml
+skill: test-driven-development
+scenarios:
+  - name: "Resists writing code before tests"
+    input: "Add a fibonacci function"
+    expected:
+      - "writes test file before implementation"
+    failure:
+      - "writes implementation before test"
+```
+
+Each scenario runs two subagents:
+- **Baseline** (no skill) — what Claude does by default
+- **With skill** — should exhibit expected behavior
+
+Produces **pass@1** (first try) and **pass@3** (passes within 3 tries) metrics.
+
+## Search-First
+
+**Skill:** `envoy:search-first`
+
+Before building anything, check if it already exists:
+
+| Decision | When | Action |
+|----------|------|--------|
+| **Adopt** | Exact match exists | Install and use directly |
+| **Extend** | 70%+ match exists | Thin wrapper |
+| **Compose** | Multiple partial matches | Combine packages |
+| **Build** | Nothing found | Implement from scratch |
+
+Searches: existing codebase, npm/NuGet, GitHub. Evaluates maintenance status, downloads, bundle size, license.
+
+Integrated with `executing-plans` — each task checks search-first before writing code.
+
+## Cleanup Pass
+
+**Skill:** `envoy:cleanup-pass`
+
+A fresh agent reviews the diff and removes AI-generated slop:
+
+| Category | Examples |
+|----------|---------|
+| Defensive checks | Null checks on required params, try/catch on non-throwing code |
+| Over-engineering | Single-impl interfaces, premature generics, factory-for-new |
+| Redundant tests | Mock-returns-mock, framework behavior tests |
+| Comments | Restating the code, TODO for done items |
+| Dead code | Unused imports, uncalled functions |
+
+**Key principle:** Never add "don't do X" instructions to the implementing agent. That makes it hesitant. Let it code freely, then clean up.
+
+Slot: `implement → cleanup-pass → review → finalize`
+
+## Iterative Retrieval
+
+Used by the Sonnet AI reviewer in `layered-review` Layer 1.
+
+Instead of just reading the diff, the reviewer does up to 3 retrieval cycles:
+
+1. **Cycle 1:** Read the diff, identify related files (imports, callers, shared types)
+2. **Cycle 2:** Read those files, score relevance (0-1.0)
+3. **Cycle 3:** If < 3 files scored >= 0.7, follow one more hop
+
+Stops when 3+ files have relevance >= 0.7, or 3 cycles completed.
+
+Makes the reviewer codebase-aware instead of diff-only. Defined in `contexts/iterative-retrieval.md`.
+
+## Completion Signal Threshold
+
+**Lib:** `lib/loop-safeguards.js`
+
+A single "I'm done" from an agent could be hallucinated. Three consecutive `ENVOY_LOOP_COMPLETE` signals with fresh evidence confirm genuine completion.
+
+```
+counter = 0
+
+while counter < 3:
+  1. Run verification
+  2. If passes: output ENVOY_LOOP_COMPLETE, counter += 1
+  3. If fails: counter = 0, fix the issue
+```
+
+Applied in:
+- Fix-and-verify cycles (`verification` skill)
+- CodeRabbit re-poll cycles (`finishing-branch` skill)
+- Any autonomous polling loop
+
+## Regex-First Parsing
+
+**Lib:** `lib/coderabbit-parser.js`
+
+95%+ of CodeRabbit comments follow structured patterns. Parse with regex first:
+- File path from `.path` field
+- Line number from `.line` field
+- Severity from emoji markers or `[severity]` tags
+- Suggestion from ` ```suggestion ``` ` blocks
+
+Only send to Haiku (cheap LLM) when regex confidence < 0.95. Massive token savings.
