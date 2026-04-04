@@ -29,6 +29,7 @@ const HOOK_PROFILES = {
   'learning-extractor':     ['standard', 'strict'],
   'post-pr-poll':           ['standard', 'strict'],
   'coderabbit-aggregator':  ['standard', 'strict'],
+  'correction-detector':    ['standard', 'strict'],
 };
 
 /**
