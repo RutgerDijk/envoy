@@ -155,21 +155,29 @@ gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
   --jq "[.[] | select(.user.login == \"coderabbitai\") | select(.created_at > \"$LAST_PUSH\")] | length"
 ```
 
-## Fix-and-Verify Cycle (Max 3)
+## Fix-and-Verify Cycle (Max 3, with Completion Signal)
 
-When addressing review findings, use a bounded cycle:
+When addressing review findings, use a bounded cycle with the **completion signal protocol** from `lib/loop-safeguards.js`:
+
+A single "I'm done" could be hallucinated. Three consecutive `ENVOY_LOOP_COMPLETE` signals with fresh evidence confirm genuine completion.
 
 ```
 CYCLE = 0
 MAX_CYCLES = 3
+COMPLETION_COUNT = 0
 
 while CYCLE < MAX_CYCLES:
   1. Run full verification suite
   2. If ALL checks pass AND zero unresolved comments:
-     → DONE. Report success with evidence.
+     → Output: ENVOY_LOOP_COMPLETE with evidence
+     → COMPLETION_COUNT += 1
+     → If COMPLETION_COUNT >= 3: DONE (genuinely complete)
+     → Else: Run verification AGAIN (fresh check)
   3. If new CodeRabbit comments appeared:
+     → COMPLETION_COUNT = 0 (reset!)
      → Address findings, push, increment CYCLE
   4. If verification failed:
+     → COMPLETION_COUNT = 0 (reset!)
      → Fix the issue, re-verify
 
 if CYCLE >= MAX_CYCLES:

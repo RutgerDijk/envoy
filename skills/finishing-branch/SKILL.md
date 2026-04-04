@@ -163,19 +163,27 @@ gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments/<id>/replies \
 git push
 ```
 
-### Step 8: Re-poll (Max 3 Cycles)
+### Step 8: Re-poll (Max 3 Cycles, with Completion Signal)
 
-After pushing, CodeRabbit may leave new comments on the fixes. Check:
+After pushing, CodeRabbit may leave new comments on the fixes. Use the **completion signal protocol** from `lib/loop-safeguards.js`:
+
+"No new comments" must be confirmed 3 consecutive times (`ENVOY_LOOP_COMPLETE`) before the loop stops — a single check could miss comments still being posted.
 
 ```bash
 LAST_PUSH=$(git log -1 --format=%cI)
-gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
-  --jq "[.[] | select(.user.login == \"coderabbitai\") | select(.created_at > \"$LAST_PUSH\")] | length"
+NEW_COMMENTS=$(gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
+  --jq "[.[] | select(.user.login == \"coderabbitai\") | select(.created_at > \"$LAST_PUSH\")] | length")
+
+if [ "$NEW_COMMENTS" -eq 0 ]; then
+  echo "ENVOY_LOOP_COMPLETE — no new comments (check N/3)"
+else
+  echo "New comments found: $NEW_COMMENTS — reset completion counter"
+fi
 ```
 
-**If new comments:** address → reply → resolve → push → re-poll.
+**If new comments:** address → reply → resolve → push → re-poll. Reset completion counter.
 
-**Max 3 cycles total.** After 3 cycles with remaining issues:
+**Max 3 address-and-push cycles.** After 3 cycles with remaining issues:
 
 ```
 **Escalation: CodeRabbit cycle limit reached**
