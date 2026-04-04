@@ -150,16 +150,23 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  3. FINALIZE (PR-first)                                             │
+│  3. REVIEW (local)                                                  │
+│     /envoy:review                                                   │
+│     → Lint → Sonnet AI review → Visual review → Doc gaps            │
+│     → Fix all local findings                                        │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  4. FINALIZE (ship it)                                              │
 │     /envoy:finalize                                                 │
-│     → Docstrings → Create PR → Parallel reviews → Fix all findings  │
-│     → Reply + resolve CodeRabbit comments → Verify → Wiki sync      │
+│     → Docstrings → Create PR → Address GitHub CodeRabbit comments   │
+│     → Reply + resolve → Verify → Wiki sync                          │
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
                         [ PR Review & Merge ]
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  4. CLEANUP                                                         │
+│  5. CLEANUP                                                         │
 │     /envoy:cleanup                                                  │
 │     → Remove worktree → Delete feature branch                       │
 └─────────────────────────────────────────────────────────────────────┘
@@ -173,8 +180,8 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 |---------|-------------|
 | `/envoy:brainstorm` | Design + plan a feature (combines design and planning) |
 | `/envoy:pickup [issue]` | Create worktree + execute plan |
-| `/envoy:review` | Full 5-layer review with complexity tiers |
-| `/envoy:finalize` | PR-first: create PR → parallel reviews → fix all findings |
+| `/envoy:review` | Local review: lint, Sonnet AI, visual, doc gaps |
+| `/envoy:finalize` | Ship: create PR → handle GitHub CodeRabbit → verify |
 | `/envoy:cleanup` | Remove worktree and branch after merge |
 
 ### Additional Commands
@@ -194,20 +201,24 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 | `/envoy:pickup --plan-only` | Stop after worktree setup (no execution) |
 | `/envoy:cleanup --all` | Clean up ALL merged worktrees |
 
-## 5-Layer Review (with Complexity Tiers)
+## Review + Finalize (Separated Concerns)
+
+**`/envoy:review`** finds and fixes issues locally (no PR needed):
 
 | Tier | Criteria | Layers |
 |------|----------|--------|
-| Trivial | Docs/config only | Lint only (CodeRabbit on GitHub handles rest) |
+| Trivial | Docs/config only | Lint only |
 | Small | 1-3 code files | Lint + Sonnet AI |
-| Medium | 4-10 files | All 5 layers |
-| Large | 10+ files | All 5 layers with extra scrutiny |
+| Medium | 4-10 files | All 4 layers |
+| Large | 10+ files | All 4 layers |
 
-0. **Automated Linting** - `npm run lint` catches basic issues early
-1. **CodeRabbit Analysis** - Static analysis via `@coderabbitai review`
-2. **AI Review (Sonnet)** - Spec compliance, TDD verification, codebase patterns (~60% cheaper than Opus)
-3. **Visual Review** - Chrome DevTools screenshots, console, network, health checks
-4. **Doc Gap Detection** - Find missing or outdated documentation
+0. **Automated Linting** - `npm run lint`
+1. **AI Review (Sonnet)** - Spec compliance, TDD verification, codebase patterns (~60% cheaper than Opus)
+2. **Visual Review** - Chrome DevTools screenshots, console, network, health checks
+3. **Doc Gap Detection** - Find missing or outdated documentation
+
+**`/envoy:finalize`** ships the work (assumes review already ran):
+- Create PR → GitHub CodeRabbit reviews automatically → address all comments → reply + resolve → verify → wiki sync
 
 ## Hook System
 
