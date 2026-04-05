@@ -84,7 +84,7 @@
     ]
   },
   "_profileDocs": {
-    "minimal": "config-protection + cost-tracker only — lowest token overhead",
+    "minimal": "config-protection only — lowest token overhead",
     "standard": "all hooks enabled (default)",
     "strict": "all hooks + additional verification gates"
   },

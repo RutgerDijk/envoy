@@ -28,8 +28,8 @@ else
     SKILL_CONTENT="Error: using-envoy skill not found at $SKILL_FILE"
 fi
 
-# Strip frontmatter from skill content
-SKILL_CONTENT=$(echo "$SKILL_CONTENT" | sed '1{/^---$/d}' | sed '1,/^---$/d')
+# Strip frontmatter from skill content (POSIX-compatible, no BSD sed warnings)
+SKILL_CONTENT=$(echo "$SKILL_CONTENT" | awk 'BEGIN{s=0} /^---$/{s++;next} s>=2{print}')
 
 # Detect stacks in current directory
 DETECTED_STACKS=""

@@ -8,7 +8,7 @@
  * Usage: node hook-runner.js <hook-name> [stdin-data]
  *
  * Hook profiles:
- *   minimal  — config-protection, cost-tracker only
+ *   minimal  — config-protection only
  *   standard — all hooks (default)
  *   strict   — all hooks + additional verification gates
  */
