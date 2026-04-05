@@ -1,6 +1,6 @@
 {
   "name": "envoy",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Plugin-safe Claude Code distribution of Envoy professional development workflows with 23 skills, 25 stack profiles, and self-learning hooks.",
   "author": {
     "name": "Rutger Dijkstra",
