@@ -161,7 +161,7 @@ const prompt = buildAgentPrompt({
 ## Integration with Envoy
 
 **Works well with:**
-- `envoy:executing-plans` — Parallel strategy for independent tasks
+- `envoy:pickup` — Parallel strategy for independent tasks
 - `envoy:systematic-debugging` — Each agent uses this for their domain
 
 **Libraries used:**
@@ -170,6 +170,6 @@ const prompt = buildAgentPrompt({
 
 **After parallel work:**
 - Check scratchpad for conflicts before integrating
-- Run `envoy:layered-review` on combined changes
+- Run `envoy:review` on combined changes
 - Use `envoy:verification` before claiming complete
 - Clear scratchpad: `require('../../lib/agent-scratchpad').clear()`

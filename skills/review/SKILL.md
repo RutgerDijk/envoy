@@ -428,15 +428,12 @@ Use ⊘ for layers that were skipped due to tier.
 
 ## Integration with Envoy
 
-This skill absorbs and replaces:
-- `envoy:layered-review` — full review process now lives here
-- `envoy:cleanup-pass` — cleanup is Layer 0.5
-- `envoy:docstrings` — documentation is Layer 3 (docstrings still available standalone)
+This skill replaces `envoy:layered-review` (full review process now lives here) and `envoy:cleanup-pass` (cleanup is Layer 0.5). `envoy:docstrings` is Layer 3 but remains available standalone.
 
 Slot in the workflow:
 
 ```
-executing-plans → review → finalize
+pickup → review → finalize
 ```
 
 - Invoked by `/envoy:review` or automatically by `envoy:finalize`

@@ -167,7 +167,7 @@ Use words Claude would search for:
 - ✅ `condition-based-waiting` not `async-test-helpers`
 - ✅ `creating-skills` not `skill-creation`
 
-**Gerunds (-ing) work well for processes:** `brainstorm`, `writing-plans`, `debugging-with-logs`
+**Gerunds (-ing) work well for processes:** `brainstorm`, `writing-skills`, `debugging-with-logs`
 
 ### Token Efficiency
 

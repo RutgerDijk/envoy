@@ -144,11 +144,11 @@ Proceed with implementation.
 
 ## Integration with Envoy
 
-- Called by `envoy:executing-plans` before each implementation task
+- Called by `envoy:pickup` before each implementation task
 - If decision is Adopt/Extend, the task's implementation steps adjust accordingly
-- Slot in workflow: `search-first → implement → cleanup-pass → review → finalize`
+- Slot in workflow: `search-first → implement → review → finalize`
 
-### In executing-plans
+### In pickup
 
 Before writing any implementation code for a task:
 

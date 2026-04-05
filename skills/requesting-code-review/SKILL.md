@@ -14,7 +14,7 @@ Dispatch code-reviewer subagent to catch issues before they cascade.
 ## When to Request Review
 
 **Mandatory:**
-- After each task in subagent-driven development
+- After each task during pickup implementation
 - After completing major feature
 - Before merge to main
 
@@ -95,16 +95,12 @@ You: [Fix null check, continue to Task 3]
 
 ## Integration with Envoy Workflows
 
-**envoy:subagent-driven-development:**
+**envoy:pickup:**
 - Review after EACH task (two-stage: spec then quality)
 - Catch issues before they compound
 
-**envoy:executing-plans (batch mode):**
-- Review after each batch
-- Get feedback, apply, continue
-
-**envoy:layered-review:**
-- More comprehensive 4-layer review
+**envoy:review:**
+- More comprehensive 5-layer review
 - Use for final review before PR
 
 ## Red Flags

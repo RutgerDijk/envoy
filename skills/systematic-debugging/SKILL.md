@@ -295,11 +295,11 @@ See `condition-based-waiting.md` for implementation patterns.
 
 **After debugging:**
 - `envoy:verification` — Verify fix before claiming success
-- `envoy:layered-review` — Review changes before finalizing
+- `envoy:review` — Review changes before finalizing
 
 **Related skills:**
 - `envoy:test-driven-development` — Write failing test before fix (Phase 4)
-- `envoy:executing-plans` — TDD enforcement during implementation
+- `envoy:pickup` — TDD enforcement during implementation
 - `envoy:pressure-test-scenarios` — Scenarios 1, 10, 11, 12 test debugging discipline
 
 **Stack profiles to consult:**

@@ -270,7 +270,7 @@ gh pr checks <pr-number>
 
 ## Integration with Envoy
 
-- Invoked by `envoy:finishing-branch` as `/envoy:fix-ci $PR_NUMBER` after CodeRabbit resolution
+- Invoked by `envoy:finalize` as `/envoy:fix-ci $PR_NUMBER` after CodeRabbit resolution
 - Uses `envoy:verification` principles (evidence before assertions)
 - Uses `lib/loop-safeguards.js` completion signal protocol
 - Standalone usage: `/envoy:fix-ci <pr-number>`

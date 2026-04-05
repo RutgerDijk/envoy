@@ -41,7 +41,7 @@
     {
       "name": "envoy-bundle-essentials",
       "version": "2.1.3",
-      "description": "Install the \"Essentials\" bundle — core brainstorm-to-merge workflow: brainstorm, pickup, executing-plans, finishing-branch, cleanup.",
+      "description": "Install the \"Essentials\" bundle — core brainstorm-to-merge workflow: brainstorm, pickup, review, finalize, cleanup.",
       "author": {
         "name": "Rutger Dijkstra",
         "url": "https://github.com/RutgerDijk"
@@ -61,7 +61,7 @@
     {
       "name": "envoy-bundle-code-review",
       "version": "2.1.3",
-      "description": "Install the \"Code Review\" bundle — layered review, visual review, quick review, CodeRabbit PR handling, requesting and receiving code review.",
+      "description": "Install the \"Code Review\" bundle — multi-layer review, visual review, quick review, CodeRabbit PR handling, requesting and receiving code review.",
       "author": {
         "name": "Rutger Dijkstra",
         "url": "https://github.com/RutgerDijk"
@@ -102,7 +102,7 @@
     {
       "name": "envoy-bundle-orchestration",
       "version": "2.1.3",
-      "description": "Install the \"Agent Orchestration\" bundle — parallel agent dispatching, subagent-driven development, plan execution strategies.",
+      "description": "Install the \"Agent Orchestration\" bundle — parallel agent dispatching, plan execution strategies.",
       "author": {
         "name": "Rutger Dijkstra",
         "url": "https://github.com/RutgerDijk"
@@ -268,7 +268,7 @@
     {
       "name": "envoy-bundle-advanced-patterns",
       "version": "2.1.3",
-      "description": "Install the \"Advanced Patterns\" bundle — search-first, cleanup pass, iterative retrieval, completion signals, pressure-test scenarios.",
+      "description": "Install the \"Advanced Patterns\" bundle — search-first, iterative retrieval, completion signals, pressure-test scenarios.",
       "author": {
         "name": "Rutger Dijkstra",
         "url": "https://github.com/RutgerDijk"

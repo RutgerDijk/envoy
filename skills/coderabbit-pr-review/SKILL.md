@@ -214,6 +214,6 @@ Thread URL: <link>
 
 ## Integration with Envoy
 
-- Called by `envoy:finishing-branch` during the review cycle
+- Called by `envoy:finalize` during the review cycle
 - Uses `envoy:verification` to verify fixes work
 - Respects `envoy:receiving-code-review` principles (verify before implementing)

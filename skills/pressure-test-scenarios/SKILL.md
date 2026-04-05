@@ -228,4 +228,4 @@ These scenarios test discipline of:
 - `envoy:systematic-debugging` — Scenarios 1, 10, 11, 12
 - `envoy:receiving-code-review` — Scenarios 7, 8, 9
 - `envoy:verification` — Scenarios 6, 13, 14
-- `envoy:subagent-driven-development` — All scenarios apply during task execution
+- `envoy:pickup` — All scenarios apply during task execution

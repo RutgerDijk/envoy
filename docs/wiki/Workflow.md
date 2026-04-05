@@ -3,7 +3,7 @@
 The full Envoy pipeline from idea to merged PR.
 
 ```
-brainstorm → pickup → implement → cleanup-pass → review → finalize → cleanup
+brainstorm → pickup → review → finalize → cleanup
 ```
 
 ## 1. Brainstorm
@@ -33,53 +33,18 @@ Use `--design-only` to stop after the design doc (no plan).
 
 Use `--plan-only` to stop after workspace setup.
 
-## 3. Implement
-
-Automatically invoked by pickup via `envoy:executing-plans`.
-
-For each task in the plan:
-
-1. **Search-first** — Check if solution exists (adopt/extend/compose/build)
-2. **TDD Red** — Write failing test
-3. **TDD Green** — Implement to make test pass
-4. **TDD Refactor** — Clean up while tests stay green
-5. **Fresh Sonnet reviewer** — A separate agent reviews (implementing agent never reviews own work)
-
-Complexity tiers control pipeline depth:
-
-| Tier | Criteria | Pipeline |
-|------|----------|----------|
-| Trivial | Docs, config, typos | implement → verify |
-| Small | 1-3 files | implement → test → light review |
-| Medium | 4-10 files | implement → test → full review |
-| Large | 10+ files | research → implement → test → full review |
-
-## 4. Cleanup Pass
-
-```
-/envoy:cleanup-pass
-```
-
-A fresh agent (sees only the diff) removes AI-generated slop:
-- Unnecessary defensive checks
-- Over-engineering (premature abstractions, single-impl interfaces)
-- Redundant tests (mock-returns-mock)
-- Excessive comments (restating the code)
-- Dead code and unused imports
-
-Key principle: never constrain the implementing agent. Let it code freely, then clean up after.
-
-## 5. Review (Local)
+## 3. Review (Local)
 
 ```
 /envoy:review
 ```
 
-4-layer local review, complexity-tier gated:
+5-layer local review, complexity-tier gated:
 
 | Layer | What | When |
 |-------|------|------|
 | 0. Lint | `npm run lint` | Always |
+| 0.5. Cleanup | Fresh agent removes AI slop from diff | Small+ |
 | 1. AI Review (Sonnet) | Spec compliance, TDD, codebase patterns | Small+ |
 | 2. Visual Review | DevTools screenshots, console, network, health | Medium+ |
 | 3. Doc Gaps | Missing docstrings, outdated docs | Medium+ |
@@ -88,7 +53,7 @@ The AI reviewer uses **iterative retrieval** — up to 3 cycles reading related 
 
 Fixes all findings before proceeding.
 
-## 6. Finalize (Ship It)
+## 4. Finalize (Ship It)
 
 ```
 /envoy:finalize
@@ -108,7 +73,7 @@ No local reviews — trusts that `/review` already ran.
 
 Uses the **completion signal protocol** — "no new comments" must be confirmed 3 consecutive times before the loop stops.
 
-## 7. Cleanup
+## 5. Cleanup
 
 ```
 /envoy:cleanup

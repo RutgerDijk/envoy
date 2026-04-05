@@ -6,12 +6,12 @@ Professional development workflows for Claude Code and GitHub Copilot.
 
 - [[Getting Started]] — Installation and setup
 - [[Workflow]] — The full brainstorm-to-merge pipeline
-- [[Skills Reference]] — All 27 skills with descriptions
+- [[Skills Reference]] — All 23 skills with descriptions
 - [[Hooks]] — Automation hooks and profiles
 - [[Stack Profiles]] — Technology-specific best practices
 - [[Token Optimization]] — How Envoy minimizes token usage
 - [[Context Efficiency]] — LITM-aware prompts, session continuity, agent coordination, output compression
-- [[Advanced Patterns]] — Eval harness, search-first, cleanup pass, iterative retrieval
+- [[Advanced Patterns]] — Eval harness, search-first, iterative retrieval
 
 ## What Is Envoy?
 
@@ -20,15 +20,13 @@ Envoy is a Claude Code plugin that provides structured workflows for professiona
 ## The Flow
 
 ```
-brainstorm → pickup → implement → cleanup-pass → review → finalize → cleanup
+brainstorm → pickup → review → finalize → cleanup
 ```
 
 | Step | Command | What Happens |
 |------|---------|-------------|
-| Brainstorm | `/envoy:brainstorm` | Socratic dialogue → design doc → plan → GitHub issue |
-| Pickup | `/envoy:pickup 42` | Creates worktree → loads spec → executes plan with TDD |
-| Implement | (auto) | Search-first → TDD cycles → fresh Sonnet reviewer per task |
-| Cleanup Pass | `/envoy:cleanup-pass` | Fresh agent removes AI slop from the diff |
-| Review | `/envoy:review` | Lint → Sonnet AI → Visual → Doc gaps (local, no PR needed) |
+| Brainstorm | `/envoy:brainstorm` | Socratic dialogue → design doc → GitHub issue |
+| Pickup | `/envoy:pickup 42` | Creates worktree → loads spec → plans → executes with TDD |
+| Review | `/envoy:review` | Lint → Cleanup → Sonnet AI → Visual → Docs (local, no PR needed) |
 | Finalize | `/envoy:finalize` | Docstrings → create PR → handle CodeRabbit → verify → wiki sync |
 | Cleanup | `/envoy:cleanup` | Remove worktree and feature branch |
