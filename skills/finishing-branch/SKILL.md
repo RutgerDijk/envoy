@@ -99,7 +99,7 @@ Save the PR number.
 
 ### Step 4: Poll for GitHub CodeRabbit Comments (Exponential Backoff)
 
-GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (20-minute max):
+GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (22-minute max):
 
 ```bash
 OWNER=$(gh repo view --json owner -q '.owner.login')
@@ -125,9 +125,9 @@ for WAIT in 2 2 4 6 8; do
 done
 ```
 
-**If 20 minutes pass with no comments:**
+**If 22 minutes pass with no comments:**
 ```
-CodeRabbit did not comment within 20 minutes. Proceeding without CodeRabbit.
+CodeRabbit did not comment within 22 minutes. Proceeding without CodeRabbit.
 (CodeRabbit may not be installed, or the PR is clean.)
 ```
 
@@ -376,7 +376,7 @@ Options:
 - [ ] **Preconditions:** Feature branch, clean state, tests pass
 - [ ] **Docstrings:** Public APIs documented
 - [ ] **PR created**
-- [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved (exponential backoff, 20min max)
+- [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved (exponential backoff, 22min max)
 - [ ] **CI/CD:** All checks passing (auto-fixed if needed, max 3 cycles)
 - [ ] **Verification:** Tests, build, lint, health, CI green, zero unresolved
 - [ ] **Session state:** Cleared (.envoy-session.json, .envoy-scratchpad.json)
