@@ -212,7 +212,38 @@ After 3 cycles, these comments remain unresolved:
 Please review and decide how to proceed.
 ```
 
-### Step 9: Final Verification
+### Step 9: Poll CI and Auto-Fix Failures
+
+After CodeRabbit is resolved, poll GitHub Actions for CI status:
+
+```bash
+# Poll with exponential backoff (30s, 60s, 120s, 240s — 15min timeout)
+for WAIT in 30 60 120 240; do
+  CHECKS=$(gh pr checks $PR_NUMBER --json name,state,conclusion 2>/dev/null)
+  PENDING=$(echo "$CHECKS" | jq '[.[] | select(.state == "PENDING" or .state == "QUEUED")] | length')
+  FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion == "FAILURE")] | length')
+
+  if [ "$PENDING" -eq 0 ]; then
+    break  # All checks resolved
+  fi
+  echo "CI checks still running ($PENDING pending). Next poll in ${WAIT}s..."
+  sleep $WAIT
+done
+```
+
+**If all checks pass:** proceed to final verification (Step 10).
+
+**If any checks fail:** invoke fix-ci logic:
+
+```
+/envoy:fix-ci $PR_NUMBER
+```
+
+This runs the full fix-ci cycle: classify failures, diagnose, fix, verify locally, push, re-poll. Max 3 fix cycles before escalation.
+
+**After fix-ci completes (or escalates):** proceed to final verification.
+
+### Step 10: Final Verification
 
 Run envoy:verification with evidence:
 
@@ -232,6 +263,10 @@ npm run lint
 curl -sf http://localhost:5000/health && echo "✓ Backend" || echo "✗ Backend"
 curl -sf http://localhost:5173 && echo "✓ Frontend" || echo "✗ Frontend"
 
+# CI status
+gh pr checks $PR_NUMBER --json name,conclusion \
+  --jq '.[] | select(.conclusion != "SUCCESS") | .name + ": " + .conclusion'
+
 # Zero unresolved PR conversations
 gh api graphql -f query='
   query {
@@ -248,7 +283,7 @@ gh api graphql -f query='
 
 **All checks must pass with evidence.**
 
-### Step 10: Clear Session State
+### Step 11: Clear Session State
 
 Clean up session state and scratchpad files — the work is shipped:
 
@@ -259,13 +294,13 @@ session.clear();     // Remove .envoy-session.json
 scratchpad.clear();  // Remove .envoy-scratchpad.json (if exists)
 ```
 
-### Step 11: Wiki Sync
+### Step 12: Wiki Sync
 
 ```
 /envoy:wiki-sync
 ```
 
-### Step 12: Report
+### Step 13: Report
 
 ```
 **Branch finalized**
@@ -275,6 +310,8 @@ scratchpad.clear();  // Remove .envoy-scratchpad.json (if exists)
 | Docstrings | ✓ Added |
 | PR | ✓ Created (#<number>) |
 | GitHub CodeRabbit | ✓ <N> comments resolved |
+| CI/CD | ✓ All checks passing |
+| CI fix cycles | <N>/3 used |
 | Verification | ✓ Tests, build, lint, health pass |
 | Unresolved conversations | 0 |
 | Session state | ✓ Cleared |
@@ -284,11 +321,10 @@ scratchpad.clear();  // Remove .envoy-scratchpad.json (if exists)
 **Pull Request:** <URL>
 
 **Next steps:**
-1. Wait for CI to pass
-2. Request human reviewers
-3. Address any human feedback
-4. Merge when approved
-5. `/envoy:cleanup` to remove worktree and branch
+1. Request human reviewers
+2. Address any human feedback
+3. Merge when approved
+4. `/envoy:cleanup` to remove worktree and branch
 ```
 
 ## Error Handling
@@ -328,7 +364,8 @@ Options:
 - [ ] **Preconditions:** Feature branch, clean state, tests pass
 - [ ] **Docstrings:** Public APIs documented
 - [ ] **PR created**
-- [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved
-- [ ] **Verification:** Tests, build, lint, health, zero unresolved
+- [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved (exponential backoff, 20min max)
+- [ ] **CI/CD:** All checks passing (auto-fixed if needed, max 3 cycles)
+- [ ] **Verification:** Tests, build, lint, health, CI green, zero unresolved
 - [ ] **Session state:** Cleared (.envoy-session.json, .envoy-scratchpad.json)
 - [ ] **Wiki:** Synced
