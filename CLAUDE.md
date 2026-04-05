@@ -60,6 +60,15 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 - `lib/automation-suggester.js` generates prevention suggestions for 5x patterns
 - Archived patterns (not seen in 5 reviews) get re-promoted if they reappear
 
+### Context Efficiency (lean-ctx inspired)
+- `lib/session-state.js` — Cross-session task continuity via `.envoy-session.json`; auto-detected by `session-start.sh`
+- `lib/agent-scratchpad.js` — Multi-agent coordination via `.envoy-scratchpad.json`; agents register, post findings, check file ownership
+- `lib/context-budget.js` — LITM-aware prompt structuring; classifies complexity (mechanical→architectural), orders sections for U-curve attention
+- `lib/relevance-scorer.js` — Task-aware file scoring via import chain heat diffusion; recommends read depth (full/focused/skim/skip)
+- `lib/output-compressor.js` — Shell output compression (patterns: dotnet, npm, jest, playwright, cargo, git, docker); safeguard ratio prevents over-compression
+- `lib/cost-reporter.js` — Token usage analytics from Claude Code session JSONL logs; per-model/branch/session breakdown
+- `.envoy-session.json` and `.envoy-scratchpad.json` are gitignored ephemeral files
+
 ### Context Fragments
 - Phase-specific context in `contexts/` (review.md, implement.md, research.md)
 - Loaded dynamically based on current phase instead of loading everything

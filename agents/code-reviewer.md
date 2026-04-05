@@ -135,6 +135,13 @@ When reviewing, apply checks from the relevant stack profiles:
 - Async methods used
 - Proper transaction handling
 
+### Security (OWASP Top 10)
+- Input validation present
+- SQL injection prevented (parameterized queries)
+- XSS prevented (output encoding)
+- Authentication/authorization correct
+- Sensitive data protected (no secrets in code/logs)
+
 ## Important Notes
 
 - Be constructive, not critical

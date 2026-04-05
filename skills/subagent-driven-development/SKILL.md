@@ -29,23 +29,74 @@ Execute plan by dispatching fresh subagent per task, with two-stage review after
 ```
 1. Read plan, extract all tasks with full text
 2. Create TodoWrite with all tasks
+3. Initialize session state for cross-session continuity
+4. Classify each task's complexity for prompt sizing
 
 For each task:
-  3. Dispatch implementer subagent with full task text + context
-  4. If subagent asks questions → answer, then continue
-  5. Subagent implements using TDD, commits, self-reviews
-  6. Dispatch spec reviewer → confirms code matches spec
-  7. If spec issues → implementer fixes → re-review
-  8. Dispatch code quality reviewer
-  9. If quality issues → implementer fixes → re-review
-  10. Mark task complete in TodoWrite
+  5. Build LITM-aware prompt sized to task complexity
+  6. Dispatch implementer subagent with structured prompt
+  7. If subagent asks questions → answer, then continue
+  8. Subagent implements using TDD, commits, self-reviews
+  9. Update session state (task progress, decisions, files)
+  10. Dispatch spec reviewer → confirms code matches spec
+  11. If spec issues → implementer fixes → re-review
+  12. Dispatch code quality reviewer
+  13. If quality issues → implementer fixes → re-review
+  14. Mark task complete in TodoWrite + session state
 
 After all tasks:
-  11. Dispatch final code reviewer for entire implementation
-  12. Use envoy:finishing-branch
+  15. Dispatch final code reviewer for entire implementation
+  16. Use envoy:finishing-branch (which clears session state)
+```
+
+### Session State Initialization
+
+At the start, initialize session state so work survives context compaction or session switches:
+
+```javascript
+const session = require('../../lib/session-state');
+const state = session.load(); // Resumes existing or creates new
+state.branch = currentBranch;
+state.plan = specPath;
+// Pre-populate tasks from plan
+for (const task of planTasks) {
+  session.updateTask(state, task.id, 'pending');
+}
+session.save(state);
+```
+
+### Task Complexity Classification
+
+Before building each implementer prompt, classify the task:
+
+```javascript
+const { classifyComplexity, buildAgentPrompt, checkBudget } = require('../../lib/context-budget');
+
+const tier = classifyComplexity({
+  filesChanged: estimatedFiles,
+  servicesAffected: task.touchesMultipleProjects ? 2 : 1,
+  isMechanical: task.type === 'rename' || task.type === 'config',
+});
+// Use tier.modelTier for agent model selection
+// Use tier.maxPromptLines to keep prompts right-sized
 ```
 
 ## Implementer Subagent Prompt
+
+Build prompts using `lib/context-budget.js` → `buildAgentPrompt()` for LITM-aware section ordering. Critical content (objective, constraints, acceptance) lands at attention peaks; reference material goes in the low-attention middle.
+
+```javascript
+const prompt = buildAgentPrompt({
+  objective: `Implement Task ${n}: ${task.title}\n\n${task.fullSpec}`,
+  constraints: tddIronLaw + toolRestrictions,
+  context: `Plan: ${specPath}\nProgress: ${done}/${total} tasks complete`,
+  reference: stackProfiles + reminders,
+  acceptance: `Return: summary, git log, files changed, questions`,
+  learnings: formatReminders(patterns, corrections),
+});
+```
+
+**Equivalent markdown structure (for reference):**
 
 ```markdown
 Implement Task N: <task title>
@@ -180,6 +231,22 @@ Review this implementation for code quality.
 - Assessment: Approved / Needs fixes / **TDD Violation - Redo task**
 ```
 
+## Session State Updates
+
+After each task completes, update session state:
+
+```javascript
+const session = require('../../lib/session-state');
+const state = session.load();
+session.updateTask(state, taskId, 'done', 'Implemented User entity with migration');
+session.trackFile(state, 'src/Models/User.cs', 'New entity');
+session.trackFile(state, 'src/Data/Migrations/001_AddUser.cs', 'New migration');
+session.addDecision(state, 'Used Guid for User PK — matches existing entities');
+session.save(state);
+```
+
+If context compacts or session restarts, `session-start.sh` auto-detects `.envoy-session.json` and restores progress.
+
 ## Example Workflow
 
 ```
@@ -187,6 +254,7 @@ You: I'm using envoy:subagent-driven-development to execute this plan.
 
 [Read spec file: docs/plans/user-auth.md]
 [Extract 5 tasks, create TodoWrite]
+[Initialize session state with branch + plan + tasks]
 
 Task 1: Add User entity and migration
 
@@ -207,7 +275,9 @@ Code reviewer:
   Issues: None.
   Assessment: Approved.
 
-[Mark Task 1 complete, continue to Task 2...]
+[Mark Task 1 complete in TodoWrite + session state]
+[Session state: 1/5 tasks done, branch/plan/decisions persisted]
+[Continue to Task 2...]
 ```
 
 ### TDD Violation Example
@@ -260,7 +330,11 @@ You: "TDD violation detected. Delete your implementation and start over:
 
 **Required:**
 - `envoy:writing-plans` — Creates the plan this skill executes
-- `envoy:finishing-branch` — Complete development after all tasks
+- `envoy:finishing-branch` — Complete development after all tasks (clears session state)
+
+**Libraries used:**
+- `lib/session-state.js` — Persist task progress across context compactions and sessions
+- `lib/context-budget.js` — Right-size prompts per task complexity, LITM-aware ordering
 
 **Subagents should use:**
 - `envoy:test-driven-development` — TDD Iron Law applies to all tasks

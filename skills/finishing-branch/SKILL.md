@@ -231,13 +231,24 @@ gh api graphql -f query='
 
 **All checks must pass with evidence.**
 
-### Step 10: Wiki Sync
+### Step 10: Clear Session State
+
+Clean up session state and scratchpad files — the work is shipped:
+
+```javascript
+const session = require('../../lib/session-state');
+const scratchpad = require('../../lib/agent-scratchpad');
+session.clear();     // Remove .envoy-session.json
+scratchpad.clear();  // Remove .envoy-scratchpad.json (if exists)
+```
+
+### Step 11: Wiki Sync
 
 ```
 /envoy:wiki-sync
 ```
 
-### Step 11: Report
+### Step 12: Report
 
 ```
 **Branch finalized**
@@ -249,6 +260,7 @@ gh api graphql -f query='
 | GitHub CodeRabbit | ✓ <N> comments resolved |
 | Verification | ✓ Tests, build, lint, health pass |
 | Unresolved conversations | 0 |
+| Session state | ✓ Cleared |
 | Wiki | ✓ Synced |
 | CodeRabbit cycles | <N>/3 used |
 
@@ -301,4 +313,5 @@ Options:
 - [ ] **PR created**
 - [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved
 - [ ] **Verification:** Tests, build, lint, health, zero unresolved
+- [ ] **Session state:** Cleared (.envoy-session.json, .envoy-scratchpad.json)
 - [ ] **Wiki:** Synced

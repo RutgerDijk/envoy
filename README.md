@@ -139,8 +139,8 @@ Create personal skills in `~/.claude/skills/` that override Envoy skills:
 
 ```
 ~/.claude/skills/
-└── brainstorming/
-    └── SKILL.md    # Your version overrides envoy:brainstorming
+└── brainstorm/
+    └── SKILL.md    # Your version overrides envoy:brainstorm
 ```
 
 Use `envoy:skill-name` prefix to force Envoy's version.
@@ -314,7 +314,7 @@ Envoy includes 24 skills:
 
 | Skill | When to Use |
 |-------|-------------|
-| `envoy:brainstorming` | Starting any new feature or significant change |
+| `envoy:brainstorm` | Starting any new feature or significant change |
 | `envoy:writing-plans` | Have a design doc, need implementation plan |
 | `envoy:executing-plans` | Have a plan, ready to start coding |
 | `envoy:pickup` | Ready to implement a GitHub issue |
