@@ -23,12 +23,11 @@ Hooks receive JSON on stdin describing the event. They control behavior via exit
 
 | Hook | Event | Purpose |
 |------|-------|---------|
-| `session-start.sh` | SessionStart | Loads Envoy skills + detects tech stacks |
+| `session-start.sh` | SessionStart | Loads Envoy skills, detects tech stacks, restores session state |
 | `config-protection.js` | PreToolUse (Edit/Write) | Blocks linter/formatter config modifications |
 | `post-edit-accumulator.js` | PostToolUse (Edit/Write) | Tracks edited files for batched processing |
 | `post-pr-poll.js` | PostToolUse (Bash) | Triggers CodeRabbit polling after `gh pr create` |
 | `stop-batch-lint.js` | Stop | Runs lint once across all session edits |
-| `cost-tracker.js` | Stop (async) | Logs token usage to JSONL |
 | `learning-extractor.js` | Stop (async) | Saves recurring review patterns to memory |
 
 ## Config Protection
@@ -56,23 +55,26 @@ All hooks route through `hook-runner.js` which checks `ENVOY_HOOK_PROFILE`:
 
 | Profile | Hooks | Use Case |
 |---------|-------|----------|
-| `minimal` | session-start, config-protection, cost-tracker | Lowest overhead |
+| `minimal` | session-start, config-protection | Lowest overhead |
 | `standard` | All hooks (default) | Full automation |
 | `strict` | All hooks + future verification gates | Maximum safety |
 
 Set profile: `export ENVOY_HOOK_PROFILE=minimal`
 
-Override individual hooks: `export ENVOY_DISABLED_HOOKS=cost-tracker,learning-extractor`
+Override individual hooks: `export ENVOY_DISABLED_HOOKS=learning-extractor`
+
+## Session State Restoration
+
+When `session-start.sh` runs, it checks for `.envoy-session.json` in the working directory. If found, it surfaces task progress, recent decisions, and next steps — enabling seamless continuation across context compactions and session restarts. See [[Context Efficiency]] for details.
 
 ## Cost Tracking
 
-The async cost-tracker hook logs to `~/.claude/metrics/envoy-costs.jsonl`:
+Use `/envoy:costs` to view token usage and estimated costs. The command reads Claude Code's native session JSONL files directly and breaks down costs by:
+- **Activity** (which skill/agent consumed tokens)
+- **Model** (opus vs sonnet vs haiku)
+- **Branch** (cost per feature)
 
-```json
-{"timestamp":"2026-04-04T10:30:00Z","session_id":"abc","model":"sonnet","input_tokens":5000,"output_tokens":1200,"phase":"review","branch":"feature/42-user-profile"}
-```
-
-Use this data to optimize your workflows based on actual token usage.
+See [[Context Efficiency#Cost Reporter]] for details.
 
 ## Learning Loop
 

@@ -69,12 +69,6 @@
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" cost-tracker",
-            "_profiles": ["minimal", "standard", "strict"],
-            "_async": true
-          },
-          {
-            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" learning-extractor",
             "_profiles": ["standard", "strict"],
             "_async": true

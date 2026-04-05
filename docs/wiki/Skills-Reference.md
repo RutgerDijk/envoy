@@ -48,6 +48,7 @@ Envoy includes 24 skills organized by purpose.
 | `envoy:using-git-worktrees` | Starting feature work needing isolation |
 | `envoy:docstrings` | Public APIs need documentation |
 | `envoy:wiki-sync` | After updating documentation in docs/wiki/ |
+| `envoy:costs` | View token usage and estimated costs for this project |
 | `envoy:using-envoy` | Starting any conversation (auto-loaded) |
 | `envoy:writing-skills` | Creating or editing Envoy skills |
 
