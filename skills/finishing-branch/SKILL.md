@@ -45,7 +45,7 @@ Use envoy:docstrings to document public APIs:
 ```
 
 ```bash
-git add -p
+git add <changed-files>
 git commit -m "docs: add docstrings to public APIs"
 ```
 
@@ -145,7 +145,7 @@ For each CodeRabbit comment:
 3. Commit
 
 ```bash
-git add -p
+git add <changed-files>
 git commit -m "fix: address CodeRabbit feedback — <summary>"
 ```
 
