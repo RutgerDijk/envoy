@@ -129,10 +129,14 @@ For each non-infra failure, in order of severity:
 2. If auto-fix doesn't resolve: read the file and fix manually
 3. Run lint locally to verify
 
+**Fix all failures from the current CI run before pushing.** Diagnose and fix each
+failure in order of severity (test → build → lint), verify all fixes locally (Step 6),
+then commit and push once. One push = one fix cycle.
+
 ```bash
-# After each fix
-git add -p
-git commit -m "fix: resolve CI failure — <failure type>: <brief description>"
+# After ALL failures are fixed and verified
+git add <changed-files>
+git commit -m "fix: resolve CI failures — <brief summary of all fixes>"
 ```
 
 ### Step 6: Verify Locally
