@@ -1,6 +1,6 @@
 # Skills Reference
 
-Envoy includes 25 skills organized by purpose.
+Envoy includes 27 skills organized by purpose.
 
 ## Core Workflow
 
@@ -32,6 +32,7 @@ Envoy includes 25 skills organized by purpose.
 | `envoy:search-first` | Before implementing, check if solution already exists |
 | `envoy:cleanup-pass` | After implementation, remove AI slop before review |
 | `envoy:eval-harness` | Test whether a skill behaves correctly across scenarios |
+| `envoy:pressure-test-scenarios` | Testing whether skills maintain discipline under pressure |
 
 ## Execution & Orchestration
 

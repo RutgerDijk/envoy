@@ -77,6 +77,12 @@ Classify each failure:
 | `lint-violation` | ESLint/Prettier errors, `warning`/`error` with rule name + file:line | Auto-fix (`--fix`) or manual fix |
 | `infra-issue` | Runner unavailable, permissions, timeouts, Docker pull failures, OOM | **Escalate immediately** — don't try to fix |
 
+**Scope note:** Step 1 uses `gh pr checks` to detect all failures — this includes
+both GitHub Actions workflow runs and external status checks (e.g., Vercel, Netlify).
+However, log download via `gh run list` / `gh run view --log-failed` only works for
+GitHub Actions runs. If a failed check has no corresponding workflow run, classify it
+as `infra-issue` with the note: "External status check — check the service directly."
+
 ### Step 4: Handle Infrastructure Failures
 
 If ANY failure is classified as `infra-issue`, escalate immediately:
@@ -123,10 +129,14 @@ For each non-infra failure, in order of severity:
 2. If auto-fix doesn't resolve: read the file and fix manually
 3. Run lint locally to verify
 
+**Fix all failures from the current CI run before pushing.** Diagnose and fix each
+failure in order of severity (test → build → lint), verify all fixes locally (Step 6),
+then commit and push once. One push = one fix cycle.
+
 ```bash
-# After each fix
-git add -p
-git commit -m "fix: resolve CI failure — <failure type>: <brief description>"
+# After ALL failures are fixed and verified
+git add <changed-files>
+git commit -m "fix: resolve CI failures — <brief summary of all fixes>"
 ```
 
 ### Step 6: Verify Locally
@@ -154,40 +164,43 @@ Poll for new CI run results with exponential backoff (same as Step 2).
 
 ### Step 8: Loop or Escalate (Max 3 Fix Cycles)
 
-Two separate counters track different concerns:
-- **FIX_CYCLE** — how many times we've pushed code fixes (max 3)
-- **COMPLETION_COUNT** — consecutive passing confirmations (need 3 per `lib/loop-safeguards.js`)
+Uses a state machine with two counters:
+- **FIX_CYCLE** — code fix pushes (max 3)
+- **CONFIRM_COUNT** — consecutive passing confirmations (need 3 per `lib/loop-safeguards.js`)
 
 ```
+state = POLL_CI
 FIX_CYCLE = 0
-MAX_FIX_CYCLES = 3
+CONFIRM_COUNT = 0
 
-# Outer loop: fix failures
-while FIX_CYCLE < MAX_FIX_CYCLES:
-  1. Poll CI checks (Step 2)
-  2. If checks FAIL:
-     → Classify and fix (Steps 3-6)
-     → Push (Step 7)
-     → FIX_CYCLE += 1
-     → Continue loop
-  3. If ALL checks PASS:
-     → Enter confirmation phase (below)
-     → Break out of fix loop
+loop:
+  case state:
 
-# Confirmation phase: verify CI is genuinely green
-COMPLETION_COUNT = 0
-while COMPLETION_COUNT < 3:
-  1. Poll CI checks
-  2. If ALL pass:
-     → Output: ENVOY_LOOP_COMPLETE with evidence
-     → COMPLETION_COUNT += 1
-  3. If any FAIL:
-     → COMPLETION_COUNT = 0 (reset!)
-     → Return to fix loop (if FIX_CYCLE < MAX_FIX_CYCLES)
+    POLL_CI:
+      Poll CI checks with backoff (Step 2)
+      If any check FAILED  → state = FIX
+      If all checks PASSED → state = CONFIRM
 
-# Escalate if fix cycles exhausted
-if FIX_CYCLE >= MAX_FIX_CYCLES and checks still failing:
-  → ESCALATE
+    FIX:
+      If FIX_CYCLE >= 3 → state = ESCALATE
+      Classify + fix ALL failures (Steps 3-6)
+      Verify locally (Step 6)
+      Push (Step 7)
+      FIX_CYCLE += 1
+      CONFIRM_COUNT = 0
+      → state = POLL_CI
+
+    CONFIRM:
+      CONFIRM_COUNT += 1
+      Output: ENVOY_LOOP_COMPLETE with evidence
+      If CONFIRM_COUNT >= 3 → state = DONE
+      → state = POLL_CI
+
+    DONE:
+      Proceed to Step 9 (Report Success)
+
+    ESCALATE:
+      Report failures + attempted fixes (see Escalation Format)
 ```
 
 ### Escalation Format

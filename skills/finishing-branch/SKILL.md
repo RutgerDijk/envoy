@@ -45,7 +45,7 @@ Use envoy:docstrings to document public APIs:
 ```
 
 ```bash
-git add -p
+git add <changed-files>
 git commit -m "docs: add docstrings to public APIs"
 ```
 
@@ -99,35 +99,37 @@ Save the PR number.
 
 ### Step 4: Poll for GitHub CodeRabbit Comments (Exponential Backoff)
 
-GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (20-minute max):
+GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (22-minute max):
 
 ```bash
 OWNER=$(gh repo view --json owner -q '.owner.login')
 REPO=$(gh repo view --json name -q '.name')
 PR_NUMBER=<number>
 
-# Exponential backoff schedule
-# intervals = [2min, 2min, 4min, 6min, 8min]
+# Exponential backoff in seconds — 22min (1320s) max
+# intervals = [120s, 120s, 240s, 360s, 480s]
 # cumulative =  2     4     8    14    22 min
+ELAPSED=0
+for WAIT in 120 120 240 360 480; do
+  sleep $WAIT
+  ELAPSED=$((ELAPSED + WAIT))
 
-CUMULATIVE=0
-for WAIT in 2 2 4 6 8; do
-  sleep ${WAIT}m
-  CUMULATIVE=$((CUMULATIVE + WAIT))
   COMMENTS=$(gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
     --jq '[.[] | select(.user.login == "coderabbitai")] | length')
 
   if [ "$COMMENTS" -gt 0 ]; then
-    echo "CodeRabbit left $COMMENTS comments after ${CUMULATIVE}min. Addressing..."
+    echo "CodeRabbit left $COMMENTS comments after $((ELAPSED / 60))min. Addressing..."
     break
   fi
-  echo "No CodeRabbit comments yet. ${CUMULATIVE}min elapsed."
+
+  echo "No CodeRabbit comments yet. $((ELAPSED / 60))min elapsed."
+  if [ "$ELAPSED" -ge 1320 ]; then break; fi
 done
 ```
 
-**If 20 minutes pass with no comments:**
+**If 22 minutes pass with no comments:**
 ```
-CodeRabbit did not comment within 20 minutes. Proceeding without CodeRabbit.
+CodeRabbit did not comment within 22 minutes. Proceeding without CodeRabbit.
 (CodeRabbit may not be installed, or the PR is clean.)
 ```
 
@@ -143,7 +145,7 @@ For each CodeRabbit comment:
 3. Commit
 
 ```bash
-git add -p
+git add <changed-files>
 git commit -m "fix: address CodeRabbit feedback — <summary>"
 ```
 
@@ -376,7 +378,7 @@ Options:
 - [ ] **Preconditions:** Feature branch, clean state, tests pass
 - [ ] **Docstrings:** Public APIs documented
 - [ ] **PR created**
-- [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved (exponential backoff, 20min max)
+- [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved (exponential backoff, 22min max)
 - [ ] **CI/CD:** All checks passing (auto-fixed if needed, max 3 cycles)
 - [ ] **Verification:** Tests, build, lint, health, CI green, zero unresolved
 - [ ] **Session state:** Cleared (.envoy-session.json, .envoy-scratchpad.json)
