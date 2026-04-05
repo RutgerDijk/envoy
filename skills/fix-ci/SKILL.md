@@ -152,29 +152,41 @@ git push
 
 Poll for new CI run results with exponential backoff (same as Step 2).
 
-### Step 8: Loop or Escalate (Max 3 Cycles)
+### Step 8: Loop or Escalate (Max 3 Fix Cycles)
 
-Use the **completion signal protocol** from `lib/loop-safeguards.js`:
+Two separate counters track different concerns:
+- **FIX_CYCLE** — how many times we've pushed code fixes (max 3)
+- **COMPLETION_COUNT** — consecutive passing confirmations (need 3 per `lib/loop-safeguards.js`)
 
 ```
-CYCLE = 0
-MAX_CYCLES = 3
-COMPLETION_COUNT = 0
+FIX_CYCLE = 0
+MAX_FIX_CYCLES = 3
 
-while CYCLE < MAX_CYCLES:
+# Outer loop: fix failures
+while FIX_CYCLE < MAX_FIX_CYCLES:
   1. Poll CI checks (Step 2)
-  2. If ALL checks pass:
-     → Output: ENVOY_LOOP_COMPLETE with evidence
-     → COMPLETION_COUNT += 1
-     → If COMPLETION_COUNT >= 3: DONE
-     → Else: re-poll to confirm
-  3. If checks fail:
-     → COMPLETION_COUNT = 0 (reset!)
+  2. If checks FAIL:
      → Classify and fix (Steps 3-6)
      → Push (Step 7)
-     → CYCLE += 1
+     → FIX_CYCLE += 1
+     → Continue loop
+  3. If ALL checks PASS:
+     → Enter confirmation phase (below)
+     → Break out of fix loop
 
-if CYCLE >= MAX_CYCLES:
+# Confirmation phase: verify CI is genuinely green
+COMPLETION_COUNT = 0
+while COMPLETION_COUNT < 3:
+  1. Poll CI checks
+  2. If ALL pass:
+     → Output: ENVOY_LOOP_COMPLETE with evidence
+     → COMPLETION_COUNT += 1
+  3. If any FAIL:
+     → COMPLETION_COUNT = 0 (reset!)
+     → Return to fix loop (if FIX_CYCLE < MAX_FIX_CYCLES)
+
+# Escalate if fix cycles exhausted
+if FIX_CYCLE >= MAX_FIX_CYCLES and checks still failing:
   → ESCALATE
 ```
 
@@ -245,7 +257,7 @@ gh pr checks <pr-number>
 
 ## Integration with Envoy
 
-- Called by `envoy:finishing-branch` after CodeRabbit resolution
+- Invoked by `envoy:finishing-branch` as `/envoy:fix-ci $PR_NUMBER` after CodeRabbit resolution
 - Uses `envoy:verification` principles (evidence before assertions)
 - Uses `lib/loop-safeguards.js` completion signal protocol
 - Standalone usage: `/envoy:fix-ci <pr-number>`

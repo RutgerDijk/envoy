@@ -110,16 +110,18 @@ PR_NUMBER=<number>
 # intervals = [2min, 2min, 4min, 6min, 8min]
 # cumulative =  2     4     8    14    22 min
 
+CUMULATIVE=0
 for WAIT in 2 2 4 6 8; do
   sleep ${WAIT}m
+  CUMULATIVE=$((CUMULATIVE + WAIT))
   COMMENTS=$(gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
     --jq '[.[] | select(.user.login == "coderabbitai")] | length')
 
   if [ "$COMMENTS" -gt 0 ]; then
-    echo "CodeRabbit left $COMMENTS comments. Addressing..."
+    echo "CodeRabbit left $COMMENTS comments after ${CUMULATIVE}min. Addressing..."
     break
   fi
-  echo "No CodeRabbit comments yet. Waited ${CUMULATIVE}min, next check in ${WAIT}min..."
+  echo "No CodeRabbit comments yet. ${CUMULATIVE}min elapsed."
 done
 ```
 
@@ -217,18 +219,28 @@ Please review and decide how to proceed.
 After CodeRabbit is resolved, poll GitHub Actions for CI status:
 
 ```bash
-# Poll with exponential backoff (30s, 60s, 120s, 240s — 15min timeout)
-for WAIT in 30 60 120 240; do
+# Poll with exponential backoff — 15min timeout
+# intervals: 30s, 60s, 120s, 240s, 240s, 240s (cumulative: 15.5min)
+ELAPSED=0
+for WAIT in 30 60 120 240 240 240; do
   CHECKS=$(gh pr checks $PR_NUMBER --json name,state,conclusion 2>/dev/null)
   PENDING=$(echo "$CHECKS" | jq '[.[] | select(.state == "PENDING" or .state == "QUEUED")] | length')
-  FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion == "FAILURE")] | length')
 
   if [ "$PENDING" -eq 0 ]; then
     break  # All checks resolved
   fi
-  echo "CI checks still running ($PENDING pending). Next poll in ${WAIT}s..."
+
+  ELAPSED=$((ELAPSED + WAIT))
+  if [ "$ELAPSED" -ge 900 ]; then
+    echo "CI checks still running after 15 minutes. Pending: $PENDING"
+    break
+  fi
+
+  echo "CI checks still running ($PENDING pending, ${ELAPSED}s elapsed). Next poll in ${WAIT}s..."
   sleep $WAIT
 done
+
+FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion == "FAILURE")] | length')
 ```
 
 **If all checks pass:** proceed to final verification (Step 10).
@@ -263,9 +275,9 @@ npm run lint
 curl -sf http://localhost:5000/health && echo "✓ Backend" || echo "✗ Backend"
 curl -sf http://localhost:5173 && echo "✓ Frontend" || echo "✗ Frontend"
 
-# CI status
-gh pr checks $PR_NUMBER --json name,conclusion \
-  --jq '.[] | select(.conclusion != "SUCCESS") | .name + ": " + .conclusion'
+# CI status (exclude pending/queued — only show actual failures)
+gh pr checks $PR_NUMBER --json name,state,conclusion \
+  --jq '.[] | select(.state != "PENDING" and .state != "QUEUED") | select(.conclusion != "SUCCESS") | .name + ": " + .conclusion'
 
 # Zero unresolved PR conversations
 gh api graphql -f query='

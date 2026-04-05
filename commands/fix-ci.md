@@ -1,4 +1,5 @@
 ---
+name: fix-ci
 description: Auto-diagnose and fix CI/CD failures on a PR
 ---
 
