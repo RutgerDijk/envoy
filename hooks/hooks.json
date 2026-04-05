@@ -69,12 +69,6 @@
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" cost-tracker",
-            "_profiles": ["minimal", "standard", "strict"],
-            "_async": true
-          },
-          {
-            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" learning-extractor",
             "_profiles": ["standard", "strict"],
             "_async": true
@@ -90,7 +84,7 @@
     ]
   },
   "_profileDocs": {
-    "minimal": "config-protection + cost-tracker only — lowest token overhead",
+    "minimal": "config-protection only — lowest token overhead",
     "standard": "all hooks enabled (default)",
     "strict": "all hooks + additional verification gates"
   },

@@ -88,12 +88,42 @@ Patterns that recur across reviews are loaded into implementing agents as remind
 
 New costs: ~100 tokens per loaded pattern, ~200 tokens per Haiku correction classification. Net effect is strongly positive after 2-3 review cycles.
 
+### 11. LITM-Aware Prompt Structuring
+
+**Lib:** `lib/context-budget.js`
+
+Based on "Lost in the Middle" (Liu et al., 2023), LLMs attend most to the beginning and end of context. `buildAgentPrompt()` orders sections for Claude's attention curve (begin=0.92, middle=0.50, end=0.88):
+
+- **Beginning (high attention):** Objective, constraints
+- **Middle (low attention):** Reference material, stack profiles, examples
+- **End (high attention):** Acceptance criteria, known patterns
+
+Used by `dispatching-parallel-agents`, `subagent-driven-development`, and `executing-plans`.
+
+### 12. Shell Output Compression
+
+**Lib:** `lib/output-compressor.js`
+
+Strips noise from verbose CLI output before it enters context. 11 command patterns (dotnet build/test, npm, jest, playwright, cargo, git, docker). A safeguard ratio prevents over-compression (if compressed < 15% of original, returns original).
+
+Used by `layered-review` during build/test verification.
+
+### 13. Task-Aware File Relevance
+
+**Lib:** `lib/relevance-scorer.js`
+
+Walks import chains from changed files and scores dependencies via heat diffusion. Recommends read depth (full/focused/skim/skip) so reviewers and agents read deeply what matters and skip what doesn't.
+
+Used by `executing-plans` (agent context) and `layered-review` (reviewer guidance).
+
 ## Measuring Token Usage
 
-The cost-tracker hook logs every session to `~/.claude/metrics/envoy-costs.jsonl`:
+Use `/envoy:costs` to view token usage from Claude Code's native session logs:
 
-```json
-{"timestamp":"...","model":"sonnet","input_tokens":5000,"output_tokens":1200,"phase":"review"}
+```
+/envoy:costs              — Last 7 days
+/envoy:costs --days 30    — Last 30 days
+/envoy:costs --branch X   — Filter by branch
 ```
 
-Use this data to identify which phases consume the most tokens and optimize further.
+Shows breakdown by **activity** (skill/agent), **model** (opus/sonnet/haiku), **branch**, and **session**. See [[Context Efficiency#Cost Reporter]] for details.

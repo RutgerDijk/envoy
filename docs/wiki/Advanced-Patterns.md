@@ -73,7 +73,32 @@ Instead of just reading the diff, the reviewer does up to 3 retrieval cycles:
 
 Stops when 3+ files have relevance >= 0.7, or 3 cycles completed.
 
+Since v2.2, the reviewer receives **pre-scored file relevance** from `lib/relevance-scorer.js` — giving it a head start on which files to read deeply vs. skim. See [[Context Efficiency#Relevance Scoring]].
+
 Makes the reviewer codebase-aware instead of diff-only. Defined in `contexts/iterative-retrieval.md`.
+
+## Agent Scratchpad Coordination
+
+**Lib:** `lib/agent-scratchpad.js`
+
+When multiple agents run in parallel (via `dispatching-parallel-agents` or `executing-plans` parallel strategy), they can coordinate through a shared scratchpad file (`.envoy-scratchpad.json`):
+
+- **Register:** Each agent declares its role and file scope
+- **Post findings:** Discoveries, conflicts, dependencies, questions
+- **Check ownership:** Prevents two agents from editing the same file
+- **Read unread:** Agents see others' discoveries to avoid duplicating work
+
+The orchestrator checks `scratchpad.getConflicts(pad)` after agents complete, before integrating changes.
+
+## Session State Continuity
+
+**Lib:** `lib/session-state.js`
+
+Persists task progress, decisions, files modified, and test results to `.envoy-session.json`. Survives context compaction and session restarts.
+
+`session-start.sh` auto-detects this file and surfaces progress (~300-500 tokens vs 10K+ cold start). `finishing-branch` clears it when the branch ships.
+
+See [[Context Efficiency]] for the full picture.
 
 ## Completion Signal Threshold
 

@@ -8,7 +8,7 @@
  * Usage: node hook-runner.js <hook-name> [stdin-data]
  *
  * Hook profiles:
- *   minimal  — config-protection, cost-tracker only
+ *   minimal  — config-protection only
  *   standard — all hooks (default)
  *   strict   — all hooks + additional verification gates
  */
@@ -25,7 +25,6 @@ const HOOK_PROFILES = {
   'config-protection':      ['minimal', 'standard', 'strict'],
   'post-edit-accumulator':  ['standard', 'strict'],
   'stop-batch-lint':        ['standard', 'strict'],
-  'cost-tracker':           ['minimal', 'standard', 'strict'],
   'learning-extractor':     ['standard', 'strict'],
   'post-pr-poll':           ['standard', 'strict'],
   'coderabbit-aggregator':  ['standard', 'strict'],
