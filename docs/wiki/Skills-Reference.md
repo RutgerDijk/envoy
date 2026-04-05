@@ -1,6 +1,6 @@
 # Skills Reference
 
-Envoy includes 24 skills organized by purpose.
+Envoy includes 25 skills organized by purpose.
 
 ## Core Workflow
 
@@ -23,6 +23,7 @@ Envoy includes 24 skills organized by purpose.
 | `envoy:verification` | Before committing or claiming a task is complete |
 | `envoy:requesting-code-review` | Completing tasks or before merging |
 | `envoy:receiving-code-review` | Receiving code review feedback |
+| `envoy:fix-ci` | CI/CD checks fail on a PR — diagnose and fix test, build, or lint failures |
 
 ## Advanced Patterns
 
