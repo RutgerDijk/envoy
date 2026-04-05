@@ -41,11 +41,11 @@ Before building anything, check if it already exists:
 
 Searches: existing codebase, npm/NuGet, GitHub. Evaluates maintenance status, downloads, bundle size, license.
 
-Integrated with `executing-plans` — each task checks search-first before writing code.
+Integrated with `pickup` — each task checks search-first before writing code.
 
 ## Cleanup Pass
 
-**Skill:** `envoy:cleanup-pass`
+**Now Layer 0.5 of `envoy:review`.**
 
 A fresh agent reviews the diff and removes AI-generated slop:
 
@@ -59,11 +59,11 @@ A fresh agent reviews the diff and removes AI-generated slop:
 
 **Key principle:** Never add "don't do X" instructions to the implementing agent. That makes it hesitant. Let it code freely, then clean up.
 
-Slot: `implement → cleanup-pass → review → finalize`
+Slot: `pickup → review (Layer 0.5) → finalize`
 
 ## Iterative Retrieval
 
-Used by the Sonnet AI reviewer in `layered-review` Layer 1.
+Used by the Sonnet AI reviewer in `review` Layer 1.
 
 Instead of just reading the diff, the reviewer does up to 3 retrieval cycles:
 
@@ -81,7 +81,7 @@ Makes the reviewer codebase-aware instead of diff-only. Defined in `contexts/ite
 
 **Lib:** `lib/agent-scratchpad.js`
 
-When multiple agents run in parallel (via `dispatching-parallel-agents` or `executing-plans` parallel strategy), they can coordinate through a shared scratchpad file (`.envoy-scratchpad.json`):
+When multiple agents run in parallel (via `dispatching-parallel-agents` or `pickup` parallel strategy), they can coordinate through a shared scratchpad file (`.envoy-scratchpad.json`):
 
 - **Register:** Each agent declares its role and file scope
 - **Post findings:** Discoveries, conflicts, dependencies, questions
@@ -96,7 +96,7 @@ The orchestrator checks `scratchpad.getConflicts(pad)` after agents complete, be
 
 Persists task progress, decisions, files modified, and test results to `.envoy-session.json`. Survives context compaction and session restarts.
 
-`session-start.sh` auto-detects this file and surfaces progress (~300-500 tokens vs 10K+ cold start). `finishing-branch` clears it when the branch ships.
+`session-start.sh` auto-detects this file and surfaces progress (~300-500 tokens vs 10K+ cold start). `finalize` clears it when the branch ships.
 
 See [[Context Efficiency]] for the full picture.
 
@@ -117,7 +117,7 @@ while counter < 3:
 
 Applied in:
 - Fix-and-verify cycles (`verification` skill)
-- CodeRabbit re-poll cycles (`finishing-branch` skill)
+- CodeRabbit re-poll cycles (`finalize` skill)
 - Any autonomous polling loop
 
 ## Graduated Learning
@@ -133,7 +133,7 @@ Patterns from AI review and CodeRabbit graduate through levels based on occurren
 | Automated | Seen 5x | Suggest hook/lint rule to user |
 | Archived | 5 clean reviews | Removed from active patterns |
 
-Confirmed patterns are loaded by `executing-plans` before each task:
+Confirmed patterns are loaded by `pickup` before each task:
 ```
 Known patterns (avoid these):
 - [dotnet] Always check null on API response DTOs before mapping
@@ -169,7 +169,7 @@ UserPromptSubmit hook that classifies user messages via Haiku:
 Project corrections → `memory/corrections.md` (team-shared, committed)
 User corrections → `~/.claude/learnings/corrections.md` (personal)
 
-Both are loaded by `executing-plans` and `layered-review` to avoid repeating the same mistakes.
+Both are loaded by `pickup` and `review` to avoid repeating the same mistakes.
 
 ## Regex-First Parsing
 

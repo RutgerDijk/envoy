@@ -1,10 +1,9 @@
 ---
 name: review
-description: Run comprehensive 5-layer code review
+description: Run multi-layer code review with cleanup, AI review, visual, and docs
 ---
 
-Use the `envoy:layered-review` skill exactly as written.
+Use the `envoy:review` skill exactly as written.
 
 Supported flags:
-- `--check-docs` - Deep documentation analysis
-- `--no-check-docs` - Skip documentation gap detection
+- `--quick` - Layers 0 and 0.5 only (lint + cleanup pass)

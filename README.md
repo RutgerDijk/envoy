@@ -7,19 +7,19 @@ Professional .NET/React/Azure development workflows for **Claude Code** and **Gi
 Envoy provides a streamlined workflow from idea to merged PR:
 
 ```
-brainstorm → pickup → implement → cleanup-pass → review → finalize → cleanup
+brainstorm → pickup → review → finalize → cleanup
 ```
 
 **Key features:**
 - **Brainstorming**: Turn ideas into designs + implementation plans through Socratic dialogue
-- **Execution**: TDD-enforced implementation with automatic worktree management
-- **Review**: 4-layer local review (Lint, Sonnet AI, Visual, Docs) with complexity tiers
+- **Pickup**: Plan writing, worktree setup, and TDD-enforced implementation in one phase
+- **Review**: 5-layer local review (Cleanup, Lint, Sonnet AI, Visual, Docs) with complexity tiers
 - **Finalization**: Create PR, handle GitHub CodeRabbit comments, verify, ship
-- **Cleanup**: Remove worktrees and branches after merge
+- **Cleanup**: Remove worktrees and branches, clear session state, sync wiki
 - **Hooks**: Config protection, batch lint, cost tracking, learning extraction
 - **Self-learning**: Graduated patterns, cross-PR CodeRabbit aggregation, user correction detection
 - **Token optimization**: ~60% cost savings via Sonnet AI review, selective stack loading, regex-first parsing
-- **Advanced patterns**: Eval harness, search-first, cleanup pass, iterative retrieval, completion signals
+- **Advanced patterns**: Eval harness, search-first, iterative retrieval, completion signals
 
 ## Installation
 
@@ -88,8 +88,8 @@ envoy/
 │   └── iterative-retrieval.md  # Multi-cycle retrieval protocol
 ├── commands/              # Entry points for /envoy:* commands
 ├── agents/                # Specialized agent definitions
-├── skills/                # 24 workflow skills
-├── stacks/                # 25 technology profiles
+├── skills/                # 23 workflow skills
+├── stacks/                # 26 technology profiles
 ├── docs/                  # Anti-patterns & authoring guides
 └── adapters/              # Platform adapters
     └── copilot/           # GitHub Copilot (prompts, instructions, agents)
@@ -163,15 +163,15 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 ┌─────────────────────────────────────────────────────────────────────┐
 │  3. REVIEW (local)                                                  │
 │     /envoy:review                                                   │
-│     → Lint → Sonnet AI review → Visual review → Doc gaps            │
+│     → Cleanup pass → Lint → Sonnet AI → Visual → Docs → Docstrings │
 │     → Fix all local findings                                        │
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  4. FINALIZE (ship it)                                              │
 │     /envoy:finalize                                                 │
-│     → Docstrings → Create PR → Address GitHub CodeRabbit comments   │
-│     → Reply + resolve → Verify → Wiki sync                          │
+│     → Create PR → Address GitHub CodeRabbit comments                │
+│     → Reply + resolve → Verify CI                                   │
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
                         [ PR Review & Merge ]
@@ -179,7 +179,7 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 ┌─────────────────────────────────────────────────────────────────────┐
 │  5. CLEANUP                                                         │
 │     /envoy:cleanup                                                  │
-│     → Remove worktree → Delete feature branch                       │
+│     → Clear session → Wiki sync → Remove worktree → Delete branch   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -189,11 +189,11 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 
 | Command | Description |
 |---------|-------------|
-| `/envoy:brainstorm` | Design + plan a feature (combines design and planning) |
-| `/envoy:pickup [issue]` | Create worktree + execute plan |
-| `/envoy:review` | Local review: lint, Sonnet AI, visual, doc gaps |
-| `/envoy:finalize` | Ship: create PR → handle GitHub CodeRabbit → verify |
-| `/envoy:cleanup` | Remove worktree and branch after merge |
+| `/envoy:brainstorm` | Design + plan a feature through Socratic dialogue |
+| `/envoy:pickup [issue]` | Create worktree, write plan, execute with TDD |
+| `/envoy:review` | Local review: cleanup pass, lint, Sonnet AI, visual, docs + docstrings |
+| `/envoy:finalize` | Ship: create PR → handle GitHub CodeRabbit → verify CI |
+| `/envoy:cleanup` | Clear session, sync wiki, remove worktree and branch |
 
 ### Additional Commands
 
@@ -203,6 +203,7 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 | `/envoy:visual-review` | Chrome DevTools visual verification |
 | `/envoy:docstrings` | Add documentation to public APIs |
 | `/envoy:wiki-sync` | Sync docs/wiki/ to GitHub wiki |
+| `/envoy:fix-ci` | Diagnose and fix CI/CD failures on a PR |
 
 ### Escape Hatches
 
@@ -219,17 +220,18 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 | Tier | Criteria | Layers |
 |------|----------|--------|
 | Trivial | Docs/config only | Lint only |
-| Small | 1-3 code files | Lint + Sonnet AI |
-| Medium | 4-10 files | All 4 layers |
-| Large | 10+ files | All 4 layers |
+| Small | 1-3 code files | Cleanup + Lint + Sonnet AI |
+| Medium | 4-10 files | All 5 layers |
+| Large | 10+ files | All 5 layers |
 
-0. **Automated Linting** - `npm run lint`
-1. **AI Review (Sonnet)** - Spec compliance, TDD verification, codebase patterns (~60% cheaper than Opus)
-2. **Visual Review** - Chrome DevTools screenshots, console, network, health checks
-3. **Doc Gap Detection** - Find missing or outdated documentation
+0. **Cleanup Pass** - Remove AI slop: dead code, debug artifacts, over-engineering
+1. **Automated Linting** - `npm run lint`
+2. **AI Review (Sonnet)** - Spec compliance, TDD verification, codebase patterns (~60% cheaper than Opus)
+3. **Visual Review** - Chrome DevTools screenshots, console, network, health checks
+4. **Doc Gaps + Docstrings** - Find missing documentation, add docstrings to public APIs
 
 **`/envoy:finalize`** ships the work (assumes review already ran):
-- Create PR → GitHub CodeRabbit reviews automatically → address all comments → reply + resolve → verify → wiki sync
+- Create PR → GitHub CodeRabbit reviews automatically → address all comments → reply + resolve → verify CI
 
 ## Hook System
 
@@ -298,7 +300,7 @@ Envoy enforces Test-Driven Development with an Iron Law:
 >
 > Write code before test? Delete it. Start over.
 
-The `executing-plans` skill includes rationalization counters:
+The `pickup` skill includes rationalization counters:
 
 | Excuse | Reality |
 |--------|---------|
@@ -308,24 +310,22 @@ The `executing-plans` skill includes rationalization counters:
 
 ## Skills
 
-Envoy includes 24 skills:
+Envoy includes 23 skills:
 
-### Core Workflow
+### Core Workflow (5 phases)
 
 | Skill | When to Use |
 |-------|-------------|
 | `envoy:brainstorm` | Starting any new feature or significant change |
-| `envoy:writing-plans` | Have a design doc, need implementation plan |
-| `envoy:executing-plans` | Have a plan, ready to start coding |
-| `envoy:pickup` | Ready to implement a GitHub issue |
-| `envoy:finishing-branch` | Implementation complete, ready for PR |
-| `envoy:cleanup` | After PR merged |
+| `envoy:pickup` | Ready to implement a GitHub issue (includes plan writing + execution) |
+| `envoy:review` | After implementation, before PR (cleanup pass + lint + AI + visual + docs) |
+| `envoy:finalize` | Review complete, ready to create PR and ship |
+| `envoy:cleanup` | After PR merged (session clear + wiki sync + worktree removal) |
 
 ### Quality & Review
 
 | Skill | When to Use |
 |-------|-------------|
-| `envoy:layered-review` | After implementation, before PR |
 | `envoy:coderabbit-pr-review` | Address + resolve GitHub CodeRabbit PR comments |
 | `envoy:visual-review` | UI changes need verification |
 | `envoy:verification` | Before committing or claiming done |
@@ -337,7 +337,6 @@ Envoy includes 24 skills:
 | Skill | When to Use |
 |-------|-------------|
 | `envoy:search-first` | Before implementing, check if solution already exists |
-| `envoy:cleanup-pass` | After implementation, remove AI-generated slop before review |
 | `envoy:eval-harness` | Test whether a skill behaves correctly across scenarios |
 
 ### Execution & Orchestration
@@ -345,7 +344,6 @@ Envoy includes 24 skills:
 | Skill | When to Use |
 |-------|-------------|
 | `envoy:dispatching-parallel-agents` | Multiple independent tasks |
-| `envoy:subagent-driven-development` | Execute plan with fresh agent per task |
 | `envoy:systematic-debugging` | Bug, test failure, or unexpected behavior |
 | `envoy:test-driven-development` | Implementing any feature or bugfix |
 
@@ -356,12 +354,15 @@ Envoy includes 24 skills:
 | `envoy:using-git-worktrees` | Need isolated workspace |
 | `envoy:docstrings` | Public APIs need documentation |
 | `envoy:wiki-sync` | Documentation updated |
+| `envoy:fix-ci` | CI/CD checks fail on a PR |
 | `envoy:using-envoy` | Discover available skills |
 | `envoy:writing-skills` | Create new Envoy skills |
+| `envoy:pressure-test-scenarios` | Test skill discipline under pressure |
+| `envoy:costs` | View token usage and cost analytics |
 
 ## Stack Profiles
 
-25 technology profiles with best practices, common mistakes, and review checklists:
+26 technology profiles with best practices, common mistakes, and review checklists:
 
 **Core:**
 - .NET, React, TypeScript, PostgreSQL
@@ -408,17 +409,17 @@ claude
 # Session 2: Implementation (in worktree)
 > /envoy:pickup 42
 # Creates .worktrees/coach-dashboard
-# Executes plan with TDD...
+# Writes plan, executes with TDD...
 
 > /envoy:review
-# Local review: lint, Sonnet AI, visual, docs...
+# Local review: cleanup pass, lint, Sonnet AI, visual, docs + docstrings...
 
 > /envoy:finalize
-# Creates PR #43, handles CodeRabbit comments, verifies
+# Creates PR #43, handles CodeRabbit comments, verifies CI
 
 # After PR is merged:
 > /envoy:cleanup
-# Removes worktree and branch
+# Clears session, syncs wiki, removes worktree and branch
 ```
 
 ## Creating Custom Skills
@@ -445,7 +446,7 @@ See `docs/SKILL-AUTHORING-GUIDE.md` for:
 
 | Prerequisite | Purpose | Setup |
 |--------------|---------|-------|
-| CodeRabbit | AI code review (Layer 1) | See [CodeRabbit Setup](#coderabbit-setup) |
+| CodeRabbit | AI code review on PRs | See [CodeRabbit Setup](#coderabbit-setup) |
 | Chrome DevTools MCP | Visual verification (Layer 3) | See [DevTools MCP Setup](#devtools-mcp-setup) |
 
 ### CodeRabbit Setup
@@ -503,7 +504,7 @@ Chrome DevTools MCP enables visual verification by capturing screenshots, consol
    alias chrome-debug='/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222'
    ```
 
-**Without DevTools MCP**: The review skill skips visual verification (Layer 2) and continues with other layers.
+**Without DevTools MCP**: The review skill skips visual verification (Layer 3) and continues with other layers.
 
 ### Verify Setup
 

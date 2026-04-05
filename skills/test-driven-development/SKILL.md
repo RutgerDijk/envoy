@@ -285,8 +285,7 @@ Can't check all boxes? **You skipped TDD. Start over.**
 ## Integration with Envoy
 
 **Use TDD with:**
-- `envoy:executing-plans` — TDD enforced per task
-- `envoy:subagent-driven-development` — TDD enforced per subagent task
+- `envoy:pickup` — TDD enforced per task during implementation
 - `envoy:systematic-debugging` — Write failing test to prove bug exists
 - `envoy:verification` — Verify all tests pass before claiming done
 - `envoy:pressure-test-scenarios` — Scenarios 4, 5 test TDD discipline

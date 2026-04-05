@@ -6,11 +6,11 @@ Libraries inspired by [lean-ctx](https://github.com/yvgude/lean-ctx) that reduce
 
 | Library | Purpose | Used By |
 |---------|---------|---------|
-| `lib/session-state.js` | Cross-session task continuity | executing-plans, subagent-driven-development, finishing-branch |
-| `lib/agent-scratchpad.js` | Multi-agent coordination | dispatching-parallel-agents, finishing-branch |
-| `lib/context-budget.js` | LITM-aware prompt structuring | dispatching-parallel-agents, subagent-driven-development, executing-plans |
-| `lib/relevance-scorer.js` | Task-aware file scoring | executing-plans, layered-review |
-| `lib/output-compressor.js` | Shell output compression | layered-review |
+| `lib/session-state.js` | Cross-session task continuity | pickup, finalize |
+| `lib/agent-scratchpad.js` | Multi-agent coordination | dispatching-parallel-agents, finalize |
+| `lib/context-budget.js` | LITM-aware prompt structuring | dispatching-parallel-agents, pickup |
+| `lib/relevance-scorer.js` | Task-aware file scoring | pickup, review |
+| `lib/output-compressor.js` | Shell output compression | review |
 | `lib/cost-reporter.js` | Token usage analytics | costs skill |
 
 ## Session State
@@ -26,9 +26,9 @@ Persists between context compactions and session restarts:
 - Next steps
 
 **Lifecycle:**
-1. `executing-plans` or `subagent-driven-development` creates/updates state during execution
+1. `pickup` creates/updates state during execution
 2. `session-start.sh` detects and surfaces state on session startup (~300-500 tokens)
-3. `finishing-branch` clears state when the branch ships
+3. `finalize` clears state when the branch ships
 
 ```javascript
 const session = require('../../lib/session-state');
@@ -125,7 +125,7 @@ const briefing = formatForPrompt(results);
 // Include `briefing` in reviewer/agent prompts
 ```
 
-Used by `layered-review` (pre-scored guidance for iterative retrieval) and `executing-plans` (agent context).
+Used by `review` (pre-scored guidance for iterative retrieval) and `pickup` (agent context).
 
 ## Output Compression
 

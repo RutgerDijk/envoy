@@ -264,7 +264,7 @@ All verifications passed. Ready for human review.
 
 ## Integration with Other Skills
 
-- **After executing-plans tasks:** Verify each task
-- **Before layered-review:** Ensure basic verification passes
-- **Before finishing-branch:** Final verification of all changes
+- **After pickup tasks:** Verify each task
+- **Before review:** Ensure basic verification passes
+- **Before finalize:** Final verification of all changes
 - **During fix-and-verify cycles:** Bounded verification with escalation

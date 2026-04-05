@@ -55,7 +55,7 @@ Token cost for parsing 10 comments:
 
 ### 6. Skill Descriptions Under 30 Words
 
-All 24 skill descriptions are trimmed to triggering conditions only — no workflow summaries. This reduces the token overhead of skill discovery.
+All 23 skill descriptions are trimmed to triggering conditions only — no workflow summaries. This reduces the token overhead of skill discovery.
 
 ### 7. Context Fragments
 
@@ -98,7 +98,7 @@ Based on "Lost in the Middle" (Liu et al., 2023), LLMs attend most to the beginn
 - **Middle (low attention):** Reference material, stack profiles, examples
 - **End (high attention):** Acceptance criteria, known patterns
 
-Used by `dispatching-parallel-agents`, `subagent-driven-development`, and `executing-plans`.
+Used by `dispatching-parallel-agents` and `pickup`.
 
 ### 12. Shell Output Compression
 
@@ -106,7 +106,7 @@ Used by `dispatching-parallel-agents`, `subagent-driven-development`, and `execu
 
 Strips noise from verbose CLI output before it enters context. 11 command patterns (dotnet build/test, npm, jest, playwright, cargo, git, docker). A safeguard ratio prevents over-compression (if compressed < 15% of original, returns original).
 
-Used by `layered-review` during build/test verification.
+Used by `review` during build/test verification.
 
 ### 13. Task-Aware File Relevance
 
@@ -114,7 +114,7 @@ Used by `layered-review` during build/test verification.
 
 Walks import chains from changed files and scores dependencies via heat diffusion. Recommends read depth (full/focused/skim/skip) so reviewers and agents read deeply what matters and skip what doesn't.
 
-Used by `executing-plans` (agent context) and `layered-review` (reviewer guidance).
+Used by `pickup` (agent context) and `review` (reviewer guidance).
 
 ## Measuring Token Usage
 

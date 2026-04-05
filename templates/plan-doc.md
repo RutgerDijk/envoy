@@ -7,7 +7,7 @@ Save as: `docs/plans/YYYY-MM-DD-feature-name.md`
 ```markdown
 # Feature Name
 
-> **For Claude:** Use envoy:executing-plans to implement this spec task-by-task.
+> **For Claude:** Use envoy:pickup to implement this spec task-by-task.
 >
 > GitHub Issue: #123
 

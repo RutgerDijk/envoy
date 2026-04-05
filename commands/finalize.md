@@ -1,12 +1,12 @@
 ---
 name: finalize
-description: Complete branch with review, docstrings, wiki sync, and PR creation
+description: Push, create PR, handle CodeRabbit, fix CI, verify
 ---
 
-Use the `envoy:finishing-branch` skill exactly as written.
+Use the `envoy:finalize` skill exactly as written.
 
-This runs the full finalization workflow:
-1. Run 4-layer review
-2. Add docstrings to public APIs
-3. Update and sync wiki documentation
-4. Push branch and create PR
+This runs the shipping workflow:
+1. Push branch and create PR
+2. Poll and address CodeRabbit comments
+3. Poll CI and auto-fix failures
+4. Final verification

@@ -1,15 +1,15 @@
 ---
-name: finishing-branch
-description: Use when implementation is complete and you're ready to create a PR
+name: finalize
+description: Use when review is complete and you're ready to push, create PR, and ship
 ---
 
-# Finishing a Development Branch
+# Finalize
 
 ## Overview
 
-Ship the work: create PR, handle GitHub CodeRabbit comments, verify, done. This skill assumes `/envoy:review` has already been run — it does NOT re-run local reviews.
+Ship the work: push, create PR, handle CodeRabbit, fix CI, verify. Assumes `envoy:review` has already been run.
 
-**Announce at start:** "I'm using envoy:finishing-branch to create a PR and ship this work."
+**Announce at start:** "I'm using envoy:finalize to create a PR and ship this work."
 
 ## Preconditions
 
@@ -36,32 +36,11 @@ npm test
 
 ## Process
 
-### Step 1: Docstrings
+### Step 1: Preconditions Check
 
-Use envoy:docstrings to document public APIs:
+Run the preconditions above. All must pass before proceeding.
 
-```
-/envoy:docstrings
-```
-
-```bash
-git add <changed-files>
-git commit -m "docs: add docstrings to public APIs"
-```
-
-### Step 2: Update Documentation
-
-If needed:
-1. **New features** → Add to relevant wiki pages
-2. **API changes** → Update API docs
-3. **Configuration changes** → Update setup docs
-
-```bash
-git add docs/wiki/
-git commit -m "docs: update wiki documentation"
-```
-
-### Step 3: Push and Create PR
+### Step 2: Push and Create PR
 
 ```bash
 git push -u origin HEAD
@@ -76,13 +55,11 @@ gh pr create --title "<title>" --body "$(cat <<'PREOF'
 ## Changes
 
 - **Implementation:** <main work summary>
-- **Documentation:** <what was updated>
 
 ## Test Plan
 
 - [ ] Unit tests pass
 - [ ] E2E tests pass
-- [ ] Visual review passed
 
 ## Linked Issue
 
@@ -97,7 +74,7 @@ PREOF
 
 Save the PR number.
 
-### Step 4: Poll for GitHub CodeRabbit Comments (Exponential Backoff)
+### Step 3: Poll for CodeRabbit Comments (Exponential Backoff)
 
 GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (22-minute max):
 
@@ -133,9 +110,9 @@ CodeRabbit did not comment within 22 minutes. Proceeding without CodeRabbit.
 (CodeRabbit may not be installed, or the PR is clean.)
 ```
 
-Skip to CI checks (Step 9).
+Skip to CI checks (Step 8).
 
-### Step 5: Address All CodeRabbit Findings
+### Step 4: Address All CodeRabbit Findings
 
 **No skipping — address everything including nitpicks.**
 
@@ -149,7 +126,7 @@ git add <changed-files>
 git commit -m "fix: address CodeRabbit feedback — <summary>"
 ```
 
-### Step 6: Reply and Resolve Each Comment
+### Step 5: Reply and Resolve Each Comment
 
 ```bash
 # Reply with fix + commit hash
@@ -178,13 +155,13 @@ gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments/<id>/replies \
   --field body="Not applied: <reason>. The current approach <explanation>."
 ```
 
-### Step 7: Push Fixes
+### Step 6: Push Fixes
 
 ```bash
 git push
 ```
 
-### Step 8: Re-poll (Max 3 Cycles, with Completion Signal)
+### Step 7: Re-poll (Max 3 Cycles, with Completion Signal)
 
 After pushing, CodeRabbit may leave new comments on the fixes. Use the **completion signal protocol** from `lib/loop-safeguards.js`:
 
@@ -202,7 +179,7 @@ else
 fi
 ```
 
-**If new comments:** address → reply → resolve → push → re-poll. Reset completion counter.
+**If new comments:** address -> reply -> resolve -> push -> re-poll. Reset completion counter.
 
 **Max 3 address-and-push cycles.** After 3 cycles with remaining issues:
 
@@ -216,7 +193,7 @@ After 3 cycles, these comments remain unresolved:
 Please review and decide how to proceed.
 ```
 
-### Step 9: Poll CI and Auto-Fix Failures
+### Step 8: Poll CI and Auto-Fix Failures
 
 After CodeRabbit is resolved, poll GitHub Actions for CI status:
 
@@ -245,7 +222,7 @@ done
 FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion == "FAILURE")] | length')
 ```
 
-**If all checks pass:** proceed to final verification (Step 10).
+**If all checks pass:** proceed to final verification (Step 9).
 
 **If any checks fail:** invoke fix-ci logic:
 
@@ -257,7 +234,7 @@ This runs the full fix-ci cycle: classify failures, diagnose, fix, verify locall
 
 **After fix-ci completes (or escalates):** proceed to final verification.
 
-### Step 10: Final Verification
+### Step 9: Final Verification
 
 Run envoy:verification with evidence:
 
@@ -272,10 +249,6 @@ npm run build
 
 # Lint
 npm run lint
-
-# Health check
-curl -sf http://localhost:5000/health && echo "✓ Backend" || echo "✗ Backend"
-curl -sf http://localhost:5173 && echo "✓ Frontend" || echo "✗ Frontend"
 
 # CI status (exclude pending/queued — only show actual failures)
 gh pr checks $PR_NUMBER --json name,state,conclusion \
@@ -297,40 +270,20 @@ gh api graphql -f query='
 
 **All checks must pass with evidence.**
 
-### Step 11: Clear Session State
-
-Clean up session state and scratchpad files — the work is shipped:
-
-```javascript
-const session = require('../../lib/session-state');
-const scratchpad = require('../../lib/agent-scratchpad');
-session.clear();     // Remove .envoy-session.json
-scratchpad.clear();  // Remove .envoy-scratchpad.json (if exists)
-```
-
-### Step 12: Wiki Sync
-
-```
-/envoy:wiki-sync
-```
-
-### Step 13: Report
+### Step 10: Report
 
 ```
 **Branch finalized**
 
 | Step | Status |
 |------|--------|
-| Docstrings | ✓ Added |
 | PR | ✓ Created (#<number>) |
 | GitHub CodeRabbit | ✓ <N> comments resolved |
 | CI/CD | ✓ All checks passing |
 | CI fix cycles | <N>/3 used |
-| Verification | ✓ Tests, build, lint, health pass |
-| Unresolved conversations | 0 |
-| Session state | ✓ Cleared |
-| Wiki | ✓ Synced |
 | CodeRabbit cycles | <N>/3 used |
+| Verification | ✓ Tests, build, lint pass |
+| Unresolved conversations | 0 |
 
 **Pull Request:** <URL>
 
@@ -362,24 +315,19 @@ Fix tests before finalizing.
 Try: gh pr create --web
 ```
 
-### Wiki Sync Conflict
-
-```
-**Wiki sync conflict**
-
-Options:
-1. Overwrite with docs/wiki/ content
-2. Merge manually
-3. Skip wiki sync
-```
-
 ## Checklist
 
 - [ ] **Preconditions:** Feature branch, clean state, tests pass
-- [ ] **Docstrings:** Public APIs documented
-- [ ] **PR created**
+- [ ] **PR created** with `Closes #<issue-number>`
 - [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved (exponential backoff, 22min max)
 - [ ] **CI/CD:** All checks passing (auto-fixed if needed, max 3 cycles)
-- [ ] **Verification:** Tests, build, lint, health, CI green, zero unresolved
-- [ ] **Session state:** Cleared (.envoy-session.json, .envoy-scratchpad.json)
-- [ ] **Wiki:** Synced
+- [ ] **Verification:** Tests, build, lint, CI green, zero unresolved conversations
+
+## Integration with Envoy
+
+- Replaces `envoy:finishing-branch` as the shipping step in the workflow
+- Assumes `envoy:review` (layered review) has already been run
+- Invokes `envoy:fix-ci` for CI failure auto-remediation
+- Uses `envoy:verification` principles (evidence before assertions)
+- Uses `lib/loop-safeguards.js` completion signal protocol
+- Follow with `/envoy:cleanup` after PR is merged

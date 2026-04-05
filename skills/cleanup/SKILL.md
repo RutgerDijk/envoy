@@ -50,7 +50,30 @@ git checkout main
 git pull origin main
 ```
 
-### Step 4: Remove Worktree
+### Step 4: Clear Session State
+
+Remove ephemeral session files from the worktree before it is removed:
+
+```bash
+# Clear session state before removing worktree
+rm -f "$WORKTREE_PATH/.envoy-session.json"
+rm -f "$WORKTREE_PATH/.envoy-scratchpad.json"
+```
+
+### Step 5: Wiki Sync
+
+If `docs/wiki/` was changed on the branch, sync to the GitHub wiki:
+
+```bash
+# Check if docs/wiki/ was changed on this branch
+WIKI_CHANGED=$(git diff main...HEAD --name-only | grep "^docs/wiki/" | wc -l | tr -d ' ')
+if [ "$WIKI_CHANGED" -gt 0 ]; then
+  # Run wiki sync from within the worktree before removing it
+  /envoy:wiki-sync
+fi
+```
+
+### Step 6: Remove Worktree
 
 ```bash
 git worktree remove "$WORKTREE_PATH"
@@ -61,7 +84,7 @@ If there are uncommitted changes (shouldn't happen if PR is merged):
 git worktree remove --force "$WORKTREE_PATH"
 ```
 
-### Step 5: Delete Feature Branch
+### Step 7: Delete Feature Branch
 
 **Local branch:**
 ```bash
@@ -73,9 +96,9 @@ git branch -d "$BRANCH"
 git push origin --delete "$BRANCH"
 ```
 
-### Step 6: Close Linked Issue
+### Step 8: Remove "in progress" Label
 
-Find and close the GitHub issue linked to this PR:
+Remove the workflow label from the linked issue:
 
 ```bash
 # Get the PR number for this branch
@@ -84,6 +107,16 @@ PR_NUMBER=$(gh pr list --head "$BRANCH" --state merged --json number --jq '.[0].
 # Get the linked issue number from the PR body
 ISSUE_NUMBER=$(gh pr view "$PR_NUMBER" --json body --jq '.body' | grep -oE 'Closes #[0-9]+|Fixes #[0-9]+|Resolves #[0-9]+' | grep -oE '[0-9]+' | head -1)
 
+if [ -n "$ISSUE_NUMBER" ]; then
+  gh issue edit "$ISSUE_NUMBER" --remove-label "in progress" 2>/dev/null || true
+fi
+```
+
+### Step 9: Close Linked Issue
+
+Close the GitHub issue linked to this PR:
+
+```bash
 if [ -n "$ISSUE_NUMBER" ]; then
   # Close the issue if not already closed
   ISSUE_STATE=$(gh issue view "$ISSUE_NUMBER" --json state --jq '.state')
@@ -98,7 +131,7 @@ else
 fi
 ```
 
-### Step 7: Verify Cleanup
+### Step 10: Verify Cleanup
 
 ```bash
 # Worktree removed
@@ -108,21 +141,28 @@ git worktree list
 git branch -a | grep "$BRANCH"
 # Should return nothing
 
+# Session state cleared
+[ ! -f "$WORKTREE_PATH/.envoy-session.json" ] && echo "✓ session.json gone" || echo "✗ session.json still exists"
+[ ! -f "$WORKTREE_PATH/.envoy-scratchpad.json" ] && echo "✓ scratchpad.json gone" || echo "✗ scratchpad.json still exists"
+
 # Issue closed
 gh issue view "$ISSUE_NUMBER" --json state --jq '.state'
 # Should show: CLOSED
 ```
 
-### Step 9: Report Completion
+### Step 11: Report Completion
 
 ```
 **Cleanup complete**
 
 | Item | Status |
 |------|--------|
+| Session state | ✓ Cleared |
+| Wiki | ✓ Synced / ⊘ No changes |
 | Worktree | ✓ Removed |
 | Local branch | ✓ Deleted |
 | Remote branch | ✓ Deleted |
+| "in progress" label | ✓ Removed |
 | Issue #<number> | ✓ Closed |
 
 You're now on `main` with a clean workspace.

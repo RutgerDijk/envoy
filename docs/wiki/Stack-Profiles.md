@@ -21,10 +21,10 @@ On session start, Envoy scans your project for technology markers:
 Each profile in `stacks/<name>.md` has three sections:
 
 ### Best Practices
-Patterns to follow during implementation. Loaded by `executing-plans` and `search-first`.
+Patterns to follow during implementation. Loaded by `pickup` and `search-first`.
 
 ### Common Mistakes
-Anti-patterns with fixes. Loaded by `layered-review` during the AI review layer.
+Anti-patterns with fixes. Loaded by `review` during the AI review layer.
 
 ### Review Checklist
 What to verify during code review. Used by review agents.

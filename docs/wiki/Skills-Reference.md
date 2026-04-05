@@ -1,23 +1,21 @@
 # Skills Reference
 
-Envoy includes 27 skills organized by purpose.
+Envoy includes 23 skills organized by purpose.
 
 ## Core Workflow
 
 | Skill | Trigger |
 |-------|---------|
 | `envoy:brainstorm` | Starting any new feature or significant change |
-| `envoy:writing-plans` | Have a design doc, need implementation plan |
-| `envoy:executing-plans` | Have a plan, ready to start coding |
-| `envoy:pickup` | Ready to implement a GitHub issue from brainstorming |
-| `envoy:finishing-branch` | Implementation complete, ready to create PR |
+| `envoy:pickup` | Ready to implement a GitHub issue (handles planning and execution) |
+| `envoy:review` | After implementation, before creating PR |
+| `envoy:finalize` | Implementation reviewed, ready to create PR |
 | `envoy:cleanup` | After PR merged, before starting new work |
 
 ## Quality & Review
 
 | Skill | Trigger |
 |-------|---------|
-| `envoy:layered-review` | After implementation, before creating PR |
 | `envoy:coderabbit-pr-review` | PR has GitHub CodeRabbit comments to address |
 | `envoy:visual-review` | UI changes need visual verification |
 | `envoy:verification` | Before committing or claiming a task is complete |
@@ -30,7 +28,6 @@ Envoy includes 27 skills organized by purpose.
 | Skill | Trigger |
 |-------|---------|
 | `envoy:search-first` | Before implementing, check if solution already exists |
-| `envoy:cleanup-pass` | After implementation, remove AI slop before review |
 | `envoy:eval-harness` | Test whether a skill behaves correctly across scenarios |
 | `envoy:pressure-test-scenarios` | Testing whether skills maintain discipline under pressure |
 
@@ -39,7 +36,6 @@ Envoy includes 27 skills organized by purpose.
 | Skill | Trigger |
 |-------|---------|
 | `envoy:dispatching-parallel-agents` | 2+ independent tasks without shared state |
-| `envoy:subagent-driven-development` | Executing plans with independent tasks |
 | `envoy:systematic-debugging` | Bug, test failure, or unexpected behavior |
 | `envoy:test-driven-development` | Implementing any feature or bugfix |
 
@@ -60,7 +56,7 @@ Envoy includes 27 skills organized by purpose.
 - `test-driven-development`, `systematic-debugging`, `verification`
 
 **Flexible skills** (adapt principles to context):
-- `brainstorm`, `writing-plans`, `search-first`
+- `brainstorm`, `search-first`
 
 ## Skill Anatomy
 

@@ -147,7 +147,7 @@ function run(rawInput) {
 function isReviewSession(input) {
   const conversation = (input.conversation || input.tool_name || '').toLowerCase();
   return conversation.includes('review') ||
-         conversation.includes('layered-review') ||
+         conversation.includes('review') ||
          conversation.includes('coderabbit');
 }
 
