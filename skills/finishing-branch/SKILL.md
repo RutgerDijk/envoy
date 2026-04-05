@@ -97,22 +97,39 @@ PREOF
 
 Save the PR number.
 
-### Step 4: Poll for GitHub CodeRabbit Comments
+### Step 4: Poll for GitHub CodeRabbit Comments (Exponential Backoff)
 
-GitHub CodeRabbit App reviews the PR asynchronously. Poll for comments:
+GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (20-minute max):
 
 ```bash
 OWNER=$(gh repo view --json owner -q '.owner.login')
 REPO=$(gh repo view --json name -q '.name')
 PR_NUMBER=<number>
 
-# Wait briefly for CodeRabbit to start (usually 1-2 minutes)
-# Then poll for comments
-gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
-  --jq '.[] | select(.user.login == "coderabbitai") | {id, path, line, body}'
+# Exponential backoff schedule
+# intervals = [2min, 2min, 4min, 6min, 8min]
+# cumulative =  2     4     8    14    22 min
+
+for WAIT in 2 2 4 6 8; do
+  sleep ${WAIT}m
+  COMMENTS=$(gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
+    --jq '[.[] | select(.user.login == "coderabbitai")] | length')
+
+  if [ "$COMMENTS" -gt 0 ]; then
+    echo "CodeRabbit left $COMMENTS comments. Addressing..."
+    break
+  fi
+  echo "No CodeRabbit comments yet. Waited ${CUMULATIVE}min, next check in ${WAIT}min..."
+done
 ```
 
-If no comments after 3-5 minutes, CodeRabbit may not be installed or the PR is clean. Continue to verification.
+**If 20 minutes pass with no comments:**
+```
+CodeRabbit did not comment within 20 minutes. Proceeding without CodeRabbit.
+(CodeRabbit may not be installed, or the PR is clean.)
+```
+
+Skip to CI checks (Step 9).
 
 ### Step 5: Address All CodeRabbit Findings
 
