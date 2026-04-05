@@ -106,22 +106,24 @@ OWNER=$(gh repo view --json owner -q '.owner.login')
 REPO=$(gh repo view --json name -q '.name')
 PR_NUMBER=<number>
 
-# Exponential backoff schedule
-# intervals = [2min, 2min, 4min, 6min, 8min]
+# Exponential backoff in seconds — 22min (1320s) max
+# intervals = [120s, 120s, 240s, 360s, 480s]
 # cumulative =  2     4     8    14    22 min
+ELAPSED=0
+for WAIT in 120 120 240 360 480; do
+  sleep $WAIT
+  ELAPSED=$((ELAPSED + WAIT))
 
-CUMULATIVE=0
-for WAIT in 2 2 4 6 8; do
-  sleep ${WAIT}m
-  CUMULATIVE=$((CUMULATIVE + WAIT))
   COMMENTS=$(gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
     --jq '[.[] | select(.user.login == "coderabbitai")] | length')
 
   if [ "$COMMENTS" -gt 0 ]; then
-    echo "CodeRabbit left $COMMENTS comments after ${CUMULATIVE}min. Addressing..."
+    echo "CodeRabbit left $COMMENTS comments after $((ELAPSED / 60))min. Addressing..."
     break
   fi
-  echo "No CodeRabbit comments yet. ${CUMULATIVE}min elapsed."
+
+  echo "No CodeRabbit comments yet. $((ELAPSED / 60))min elapsed."
+  if [ "$ELAPSED" -ge 1320 ]; then break; fi
 done
 ```
 
