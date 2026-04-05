@@ -6,12 +6,12 @@
   },
   "metadata": {
     "description": "Claude Code marketplace entries for the Envoy professional development workflow plugin and its editorial bundles.",
-    "version": "2.1.1"
+    "version": "2.1.2"
   },
   "plugins": [
     {
       "name": "envoy",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Expose the full Envoy professional development workflow plugin through a single marketplace entry.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -40,7 +40,7 @@
     },
     {
       "name": "envoy-bundle-essentials",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"Essentials\" bundle — core brainstorm-to-merge workflow: brainstorm, pickup, executing-plans, finishing-branch, cleanup.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -60,7 +60,7 @@
     },
     {
       "name": "envoy-bundle-code-review",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"Code Review\" bundle — layered review, visual review, quick review, CodeRabbit PR handling, requesting and receiving code review.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -80,7 +80,7 @@
     },
     {
       "name": "envoy-bundle-tdd-quality",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"TDD & Quality\" bundle — test-driven development, systematic debugging, verification, eval harness.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -101,7 +101,7 @@
     },
     {
       "name": "envoy-bundle-orchestration",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"Agent Orchestration\" bundle — parallel agent dispatching, subagent-driven development, plan execution strategies.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -122,7 +122,7 @@
     },
     {
       "name": "envoy-bundle-documentation",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"Documentation\" bundle — docstrings for public APIs, wiki sync, skill authoring guide.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -142,7 +142,7 @@
     },
     {
       "name": "envoy-bundle-self-learning",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"Self-Learning\" bundle — graduated pattern learning, cross-PR CodeRabbit aggregation, user correction detection.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -163,7 +163,7 @@
     },
     {
       "name": "envoy-bundle-hooks",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"Hooks\" bundle — config protection, batch lint, cost tracking, learning extraction, CodeRabbit aggregation, correction detection.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -184,7 +184,7 @@
     },
     {
       "name": "envoy-bundle-dotnet",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \".NET\" stack bundle — .NET, Entity Framework, API patterns, xUnit/Moq/FluentAssertions profiles.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -205,7 +205,7 @@
     },
     {
       "name": "envoy-bundle-react-typescript",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"React & TypeScript\" stack bundle — React, TypeScript, Tailwind, shadcn/Radix, React Query, React Hook Form profiles.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -226,7 +226,7 @@
     },
     {
       "name": "envoy-bundle-azure-devops",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"Azure & DevOps\" stack bundle — Azure Container Apps, Static Web Apps, Bicep, GitHub Actions, Docker Compose profiles.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -247,7 +247,7 @@
     },
     {
       "name": "envoy-bundle-security",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"Security\" bundle — security stack profile, JWT/OAuth patterns, security audit agent.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -267,7 +267,7 @@
     },
     {
       "name": "envoy-bundle-advanced-patterns",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"Advanced Patterns\" bundle — search-first, cleanup pass, iterative retrieval, completion signals, pressure-test scenarios.",
       "author": {
         "name": "Rutger Dijkstra",
@@ -287,7 +287,7 @@
     },
     {
       "name": "envoy-bundle-copilot-adapter",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Install the \"GitHub Copilot\" adapter — prompts, instructions, and agents for GitHub Copilot Chat integration.",
       "author": {
         "name": "Rutger Dijkstra",

@@ -97,22 +97,41 @@ PREOF
 
 Save the PR number.
 
-### Step 4: Poll for GitHub CodeRabbit Comments
+### Step 4: Poll for GitHub CodeRabbit Comments (Exponential Backoff)
 
-GitHub CodeRabbit App reviews the PR asynchronously. Poll for comments:
+GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (20-minute max):
 
 ```bash
 OWNER=$(gh repo view --json owner -q '.owner.login')
 REPO=$(gh repo view --json name -q '.name')
 PR_NUMBER=<number>
 
-# Wait briefly for CodeRabbit to start (usually 1-2 minutes)
-# Then poll for comments
-gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
-  --jq '.[] | select(.user.login == "coderabbitai") | {id, path, line, body}'
+# Exponential backoff schedule
+# intervals = [2min, 2min, 4min, 6min, 8min]
+# cumulative =  2     4     8    14    22 min
+
+CUMULATIVE=0
+for WAIT in 2 2 4 6 8; do
+  sleep ${WAIT}m
+  CUMULATIVE=$((CUMULATIVE + WAIT))
+  COMMENTS=$(gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
+    --jq '[.[] | select(.user.login == "coderabbitai")] | length')
+
+  if [ "$COMMENTS" -gt 0 ]; then
+    echo "CodeRabbit left $COMMENTS comments after ${CUMULATIVE}min. Addressing..."
+    break
+  fi
+  echo "No CodeRabbit comments yet. ${CUMULATIVE}min elapsed."
+done
 ```
 
-If no comments after 3-5 minutes, CodeRabbit may not be installed or the PR is clean. Continue to verification.
+**If 20 minutes pass with no comments:**
+```
+CodeRabbit did not comment within 20 minutes. Proceeding without CodeRabbit.
+(CodeRabbit may not be installed, or the PR is clean.)
+```
+
+Skip to CI checks (Step 9).
 
 ### Step 5: Address All CodeRabbit Findings
 
@@ -195,7 +214,48 @@ After 3 cycles, these comments remain unresolved:
 Please review and decide how to proceed.
 ```
 
-### Step 9: Final Verification
+### Step 9: Poll CI and Auto-Fix Failures
+
+After CodeRabbit is resolved, poll GitHub Actions for CI status:
+
+```bash
+# Poll with exponential backoff — 15min timeout
+# intervals: 30s, 60s, 120s, 240s, 240s, 240s (cumulative: 15.5min)
+ELAPSED=0
+for WAIT in 30 60 120 240 240 240; do
+  CHECKS=$(gh pr checks $PR_NUMBER --json name,state,conclusion 2>/dev/null)
+  PENDING=$(echo "$CHECKS" | jq '[.[] | select(.state == "PENDING" or .state == "QUEUED")] | length')
+
+  if [ "$PENDING" -eq 0 ]; then
+    break  # All checks resolved
+  fi
+
+  ELAPSED=$((ELAPSED + WAIT))
+  if [ "$ELAPSED" -ge 900 ]; then
+    echo "CI checks still running after 15 minutes. Pending: $PENDING"
+    break
+  fi
+
+  echo "CI checks still running ($PENDING pending, ${ELAPSED}s elapsed). Next poll in ${WAIT}s..."
+  sleep $WAIT
+done
+
+FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion == "FAILURE")] | length')
+```
+
+**If all checks pass:** proceed to final verification (Step 10).
+
+**If any checks fail:** invoke fix-ci logic:
+
+```
+/envoy:fix-ci $PR_NUMBER
+```
+
+This runs the full fix-ci cycle: classify failures, diagnose, fix, verify locally, push, re-poll. Max 3 fix cycles before escalation.
+
+**After fix-ci completes (or escalates):** proceed to final verification.
+
+### Step 10: Final Verification
 
 Run envoy:verification with evidence:
 
@@ -215,6 +275,10 @@ npm run lint
 curl -sf http://localhost:5000/health && echo "✓ Backend" || echo "✗ Backend"
 curl -sf http://localhost:5173 && echo "✓ Frontend" || echo "✗ Frontend"
 
+# CI status (exclude pending/queued — only show actual failures)
+gh pr checks $PR_NUMBER --json name,state,conclusion \
+  --jq '.[] | select(.state != "PENDING" and .state != "QUEUED") | select(.conclusion != "SUCCESS") | .name + ": " + .conclusion'
+
 # Zero unresolved PR conversations
 gh api graphql -f query='
   query {
@@ -231,7 +295,7 @@ gh api graphql -f query='
 
 **All checks must pass with evidence.**
 
-### Step 10: Clear Session State
+### Step 11: Clear Session State
 
 Clean up session state and scratchpad files — the work is shipped:
 
@@ -242,13 +306,13 @@ session.clear();     // Remove .envoy-session.json
 scratchpad.clear();  // Remove .envoy-scratchpad.json (if exists)
 ```
 
-### Step 11: Wiki Sync
+### Step 12: Wiki Sync
 
 ```
 /envoy:wiki-sync
 ```
 
-### Step 12: Report
+### Step 13: Report
 
 ```
 **Branch finalized**
@@ -258,6 +322,8 @@ scratchpad.clear();  // Remove .envoy-scratchpad.json (if exists)
 | Docstrings | ✓ Added |
 | PR | ✓ Created (#<number>) |
 | GitHub CodeRabbit | ✓ <N> comments resolved |
+| CI/CD | ✓ All checks passing |
+| CI fix cycles | <N>/3 used |
 | Verification | ✓ Tests, build, lint, health pass |
 | Unresolved conversations | 0 |
 | Session state | ✓ Cleared |
@@ -267,11 +333,10 @@ scratchpad.clear();  // Remove .envoy-scratchpad.json (if exists)
 **Pull Request:** <URL>
 
 **Next steps:**
-1. Wait for CI to pass
-2. Request human reviewers
-3. Address any human feedback
-4. Merge when approved
-5. `/envoy:cleanup` to remove worktree and branch
+1. Request human reviewers
+2. Address any human feedback
+3. Merge when approved
+4. `/envoy:cleanup` to remove worktree and branch
 ```
 
 ## Error Handling
@@ -311,7 +376,8 @@ Options:
 - [ ] **Preconditions:** Feature branch, clean state, tests pass
 - [ ] **Docstrings:** Public APIs documented
 - [ ] **PR created**
-- [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved
-- [ ] **Verification:** Tests, build, lint, health, zero unresolved
+- [ ] **GitHub CodeRabbit:** All comments addressed, replied to, resolved (exponential backoff, 20min max)
+- [ ] **CI/CD:** All checks passing (auto-fixed if needed, max 3 cycles)
+- [ ] **Verification:** Tests, build, lint, health, CI green, zero unresolved
 - [ ] **Session state:** Cleared (.envoy-session.json, .envoy-scratchpad.json)
 - [ ] **Wiki:** Synced
