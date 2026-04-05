@@ -1,5 +1,5 @@
 ---
-name: brainstorming
+name: brainstorm
 description: Use when starting any new feature, significant change, or when you have an idea that needs design
 ---
 
@@ -11,7 +11,7 @@ Turn ideas into fully formed designs with implementation plans through collabora
 1. **Spec Document** — Design + implementation plan in single `docs/plans/` file
 2. **GitHub Issue** — Tracking with acceptance criteria
 
-**Announce at start:** "I'm using envoy:brainstorming to design and plan this feature."
+**Announce at start:** "I'm using envoy:brainstorm to design and plan this feature."
 
 ## Arguments
 

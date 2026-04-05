@@ -41,7 +41,7 @@
     {
       "name": "envoy-bundle-essentials",
       "version": "2.1.0",
-      "description": "Install the \"Essentials\" bundle — core brainstorm-to-merge workflow: brainstorming, pickup, executing-plans, finishing-branch, cleanup.",
+      "description": "Install the \"Essentials\" bundle — core brainstorm-to-merge workflow: brainstorm, pickup, executing-plans, finishing-branch, cleanup.",
       "author": {
         "name": "Rutger Dijkstra",
         "url": "https://github.com/RutgerDijk"

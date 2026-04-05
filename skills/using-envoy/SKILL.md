@@ -15,7 +15,7 @@ When you receive a task, check if any Envoy skill applies:
 
 | Task Type | Skill to Use |
 |-----------|--------------|
-| New feature idea | `envoy:brainstorming` |
+| New feature idea | `envoy:brainstorm` |
 | Create implementation plan | `envoy:writing-plans` |
 | Execute a plan | `envoy:executing-plans` or `envoy:subagent-driven-development` |
 | Pick up GitHub issue | `envoy:pickup` |
@@ -72,7 +72,7 @@ Every skill has an "Announce at start" directive. Use it:
 
 ```
 "I'm using envoy:systematic-debugging to investigate this issue."
-"I'm using envoy:brainstorming to design this feature."
+"I'm using envoy:brainstorm to design this feature."
 ```
 
 This keeps the user informed and commits you to following the skill.

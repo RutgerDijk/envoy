@@ -6,7 +6,7 @@ Envoy includes 24 skills organized by purpose.
 
 | Skill | Trigger |
 |-------|---------|
-| `envoy:brainstorming` | Starting any new feature or significant change |
+| `envoy:brainstorm` | Starting any new feature or significant change |
 | `envoy:writing-plans` | Have a design doc, need implementation plan |
 | `envoy:executing-plans` | Have a plan, ready to start coding |
 | `envoy:pickup` | Ready to implement a GitHub issue from brainstorming |
@@ -57,7 +57,7 @@ Envoy includes 24 skills organized by purpose.
 - `test-driven-development`, `systematic-debugging`, `verification`
 
 **Flexible skills** (adapt principles to context):
-- `brainstorming`, `writing-plans`, `search-first`
+- `brainstorm`, `writing-plans`, `search-first`
 
 ## Skill Anatomy
 

@@ -7,7 +7,7 @@ description: Use when ready to implement a GitHub issue that was created via bra
 
 ## Overview
 
-Pick up a GitHub issue created by envoy:brainstorming. Creates a worktree, loads context, and **automatically continues to execution** if a plan exists.
+Pick up a GitHub issue created by envoy:brainstorm. Creates a worktree, loads context, and **automatically continues to execution** if a plan exists.
 
 **Announce at start:** "I'm using envoy:pickup to implement issue #<number>."
 
@@ -193,11 +193,11 @@ Run `gh issue list` to see available issues.
 ```
 Issue #<number> has no feature branch specified.
 
-This issue may not have been created with /envoy:brainstorming.
+This issue may not have been created with /envoy:brainstorm.
 
 Options:
 1. Create spec and branch manually:
-   /envoy:brainstorming (start fresh)
+   /envoy:brainstorm (start fresh)
 
 2. Work directly from issue description:
    git checkout -b feature/<number>-<topic>
@@ -242,7 +242,7 @@ The spec may have been moved or deleted. Check:
 - `docs/plans/` for similar files
 - Git history for the file
 
-Or create a new spec with /envoy:brainstorming.
+Or create a new spec with /envoy:brainstorm.
 ```
 
 ### Spec Has No Implementation Tasks
