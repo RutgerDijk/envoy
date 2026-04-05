@@ -44,7 +44,26 @@ CODE_FILES=$(echo "$CHANGED" | grep -v '\.\(md\|txt\|json\|yml\|yaml\)$' | wc -l
 | **Medium** | 4-10 code files | Layers 0, 1, 2, 3 |
 | **Large** | 10+ code files or cross-cutting | Layers 0, 1, 2, 3 (full) |
 
-### 3. Detect and Load Stack Profiles (Selective)
+### 3. Score File Relevance
+
+Use `lib/relevance-scorer.js` to identify which files the reviewer should read deeply vs. skim:
+
+```javascript
+const { scoreTaskRelevance, formatForPrompt } = require('../../lib/relevance-scorer');
+const changedFiles = getChangedFiles(); // absolute paths from git diff
+const results = scoreTaskRelevance(changedFiles, projectRoot);
+const relevanceBriefing = formatForPrompt(results);
+```
+
+This walks import chains from changed files and scores dependencies by relevance:
+- **full** — directly changed or critical dependency (score >= 0.5)
+- **focused** — read signatures + changed sections (score 0.2-0.5)
+- **skim** — scan exports only (score 0.1-0.2)
+- **skip** — not relevant
+
+Include `relevanceBriefing` in the Layer 1 AI reviewer prompt so it knows which related files to prioritize during iterative retrieval.
+
+### 4. Detect and Load Stack Profiles (Selective)
 
 **Only load stacks relevant to changed files, and only the "Common Mistakes" section:**
 
@@ -60,7 +79,7 @@ const { loadStackSection } = require('../../lib/stack-loader');
 const mistakes = loadStackSection('dotnet', 'Common Mistakes');
 ```
 
-### 4. Load Known Review Patterns
+### 5. Load Known Review Patterns
 
 ```javascript
 const { loadConfirmedPatterns, loadCorrections } = require('../../lib/learning-loader');
@@ -72,17 +91,34 @@ Load confirmed patterns from both `memory/review-learnings.md` AND `memory/coder
 
 Also load corrections — items in corrections are team decisions, not bugs. Do not flag these during review.
 
-### 5. Load Acceptance Criteria
+### 6. Load Acceptance Criteria
 
 From linked issue/spec document.
 
-### 6. Load Known Limitations
+### 7. Load Known Limitations
 
 ```bash
 grep -i "future\|enhancement\|out of scope\|limitation\|deferred" docs/plans/*.md
 ```
 
 Items documented as "future enhancement" or "out of scope" should NOT be flagged.
+
+---
+
+## Shell Output Compression
+
+When running build/test/lint commands during review, use `lib/output-compressor.js` to reduce noisy output before including in review context:
+
+```javascript
+const { compress } = require('../../lib/output-compressor');
+const result = compress(rawOutput, 'dotnet test');
+// result.compressed — noise stripped, only failures + summary
+// result.savings — { ratio: 85, pattern: 'dotnet-test' }
+```
+
+This prevents verbose test/build output from consuming review context tokens. The compressor has a safeguard ratio — if compression removes > 85% of content, the original is returned to prevent information loss.
+
+Supported patterns: `dotnet build`, `dotnet test`, `npm install`, `npm run build`, `jest`, `vitest`, `playwright`, `cargo build/test`, `git status/log`, `docker compose`.
 
 ---
 
@@ -117,12 +153,15 @@ Agent({
 
   FIRST: Read contexts/iterative-retrieval.md for the retrieval protocol.
 
-  THEN: Follow the protocol:
+  **Pre-scored file relevance (from dependency analysis):**
+  ${relevanceBriefing}
+
+  Use these scores to guide your retrieval — start with 'full' and 'focused'
+  files, then expand if needed:
   1. Read git diff main...HEAD
-  2. Identify related files (imports, callers, shared types)
-  3. Read those files, score relevance (0-1.0)
-  4. If <3 files scored >=0.7, follow one more hop
-  5. Stop when 3+ files have relevance >=0.7 or 3 cycles done
+  2. Read 'full' relevance files first, then 'focused' files
+  3. If <3 files scored >=0.7 after reading pre-scored files, follow one more hop
+  4. Stop when 3+ files have relevance >=0.7 or 3 cycles done
 
   Report your retrieval context before reviewing.
 

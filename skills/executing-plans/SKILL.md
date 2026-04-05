@@ -36,11 +36,35 @@ execution:
       checkpoint: true
 ```
 
-### Step 3: Load Stack Profiles
+### Step 3: Initialize Session State
+
+Initialize session state for cross-session continuity. If resuming, load existing state instead:
+
+```javascript
+const session = require('../../lib/session-state');
+const state = session.exists() ? session.load() : session.createEmpty();
+
+if (state.tasks.length > 0) {
+  // Resuming — report progress
+  const done = state.tasks.filter(t => t.status === 'done').length;
+  console.log(`Resuming: ${done}/${state.tasks.length} tasks complete`);
+  console.log('Recent decisions:', state.decisions.slice(-3));
+} else {
+  // Fresh start
+  state.branch = currentBranch;
+  state.plan = specPath;
+  for (const task of planTasks) {
+    session.updateTask(state, task.id, 'pending');
+  }
+  session.save(state);
+}
+```
+
+### Step 3b: Load Stack Profiles
 
 Detect and load relevant stack profiles for context during execution.
 
-### Step 3b: Load Implementation Reminders
+### Step 3c: Load Implementation Reminders
 
 Before executing tasks, load confirmed patterns and team corrections so implementing agents avoid known issues:
 
@@ -283,40 +307,45 @@ Changes:
 3. Report final results
 ```
 
+#### Score File Relevance (for Review & Context)
+
+Before dispatching agents, score which files are relevant to each task group using `lib/relevance-scorer.js`:
+
+```javascript
+const { scoreTaskRelevance, formatForPrompt } = require('../../lib/relevance-scorer');
+const results = scoreTaskRelevance(taskFiles, projectRoot);
+// results: [{ relPath, score, depth: 'full'|'focused'|'skim'|'skip' }]
+const relevanceBriefing = formatForPrompt(results);
+```
+
+Include the relevance briefing in agent prompts so agents know which related files to read deeply vs. skim.
+
+#### Build LITM-Aware Agent Prompts
+
+Use `lib/context-budget.js` to right-size prompts and order sections for optimal attention:
+
+```javascript
+const { classifyComplexity, buildAgentPrompt } = require('../../lib/context-budget');
+
+const tier = classifyComplexity({ filesChanged: 4, servicesAffected: 1 });
+const prompt = buildAgentPrompt({
+  objective: `Execute Tasks 6-9 from the implementation plan:\n- Task 6: Write UserService unit tests\n- Task 7: Write UserController integration tests\n- Task 8: Write validation tests\n- Task 9: Add test fixtures`,
+  constraints: `Follow TDD. Only modify: tests/*, src/Services/*, src/Controllers/*. DO NOT modify: src/Models/*, src/Data/*.`,
+  context: `Working directory: ${cwd}\nBranch: ${branch}\nPlan: ${planPath}`,
+  reference: relevanceBriefing + '\n' + stackProfiles,
+  acceptance: `All tests pass (dotnet test). No lint errors (dotnet build). Report summary of changes.`,
+  learnings: reminders,
+});
+```
+
 #### Dispatching Agents
 
-For each parallel batch, use the Task tool with clear boundaries:
+For each parallel batch, dispatch with the structured prompt:
 
 ```typescript
-// Dispatch parallel agents
 Task({
   description: "Execute Task 6-9 (API Tests)",
-  prompt: `
-    You are executing Tasks 6-9 from the implementation plan.
-
-    **Context:**
-    - Working directory: ${cwd}
-    - Branch: ${branch}
-    - Plan: ${planPath}
-
-    **Your tasks:**
-    - Task 6: Write UserService unit tests
-    - Task 7: Write UserController integration tests
-    - Task 8: Write validation tests
-    - Task 9: Add test fixtures
-
-    **Constraints:**
-    - Follow TDD: Write failing test first, then make it pass
-    - Only modify files in: tests/*, src/Services/*, src/Controllers/*
-    - DO NOT modify: src/Models/*, src/Data/*
-    - Commit after each task with proper message
-
-    **Verification:**
-    - All tests must pass: dotnet test
-    - No lint errors: dotnet build
-
-    Report completion with summary of changes.
-  `,
+  prompt: prompt, // Built with buildAgentPrompt above
   subagent_type: "general-purpose"
 })
 ```
@@ -492,7 +521,7 @@ Agent({
 
 ## Progress Tracking
 
-Use TaskCreate/TaskUpdate to track task progress:
+Use TaskCreate/TaskUpdate to track task progress in the conversation, AND persist to session state for cross-session continuity:
 
 ```
 - [x] Task 1: Create database schema
@@ -500,6 +529,16 @@ Use TaskCreate/TaskUpdate to track task progress:
 - [ ] Task 3: Create repository (in progress)
 - [ ] Task 4: Add service layer
 - [ ] Task 5: Create controller
+```
+
+After each task completes:
+```javascript
+const session = require('../../lib/session-state');
+const state = session.load();
+session.updateTask(state, 'task-3', 'done', 'Created repository with EF Core');
+session.trackFile(state, 'src/Data/UserRepository.cs', 'New repository');
+session.addDecision(state, 'Used repository pattern — matches existing codebase');
+session.save(state);
 ```
 
 ## Verification
@@ -567,18 +606,40 @@ Summary:
 
 Next steps:
 1. `/envoy:review` — Run 4-layer review
-2. `/envoy:finalize` — Prepare PR
+2. `/envoy:finalize` — Prepare PR (clears session state)
+```
+
+Update session state with next steps before completing:
+```javascript
+const session = require('../../lib/session-state');
+const state = session.load();
+state.nextSteps = ['Run envoy:review', 'Run envoy:finalize'];
+session.save(state);
 ```
 
 ## Resuming Execution
 
-If execution was interrupted:
+If execution was interrupted, session state enables automatic resumption:
 
+```javascript
+const session = require('../../lib/session-state');
+if (session.exists()) {
+  const state = session.load();
+  // state.tasks — which tasks are done/pending/blocked
+  // state.decisions — key decisions made so far
+  // state.testResults — last test run
+  // state.nextSteps — what was planned next
+}
+```
+
+The `session-start.sh` hook auto-detects `.envoy-session.json` on session startup and surfaces progress in the session context. This means:
+- Context compaction doesn't lose task progress
+- New sessions auto-resume from where you left off
+- Branch/plan/decisions are preserved
+
+Also check git log for commit-level progress:
 ```bash
-# Check git log for last completed task
 git log --oneline -10
-
-# Check TodoWrite for progress
 ```
 
 Resume from the next incomplete task.

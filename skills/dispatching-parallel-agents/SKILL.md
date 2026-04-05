@@ -38,15 +38,57 @@ Group tasks/failures by what's broken:
 
 Each domain is independent - fixing UserService doesn't affect component tests.
 
-### 2. Create Focused Agent Tasks
+### 2. Initialize Scratchpad
+
+Before dispatching agents, create a shared scratchpad for coordination:
+
+```javascript
+const scratchpad = require('../../lib/agent-scratchpad');
+const pad = scratchpad.createEmpty();
+// Register each agent with their scope
+scratchpad.registerAgent(pad, 'agent-backend', 'Fix UserService', ['backend/']);
+scratchpad.registerAgent(pad, 'agent-frontend', 'Fix UserCard', ['frontend/src/components/']);
+scratchpad.registerAgent(pad, 'agent-db', 'Fix migration', ['backend/Migrations/']);
+scratchpad.save(pad);
+```
+
+### 3. Size Prompts to Task Complexity
+
+Use `lib/context-budget.js` to right-size each agent's prompt:
+
+```javascript
+const { classifyComplexity, buildAgentPrompt, checkBudget } = require('../../lib/context-budget');
+
+const tier = classifyComplexity({
+  filesChanged: 2,
+  isMechanical: false,
+});
+// tier.modelTier → 'sonnet', tier.maxPromptLines → 60
+```
+
+Use `buildAgentPrompt()` for LITM-aware section ordering — objective and constraints at the start (high attention), reference material in the middle, acceptance criteria at the end (high attention):
+
+```javascript
+const prompt = buildAgentPrompt({
+  objective: 'Fix the 3 failing tests in CoachServiceTests.cs',
+  constraints: 'Follow TDD. Do NOT change files outside backend/.',
+  context: scratchpadBriefing, // Shared state awareness
+  reference: stackMistakes,     // Middle (low attention) — reference only
+  acceptance: 'All 3 tests pass. Return summary of root cause and fix.',
+  learnings: reminders,
+});
+```
+
+### 4. Create Focused Agent Tasks
 
 Each agent gets:
 - **Specific scope:** One test file, one component, one service
 - **Clear goal:** Make these tests pass / implement this feature
 - **Constraints:** Don't change other code
+- **Scratchpad briefing:** What other agents are working on
 - **Expected output:** Summary of what you found and fixed
 
-### 3. Dispatch in Parallel
+### 5. Dispatch in Parallel
 
 ```
 Task("Fix UserService.GetById null reference - backend/tests/UserServiceTests.cs")
@@ -55,36 +97,47 @@ Task("Fix migration rollback issue - backend/Migrations/")
 // All three run concurrently
 ```
 
-### 4. Review and Integrate
+Include scratchpad instructions in each prompt:
+```
+If you discover something that affects other agents' work (shared utility
+changes, new dependencies, interface changes), write it to .envoy-scratchpad.json:
+
+const scratchpad = require('../../lib/agent-scratchpad');
+const pad = scratchpad.load();
+scratchpad.post(pad, '<your-agent-id>', 'discovery', '<what you found>', ['affected/file.ts']);
+scratchpad.save(pad);
+```
+
+### 6. Review and Integrate
 
 When agents return:
+- Check scratchpad for conflicts: `scratchpad.getConflicts(pad)`
 - Read each summary
 - Verify fixes don't conflict
 - Run full test suite
+- Clear scratchpad: `scratchpad.clear()`
 - Integrate all changes
 
 ## Agent Prompt Structure
 
-Good agent prompts are:
+Use `lib/context-budget.js` → `buildAgentPrompt()` for LITM-aware prompt assembly. Good agent prompts are:
 1. **Focused** - One clear problem domain
 2. **Self-contained** - All context needed to understand the problem
-3. **Specific about output** - What should the agent return?
+3. **Right-sized** - Complexity tier determines prompt length and model
+4. **Attention-aware** - Critical info at start/end, reference in middle
 
-**Example prompt:**
-```markdown
-Fix the 3 failing tests in backend/HybridFit.Api.Tests/Services/CoachServiceTests.cs:
-
-1. "GetCoachById_WithInvalidId_ReturnsNull" - expects null but throws exception
-2. "CreateCoach_WithDuplicateEmail_ThrowsConflict" - wrong exception type
-3. "UpdateCoach_WithNonExistent_ReturnsNotFound" - test timing out
-
-Your task:
-1. Read the test file and understand what each test verifies
-2. Identify root cause using envoy:systematic-debugging
-3. Fix the issues following TDD
-4. Run tests to verify
-
-Return: Summary of root cause and what you fixed.
+**Example prompt (using buildAgentPrompt):**
+```javascript
+const prompt = buildAgentPrompt({
+  objective: `Fix the 3 failing tests in CoachServiceTests.cs:
+    1. "GetCoachById_WithInvalidId_ReturnsNull" - expects null but throws exception
+    2. "CreateCoach_WithDuplicateEmail_ThrowsConflict" - wrong exception type
+    3. "UpdateCoach_WithNonExistent_ReturnsNotFound" - test timing out`,
+  constraints: `Follow TDD. Use envoy:systematic-debugging for root cause.
+    Do NOT modify files outside backend/Services/ and backend/Tests/.`,
+  context: scratchpad.formatBriefing(pad, 'agent-backend'),
+  acceptance: `All 3 tests pass. Return: summary of root cause and what you fixed.`,
+});
 ```
 
 ## Common Mistakes
@@ -111,6 +164,12 @@ Return: Summary of root cause and what you fixed.
 - `envoy:executing-plans` — Parallel strategy for independent tasks
 - `envoy:systematic-debugging` — Each agent uses this for their domain
 
+**Libraries used:**
+- `lib/agent-scratchpad.js` — Coordination between parallel agents
+- `lib/context-budget.js` — Right-size prompts per task complexity, LITM-aware ordering
+
 **After parallel work:**
+- Check scratchpad for conflicts before integrating
 - Run `envoy:layered-review` on combined changes
 - Use `envoy:verification` before claiming complete
+- Clear scratchpad: `require('../../lib/agent-scratchpad').clear()`
