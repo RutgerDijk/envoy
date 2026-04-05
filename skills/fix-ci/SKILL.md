@@ -77,6 +77,12 @@ Classify each failure:
 | `lint-violation` | ESLint/Prettier errors, `warning`/`error` with rule name + file:line | Auto-fix (`--fix`) or manual fix |
 | `infra-issue` | Runner unavailable, permissions, timeouts, Docker pull failures, OOM | **Escalate immediately** — don't try to fix |
 
+**Scope note:** Step 1 uses `gh pr checks` to detect all failures — this includes
+both GitHub Actions workflow runs and external status checks (e.g., Vercel, Netlify).
+However, log download via `gh run list` / `gh run view --log-failed` only works for
+GitHub Actions runs. If a failed check has no corresponding workflow run, classify it
+as `infra-issue` with the note: "External status check — check the service directly."
+
 ### Step 4: Handle Infrastructure Failures
 
 If ANY failure is classified as `infra-issue`, escalate immediately:
