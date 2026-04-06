@@ -78,8 +78,7 @@ Adds a **BY PROJECT** section at the top. Other sections aggregate across all pr
 **Export (hook):** On session end, `hooks/cost-summary-export.js` writes a minimal JSON summary to `docs/costs/reports/<date>-<username>.json` containing:
 - Activity breakdown (label → token count)
 - Model breakdown (model → token count)
-- Branch breakdown (branch → token count)
-- Session metadata (date, turns, total tokens)
+- Session metadata (date, branch, turns, total tokens)
 
 **Aggregation:** `/envoy:costs --team` reads all JSON files from `docs/costs/reports/`, merges them, and renders the same bar-chart format with an added **BY CONTRIBUTOR** section.
 
