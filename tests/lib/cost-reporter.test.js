@@ -146,6 +146,68 @@ test('formatTokens is still exported', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// Task 2: Phase inference — classifyPhase
+// ═══════════════════════════════════════════════════════════════════
+
+section('classifyPhase: tool-window inference');
+
+test('classifyPhase is exported', () => {
+  assert.strictEqual(typeof costReporter.classifyPhase, 'function', 'classifyPhase should be exported');
+});
+
+test('classifyPhase detects implementation (Edit/Write heavy + Bash)', () => {
+  const tools = ['Edit', 'Edit', 'Bash', 'Write', 'Edit', 'Bash', 'Edit', 'Bash', 'Edit', 'Write', 'Bash'];
+  assert.strictEqual(costReporter.classifyPhase(tools), 'implementation');
+});
+
+test('classifyPhase detects debugging (Bash + Grep heavy, low Edit)', () => {
+  const tools = ['Bash', 'Bash', 'Grep', 'Read', 'Bash', 'Grep', 'Bash', 'Grep', 'Bash', 'Bash'];
+  assert.strictEqual(costReporter.classifyPhase(tools), 'debugging');
+});
+
+test('classifyPhase detects review (Read heavy + Agent, low Edit)', () => {
+  const tools = ['Read', 'Read', 'Read', 'Read', 'Read', 'Read', 'Agent'];
+  assert.strictEqual(costReporter.classifyPhase(tools), 'review');
+});
+
+test('classifyPhase detects interactive (AskUserQuestion heavy)', () => {
+  const tools = ['AskUserQuestion', 'Read', 'AskUserQuestion', 'AskUserQuestion', 'AskUserQuestion'];
+  assert.strictEqual(costReporter.classifyPhase(tools), 'interactive');
+});
+
+test('classifyPhase detects planning (TaskCreate + Agent, low Edit)', () => {
+  const tools = ['Read', 'Agent', 'Agent', 'TaskCreate', 'TaskCreate', 'Read'];
+  assert.strictEqual(costReporter.classifyPhase(tools), 'planning');
+});
+
+test('classifyPhase returns other for ambiguous tools', () => {
+  const tools = ['Read', 'Read'];
+  assert.strictEqual(costReporter.classifyPhase(tools), 'other');
+});
+
+test('extractSessionUsage uses phase inference for unlabeled turns', () => {
+  // Build a session with Edit-heavy turns (no Skill/Agent tool calls)
+  const turns = [];
+  for (let i = 0; i < 11; i++) {
+    const toolName = i % 3 === 0 ? 'Bash' : (i % 3 === 1 ? 'Edit' : 'Write');
+    turns.push({
+      type: 'assistant',
+      message: {
+        model: 'claude-opus-4-6',
+        usage: { input_tokens: 100, output_tokens: 50 },
+        content: [{ type: 'tool_use', name: toolName, input: {} }],
+      },
+    });
+  }
+  const { tmpDir, jsonlPath } = writeTempJsonl(turns);
+  const usage = costReporter.extractSessionUsage(jsonlPath);
+  // Most turns should be labeled 'implementation', not 'general'
+  assert.ok(usage.activities['implementation'], 'Should have implementation activity');
+  assert.strictEqual(usage.activities['general'], undefined, 'Should not have general activity');
+  cleanup(tmpDir);
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
 
