@@ -408,6 +408,22 @@ test('aggregateTeamReports filters by days', () => {
   cleanup(tmpDir);
 });
 
+test('aggregateTeamReports output is compatible with formatReport', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'team-compat-'));
+  const reportsDir = path.join(tmpDir, 'reports');
+  fs.mkdirSync(reportsDir, { recursive: true });
+  fs.writeFileSync(path.join(reportsDir, '2026-04-06-test.json'), JSON.stringify({
+    date: '2026-04-06', user: 'test', branch: 'main', totalTokens: 100, turns: 1,
+    activities: { 'other': 100 }, models: { 'claude-opus-4-6': 100 },
+  }));
+  const teamData = costReporter.aggregateTeamReports(reportsDir);
+  // Should not throw
+  const report = costReporter.formatReport(teamData);
+  assert.ok(typeof report === 'string');
+  assert.ok(report.includes('BY CONTRIBUTOR'));
+  cleanup(tmpDir);
+});
+
 test('formatReport includes BY CONTRIBUTOR when byContributor exists', () => {
   const data = {
     ...mockAggregated,
