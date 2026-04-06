@@ -208,6 +208,90 @@ test('extractSessionUsage uses phase inference for unlabeled turns', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// Task 3: Bar-chart formatter
+// ═══════════════════════════════════════════════════════════════════
+
+section('formatReport: bar-chart output');
+
+test('renderBar is exported', () => {
+  assert.strictEqual(typeof costReporter.renderBar, 'function', 'renderBar should be exported');
+});
+
+test('renderBar produces correct bar for 50%', () => {
+  const bar = costReporter.renderBar(0.5, 20);
+  assert.strictEqual(bar.length, 20, `Bar should be 20 chars, got ${bar.length}`);
+  const filled = (bar.match(/\u2588/g) || []).length;
+  assert.strictEqual(filled, 10, `Expected 10 filled blocks, got ${filled}`);
+});
+
+test('renderBar produces all filled for 100%', () => {
+  const bar = costReporter.renderBar(1.0, 20);
+  const filled = (bar.match(/\u2588/g) || []).length;
+  assert.strictEqual(filled, 20);
+});
+
+test('renderBar produces all empty for 0%', () => {
+  const bar = costReporter.renderBar(0, 20);
+  const empty = (bar.match(/\u2591/g) || []).length;
+  assert.strictEqual(empty, 20);
+});
+
+const mockAggregated = {
+  period: '7 days',
+  sessions: [{ id: 's1' }, { id: 's2' }],
+  totals: { totalTokens: 10000, turns: 50 },
+  byActivity: {
+    'skill:review': { turns: 20, totalTokens: 6000, models: {} },
+    'implementation': { turns: 30, totalTokens: 4000, models: {} },
+  },
+  byModel: {
+    'claude-opus-4-6': { turns: 40, totalTokens: 8000 },
+    'claude-sonnet-4-6': { turns: 10, totalTokens: 2000 },
+  },
+  byBranch: {
+    'feature/16-costs': { sessions: 2, totalTokens: 10000 },
+  },
+};
+
+test('formatReport contains BY ACTIVITY section', () => {
+  const report = costReporter.formatReport(mockAggregated);
+  assert.ok(report.includes('BY ACTIVITY'), 'Should contain BY ACTIVITY');
+});
+
+test('formatReport contains bar chart characters', () => {
+  const report = costReporter.formatReport(mockAggregated);
+  assert.ok(report.includes('\u2588'), 'Should contain filled block');
+  assert.ok(report.includes('\u2591'), 'Should contain empty block');
+});
+
+test('formatReport contains percentage', () => {
+  const report = costReporter.formatReport(mockAggregated);
+  assert.ok(report.includes('%'), 'Should contain percentage');
+});
+
+test('formatReport does NOT contain dollar signs', () => {
+  const report = costReporter.formatReport(mockAggregated);
+  assert.ok(!report.includes('$'), 'Should not contain dollar sign');
+});
+
+test('formatReport contains BY MODEL section', () => {
+  const report = costReporter.formatReport(mockAggregated);
+  assert.ok(report.includes('BY MODEL'), 'Should contain BY MODEL');
+});
+
+test('formatReport contains BY BRANCH section', () => {
+  const report = costReporter.formatReport(mockAggregated);
+  assert.ok(report.includes('BY BRANCH'), 'Should contain BY BRANCH');
+});
+
+test('formatReport sorts activities by totalTokens descending', () => {
+  const report = costReporter.formatReport(mockAggregated);
+  const reviewIdx = report.indexOf('skill:review');
+  const implIdx = report.indexOf('implementation');
+  assert.ok(reviewIdx < implIdx, 'skill:review (6000) should appear before implementation (4000)');
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
 
