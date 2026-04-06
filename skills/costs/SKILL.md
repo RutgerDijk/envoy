@@ -42,8 +42,8 @@ console.log(formatReport(data));
 
 ```javascript
 // Cross-project
-const projects = discoverAllProjects();
-// aggregate across all project dirs...
+const data = getAllProjectsUsage({ days: 30 });
+console.log(formatReport(data));
 
 // Team view
 const teamData = aggregateTeamReports('docs/costs/reports/', { days: 30 });

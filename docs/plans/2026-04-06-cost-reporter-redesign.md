@@ -75,7 +75,7 @@ Adds a **BY PROJECT** section at the top. Other sections aggregate across all pr
 
 ### Team Visibility (`--team`)
 
-**Export (hook):** On session end, `hooks/cost-summary-export.js` writes a minimal JSON summary to `docs/costs/reports/<date>-<username>.json` containing:
+**Export (hook):** On session end, `hooks/cost-summary-export.js` writes a minimal JSON summary to `docs/costs/reports/<date>-<username>-<HHMMSS>.json` containing:
 - Activity breakdown (label → token count)
 - Model breakdown (model → token count)
 - Session metadata (date, branch, turns, total tokens)
