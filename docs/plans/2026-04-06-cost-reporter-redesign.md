@@ -14,7 +14,7 @@ Three scoped changes:
 2. **`commands/costs.md`** — Update command description and flags
 3. **`hooks/cost-summary-export.js`** — New hook: export session summary JSON on session end
 
-No new dependencies. No changes to `skills/costs/SKILL.md` (it just invokes the command).
+No new dependencies.
 
 ### Activity Classification (Two-Tier)
 
