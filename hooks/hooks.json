@@ -78,6 +78,12 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" coderabbit-aggregator",
             "_profiles": ["standard", "strict"],
             "_async": true
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" cost-summary-export",
+            "_profiles": ["standard", "strict"],
+            "_async": true
           }
         ]
       }
