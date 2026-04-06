@@ -29,6 +29,7 @@ const HOOK_PROFILES = {
   'post-pr-poll':           ['standard', 'strict'],
   'coderabbit-aggregator':  ['standard', 'strict'],
   'correction-detector':    ['standard', 'strict'],
+  'cost-summary-export':    ['standard', 'strict'],
 };
 
 /**
