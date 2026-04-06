@@ -338,6 +338,75 @@ test('formatReport includes BY PROJECT when byProject data exists', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// Task 6: Team aggregation
+// ═══════════════════════════════════════════════════════════════════
+
+section('aggregateTeamReports: merge JSON files');
+
+test('aggregateTeamReports is exported', () => {
+  assert.strictEqual(typeof costReporter.aggregateTeamReports, 'function');
+});
+
+test('aggregateTeamReports merges multiple JSON files', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'team-reports-'));
+  const reportsDir = path.join(tmpDir, 'docs', 'costs', 'reports');
+  fs.mkdirSync(reportsDir, { recursive: true });
+
+  fs.writeFileSync(path.join(reportsDir, '2026-04-05-alice.json'), JSON.stringify({
+    date: '2026-04-05', user: 'alice', branch: 'main', totalTokens: 3000, turns: 5,
+    activities: { 'skill:review': 2000, 'implementation': 1000 },
+    models: { 'claude-opus-4-6': 3000 },
+  }));
+  fs.writeFileSync(path.join(reportsDir, '2026-04-06-bob.json'), JSON.stringify({
+    date: '2026-04-06', user: 'bob', branch: 'feature/x', totalTokens: 5000, turns: 10,
+    activities: { 'implementation': 4000, 'debugging': 1000 },
+    models: { 'claude-opus-4-6': 3000, 'claude-sonnet-4-6': 2000 },
+  }));
+
+  const result = costReporter.aggregateTeamReports(reportsDir);
+
+  assert.ok(result.byContributor, 'Should have byContributor');
+  assert.strictEqual(result.byContributor['alice'].totalTokens, 3000);
+  assert.strictEqual(result.byContributor['bob'].totalTokens, 5000);
+  assert.strictEqual(result.totals.totalTokens, 8000);
+  assert.strictEqual(result.byActivity['implementation'].totalTokens, 5000);
+
+  cleanup(tmpDir);
+});
+
+test('aggregateTeamReports filters by days', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'team-reports-'));
+  const reportsDir = path.join(tmpDir, 'docs', 'costs', 'reports');
+  fs.mkdirSync(reportsDir, { recursive: true });
+
+  fs.writeFileSync(path.join(reportsDir, '2020-01-01-old.json'), JSON.stringify({
+    date: '2020-01-01', user: 'old', branch: 'main', totalTokens: 9999, turns: 1,
+    activities: {}, models: {},
+  }));
+  fs.writeFileSync(path.join(reportsDir, '2026-04-06-recent.json'), JSON.stringify({
+    date: '2026-04-06', user: 'recent', branch: 'main', totalTokens: 100, turns: 1,
+    activities: {}, models: {},
+  }));
+
+  const result = costReporter.aggregateTeamReports(reportsDir, { days: 7 });
+  assert.strictEqual(result.totals.totalTokens, 100, 'Should only include recent report');
+
+  cleanup(tmpDir);
+});
+
+test('formatReport includes BY CONTRIBUTOR when byContributor exists', () => {
+  const data = {
+    ...mockAggregated,
+    byContributor: {
+      'alice': { totalTokens: 6000 },
+      'bob': { totalTokens: 4000 },
+    },
+  };
+  const report = costReporter.formatReport(data);
+  assert.ok(report.includes('BY CONTRIBUTOR'), 'Should contain BY CONTRIBUTOR section');
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
 
