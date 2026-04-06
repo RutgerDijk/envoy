@@ -236,6 +236,20 @@ test('renderBar produces all empty for 0%', () => {
   assert.strictEqual(empty, 20);
 });
 
+test('formatReport does not crash when totals are zero', () => {
+  const emptyData = {
+    period: '7 days',
+    sessions: [],
+    totals: { totalTokens: 0, turns: 0 },
+    byActivity: { 'other': { turns: 0, totalTokens: 0, models: {} } },
+    byModel: {},
+    byBranch: {},
+  };
+  // Should not throw
+  const report = costReporter.formatReport(emptyData);
+  assert.ok(typeof report === 'string');
+});
+
 const mockAggregated = {
   period: '7 days',
   sessions: [{ id: 's1' }, { id: 's2' }],
