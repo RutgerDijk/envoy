@@ -339,6 +339,17 @@ test('discoverAllProjects returns an array', () => {
   assert.ok(Array.isArray(projects), 'Should return an array');
 });
 
+test('getAllProjectsUsage is exported', () => {
+  assert.strictEqual(typeof costReporter.getAllProjectsUsage, 'function');
+});
+
+test('getAllProjectsUsage returns data with byProject', () => {
+  const result = costReporter.getAllProjectsUsage({ days: 7 });
+  assert.ok(result.byProject, 'Should have byProject');
+  assert.ok(result.period, 'Should have period');
+  assert.ok(Array.isArray(result.sessions), 'Should have sessions array');
+});
+
 test('formatReport includes BY PROJECT when byProject data exists', () => {
   const data = {
     ...mockAggregated,
