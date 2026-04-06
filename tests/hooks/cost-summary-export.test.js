@@ -60,13 +60,14 @@ test('buildSummaryJson produces valid JSON structure', () => {
     },
   };
 
-  const summary = hook.buildSummaryJson(mockUsage, 'rutger', 'feature/16-costs');
+  const now = new Date('2026-04-06T14:30:00.000Z');
+  const summary = hook.buildSummaryJson(mockUsage, 'rutger', 'feature/16-costs', now);
 
   assert.strictEqual(summary.user, 'rutger');
   assert.strictEqual(summary.branch, 'feature/16-costs');
   assert.strictEqual(summary.totalTokens, 5000);
   assert.strictEqual(summary.turns, 10);
-  assert.ok(summary.date, 'Should have date');
+  assert.strictEqual(summary.date, '2026-04-06');
   assert.deepStrictEqual(summary.activities, { 'skill:review': 3000, 'implementation': 2000 });
   assert.deepStrictEqual(summary.models, { 'claude-opus-4-6': 4000, 'claude-sonnet-4-6': 1000 });
 });
@@ -78,16 +79,27 @@ test('buildSummaryJson has no costUSD field', () => {
     activities: {},
     models: {},
   };
-  const summary = hook.buildSummaryJson(mockUsage, 'user', 'main');
+  const now = new Date('2026-04-06T14:30:00.000Z');
+  const summary = hook.buildSummaryJson(mockUsage, 'user', 'main', now);
   assert.strictEqual(summary.costUSD, undefined);
 });
 
-test('getExportPath returns expected format', () => {
+test('getExportPath includes timestamp for uniqueness', () => {
   assert.strictEqual(typeof hook.getExportPath, 'function');
-  const exportPath = hook.getExportPath('/tmp/project', 'rutger');
+  const now = new Date('2026-04-06T14:30:45.123Z');
+  const exportPath = hook.getExportPath('/tmp/project', 'rutger', now);
   assert.ok(exportPath.includes('docs/costs/reports/'), 'Should be in docs/costs/reports/');
   assert.ok(exportPath.includes('rutger'), 'Should contain username');
+  assert.ok(exportPath.includes('143045'), 'Should contain timestamp');
   assert.ok(exportPath.endsWith('.json'), 'Should end with .json');
+});
+
+test('getExportPath produces unique names for same user same day', () => {
+  const t1 = new Date('2026-04-06T10:00:00.000Z');
+  const t2 = new Date('2026-04-06T15:30:00.000Z');
+  const p1 = hook.getExportPath('/tmp/project', 'rutger', t1);
+  const p2 = hook.getExportPath('/tmp/project', 'rutger', t2);
+  assert.notStrictEqual(p1, p2, 'Paths should differ for different times on same day');
 });
 
 // ═══════════════════════════════════════════════════════════════════

@@ -12,13 +12,16 @@ const os = require('os');
 
 /**
  * Build the export path for a cost summary.
+ * Includes timestamp to avoid overwriting earlier sessions on the same day.
  * @param {string} projectRoot
  * @param {string} username
+ * @param {Date} now
  * @returns {string}
  */
-function getExportPath(projectRoot, username) {
-  const date = new Date().toISOString().split('T')[0];
-  return path.join(projectRoot, 'docs', 'costs', 'reports', `${date}-${username}.json`);
+function getExportPath(projectRoot, username, now) {
+  const date = now.toISOString().split('T')[0];
+  const time = now.toISOString().split('T')[1].replace(/[:.]/g, '').slice(0, 6);
+  return path.join(projectRoot, 'docs', 'costs', 'reports', `${date}-${username}-${time}.json`);
 }
 
 /**
@@ -26,9 +29,10 @@ function getExportPath(projectRoot, username) {
  * @param {import('../lib/cost-reporter').SessionUsage} usage
  * @param {string} username
  * @param {string} branch
+ * @param {Date} now
  * @returns {object}
  */
-function buildSummaryJson(usage, username, branch) {
+function buildSummaryJson(usage, username, branch, now) {
   const activities = {};
   for (const [label, a] of Object.entries(usage.activities || {})) {
     activities[label] = a.totalTokens;
@@ -40,7 +44,7 @@ function buildSummaryJson(usage, username, branch) {
   }
 
   return {
-    date: new Date().toISOString().split('T')[0],
+    date: now.toISOString().split('T')[0],
     user: username,
     branch,
     totalTokens: usage.totalTokens,
@@ -72,13 +76,14 @@ function run(rawInput) {
     if (usage.turns === 0) return;
 
     const username = os.userInfo().username;
-    const exportPath = getExportPath(process.cwd(), username);
+    const now = new Date();
+    const exportPath = getExportPath(process.cwd(), username, now);
 
     // Ensure directory exists
     const dir = path.dirname(exportPath);
     fs.mkdirSync(dir, { recursive: true });
 
-    const summary = buildSummaryJson(usage, username, latest.gitBranch || 'unknown');
+    const summary = buildSummaryJson(usage, username, latest.gitBranch || 'unknown', now);
     fs.writeFileSync(exportPath, JSON.stringify(summary, null, 2) + '\n');
   } catch {
     // Async hook — never block or pollute context
