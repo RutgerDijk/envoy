@@ -789,14 +789,14 @@ test('Agent tool_use detected', () => {
   assert.strictEqual(costReporter.detectActivity(msg), 'agent:Explore');
 });
 
-test('Text-only message returns general', () => {
+test('Text-only message returns null (needs phase inference)', () => {
   const msg = { content: [{ type: 'text', text: 'Just a normal response' }] };
-  assert.strictEqual(costReporter.detectActivity(msg), 'general');
+  assert.strictEqual(costReporter.detectActivity(msg), null);
 });
 
 test('Edit tool with envoy: in new_string is NOT a false positive', () => {
   const msg = { content: [{ type: 'tool_use', name: 'Edit', input: { new_string: 'envoy:brainstorm example' } }] };
-  assert.strictEqual(costReporter.detectActivity(msg), 'general');
+  assert.strictEqual(costReporter.detectActivity(msg), null);
 });
 
 test('Review-related text detected', () => {
@@ -804,9 +804,9 @@ test('Review-related text detected', () => {
   assert.strictEqual(costReporter.detectActivity(msg), 'review');
 });
 
-test('Non-array content returns general', () => {
+test('Non-array content returns null', () => {
   const msg = { content: 'just a string' };
-  assert.strictEqual(costReporter.detectActivity(msg), 'general');
+  assert.strictEqual(costReporter.detectActivity(msg), null);
 });
 
 section('cost-reporter: formatTokens');
@@ -823,29 +823,10 @@ test('Small numbers as-is', () => {
   assert.strictEqual(costReporter.formatTokens(500), '500');
 });
 
-section('cost-reporter: formatCost');
+section('cost-reporter: classifyPhase');
 
-test('Dollar amounts formatted correctly', () => {
-  assert.strictEqual(costReporter.formatCost(1.5), '$1.50');
-  assert.strictEqual(costReporter.formatCost(0.05), '$0.05');
-  assert.strictEqual(costReporter.formatCost(0.001), '$0.0010');
-});
-
-section('cost-reporter: pricing');
-
-test('All model tiers have pricing', () => {
-  assert(costReporter.PRICING['claude-opus-4-6']);
-  assert(costReporter.PRICING['claude-sonnet-4-6']);
-  assert(costReporter.PRICING['claude-haiku-4-5']);
-});
-
-test('Each pricing has all rate types', () => {
-  for (const [, p] of Object.entries(costReporter.PRICING)) {
-    assert(typeof p.input === 'number');
-    assert(typeof p.output === 'number');
-    assert(typeof p.cacheWrite === 'number');
-    assert(typeof p.cacheRead === 'number');
-  }
+test('classifyPhase is exported', () => {
+  assert.strictEqual(typeof costReporter.classifyPhase, 'function');
 });
 
 // ═══════════════════════════════════════════════════════════════════
