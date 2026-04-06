@@ -292,6 +292,52 @@ test('formatReport sorts activities by totalTokens descending', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// Task 4: Cross-project discovery
+// ═══════════════════════════════════════════════════════════════════
+
+section('cross-project: decodeProjectName');
+
+test('decodeProjectName is exported', () => {
+  assert.strictEqual(typeof costReporter.decodeProjectName, 'function');
+});
+
+test('decodeProjectName extracts last two segments', () => {
+  const result = costReporter.decodeProjectName('-Users-rutger-Projects-EnvoyProject-envoy');
+  assert.strictEqual(result, 'EnvoyProject/envoy');
+});
+
+test('decodeProjectName handles single segment', () => {
+  const result = costReporter.decodeProjectName('-Users-rutger-myproject');
+  assert.strictEqual(result, 'rutger/myproject');
+});
+
+test('decodeProjectName handles deep paths', () => {
+  const result = costReporter.decodeProjectName('-Users-rutger-Projects-Work-Client-api');
+  assert.strictEqual(result, 'Client/api');
+});
+
+test('discoverAllProjects is exported', () => {
+  assert.strictEqual(typeof costReporter.discoverAllProjects, 'function');
+});
+
+test('discoverAllProjects returns an array', () => {
+  const projects = costReporter.discoverAllProjects();
+  assert.ok(Array.isArray(projects), 'Should return an array');
+});
+
+test('formatReport includes BY PROJECT when byProject data exists', () => {
+  const data = {
+    ...mockAggregated,
+    byProject: {
+      'EnvoyProject/envoy': { totalTokens: 8000 },
+      'Other/project': { totalTokens: 2000 },
+    },
+  };
+  const report = costReporter.formatReport(data);
+  assert.ok(report.includes('BY PROJECT'), 'Should contain BY PROJECT section');
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
 
