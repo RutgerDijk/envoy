@@ -29,6 +29,14 @@ pwd
 
 ## Process
 
+**Discipline rule:** Every step in this skill MUST be executed as written, not narrated.
+- DO NOT say "git branch --show-current would show..."
+- DO run: `git branch --show-current` and capture output
+- DO verify each step succeeded before proceeding
+- DO NOT assume steps worked without evidence
+
+This is a cleanup operation. Mistakes here mean lost work. Execute exactly.
+
 ### Step 1: Get Current Branch and Worktree Info
 
 ```bash
@@ -72,6 +80,8 @@ if [ "$WIKI_CHANGED" -gt 0 ]; then
   /envoy:wiki-sync
 fi
 ```
+
+**If wiki-sync fails:** STOP. Do NOT proceed to Step 6 (worktree removal). Removing the worktree before a successful wiki sync would permanently lose the documentation changes. Diagnose and fix the wiki-sync failure first, then re-run cleanup.
 
 ### Step 6: Remove Worktree
 
