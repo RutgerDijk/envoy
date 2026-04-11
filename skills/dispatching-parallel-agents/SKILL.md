@@ -91,9 +91,18 @@ Each agent gets:
 ### 5. Dispatch in Parallel
 
 ```
-Task("Fix UserService.GetById null reference - backend/tests/UserServiceTests.cs")
-Task("Fix UserCard component not rendering - frontend/src/components/__tests__/UserCard.test.tsx")
-Task("Fix migration rollback issue - backend/Migrations/")
+Agent({
+  description: "Fix UserService.GetById null reference",
+  prompt: `Fix the failing tests in backend/tests/UserServiceTests.cs`
+})
+Agent({
+  description: "Fix UserCard component not rendering",
+  prompt: `Fix the failing tests in frontend/src/components/__tests__/UserCard.test.tsx`
+})
+Agent({
+  description: "Fix migration rollback issue",
+  prompt: `Fix the migration rollback issue in backend/Migrations/`
+})
 // All three run concurrently
 ```
 
