@@ -21,6 +21,12 @@ Auto-diagnose and fix CI/CD failures from GitHub Actions. Polls for failed runs,
 
 ### Step 1: Identify PR and Failed Runs
 
+PR detection order:
+1. **Argument:** `/envoy:fix-ci <pr-number>` — explicit PR number passed
+2. **File:** `/tmp/envoy-active-pr.txt` — written by `envoy:finalize` after PR creation
+3. **Git:** `gh pr view` — current branch's associated PR
+4. **FAIL:** "Cannot find PR. Specify: `/envoy:fix-ci <pr-number>`"
+
 ```bash
 # Detect PR number
 if [ -n "$1" ]; then
@@ -31,6 +37,11 @@ else
   PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null)
 fi
 
+if [ -z "$PR_NUMBER" ]; then
+  echo "Cannot find PR. Specify: /envoy:fix-ci <pr-number>"
+  exit 1
+fi
+
 OWNER=$(gh repo view --json owner -q '.owner.login')
 REPO=$(gh repo view --json name -q '.name')
 BRANCH=$(git branch --show-current)
@@ -38,8 +49,6 @@ BRANCH=$(git branch --show-current)
 # Get latest check runs
 gh pr checks $PR_NUMBER --json name,state,conclusion 2>/dev/null
 ```
-
-If no PR found, report error and stop.
 
 ### Step 2: Poll for Check Completion
 
