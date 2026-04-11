@@ -41,6 +41,9 @@ const result = parseComments(comments);
 // result.regexRate — e.g., "96%"
 ```
 
+**If `lib/coderabbit-parser.js` is not available or throws an error:**
+Fall back to LLM parsing for ALL comments — apply the Haiku fallback below to each comment. Do not fail silently; log: "coderabbit-parser unavailable — falling back to LLM parsing for all <N> comments."
+
 **For comments where `needsLLM: true` (confidence < 0.95):**
 Send to a Haiku agent for structured extraction (cheap fallback):
 
