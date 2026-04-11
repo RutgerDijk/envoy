@@ -21,9 +21,18 @@ Turn ideas into fully formed designs through collaborative dialogue. Produces ON
 3. Prefer multiple choice questions when possible
 4. Focus on: purpose, constraints, success criteria, affected areas
 
+### Phase 1.5: Repo Exploration
+
+Before proposing approaches, explore the repo:
+1. Read relevant existing files (use acceptance criteria as guide)
+2. Check for existing patterns, utilities, or similar features
+3. Note file paths that will likely be affected
+
+This produces the implementation task list in the issue. Every referenced file path should be verified to exist (or confirmed as a new file to create).
+
 ### Phase 2: Exploring Approaches
 
-1. Propose 2-3 different approaches with trade-offs
+1. Propose 2-3 different approaches with trade-offs (informed by Phase 1.5 findings)
 2. Lead with your recommended option and explain why
 3. Get user confirmation before proceeding
 
@@ -52,6 +61,18 @@ gh issue create --title "<Feature Name>" --body "$(cat <<'EOF'
 
 - [ ] Criterion 1
 - [ ] Criterion 2
+
+## Tasks
+
+> Every task in this spec is REQUIRED. Optional or stretch work goes in a separate issue.
+
+### Task 1: <name>
+**Files:** Create/Modify: `exact/path/to/file.ext`
+**What:** <one sentence describing the change>
+
+### Task 2: <name>
+**Files:** Create/Modify: `exact/path/to/file.ext`
+**What:** <one sentence describing the change>
 
 ---
 
