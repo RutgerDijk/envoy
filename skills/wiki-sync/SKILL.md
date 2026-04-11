@@ -31,7 +31,7 @@ fi
 # Check for content
 FILE_COUNT=$(find docs/wiki -name "*.md" | wc -l)
 if [ "$FILE_COUNT" -eq 0 ]; then
-  echo "docs/wiki/ is empty. Add documentation first."
+  echo "docs/wiki/ has no markdown files. Add documentation before syncing."
   exit 1
 fi
 

@@ -253,7 +253,7 @@ The "waste" is keeping code you can't trust.
 | "TDD will slow me down" | TDD faster than debugging. |
 | "Existing code has no tests" | You're improving it. Add tests for new code. |
 
-## Red Flags - STOP and Start Over
+## Red Flags — STOP IMMEDIATELY
 
 If you catch yourself:
 - Writing code before test
@@ -265,7 +265,17 @@ If you catch yourself:
 - "Keep as reference"
 - "This is different because..."
 
-**All of these mean: Delete code. Start over with TDD.**
+**STOP. Delete the code. Start over with TDD. No exceptions.**
+
+Proceeding past a red flag = TDD violation = start over.
+
+## TDD Scope
+
+TDD applies to all new and modified behavior:
+- **New code:** always write failing test first.
+- **Modified existing code with no tests:** write test FIRST, then change.
+- **Refactoring without behavior change:** refactor first, add tests if missing.
+- **Existing tests that don't cover the change:** add coverage for new behavior only.
 
 ## Verification Checklist
 

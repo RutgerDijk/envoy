@@ -26,6 +26,21 @@ WHEN receiving code review feedback:
 6. IMPLEMENT: One item at a time, test each
 ```
 
+## Iron Law: Verify ALL Before Implement ANY
+
+1. READ all feedback items
+2. UNDERSTAND every item — restate or ask for clarification
+3. VERIFY all items are technically sound
+4. THEN implement
+
+Do NOT:
+- Implement items 1–3 while still unclear on item 4
+- Assume items are independent and implement partially
+- Skip verification on any item because it "seems obviously correct"
+
+All items verified → implement all.
+Any item unclear → ask first, implement nothing.
+
 ## Forbidden Responses
 
 **NEVER:**

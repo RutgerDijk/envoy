@@ -84,6 +84,7 @@ Parse all scenarios from the YAML file.
 Agent({
   model: "haiku",
   description: "Eval baseline: <scenario-name>",
+  timeout: 120000,
   prompt: `You are a helpful coding assistant.
 
   The user says: "<input>"
@@ -103,6 +104,7 @@ Agent({
 Agent({
   model: "haiku",
   description: "Eval with skill: <scenario-name>",
+  timeout: 120000,
   prompt: `You are a helpful coding assistant with the following skill loaded:
 
   <full SKILL.md content>

@@ -185,6 +185,19 @@ CS_FILES=$(echo "$CHANGED_FILES" | grep '\.cs$' | grep -v 'Designer.cs' | grep -
 TS_FILES=$(echo "$CHANGED_FILES" | grep -E '\.(ts|tsx)$' | grep -v '\.d\.ts$' | grep -v '\.spec\.' | grep -v '\.test\.')
 ```
 
+**If no code files found:**
+```
+No code files changed on this branch — nothing to document.
+
+Checked:
+- C# files (*.cs, excluding migrations and generated): 0
+- TypeScript/React files (*.ts, *.tsx, excluding tests): 0
+
+If you expected files to be documented, verify the branch has commits:
+git diff --name-only main...HEAD
+```
+Stop here — no action needed.
+
 ### Step 2: Analyze Each File
 
 For each file:

@@ -22,6 +22,7 @@ Envoy includes 23 skills organized by purpose.
 | `envoy:requesting-code-review` | Completing tasks or before merging |
 | `envoy:receiving-code-review` | Receiving code review feedback |
 | `envoy:fix-ci` | CI/CD checks fail on a PR — diagnose and fix test, build, or lint failures |
+| `envoy:review --quick` | Fast review — lint + cleanup only (Layers 0 and 0.5) |
 
 ## Advanced Patterns
 
@@ -53,7 +54,7 @@ Envoy includes 23 skills organized by purpose.
 ## Skill Types
 
 **Rigid skills** (follow exactly, no adaptation):
-- `test-driven-development`, `systematic-debugging`, `verification`
+- `test-driven-development`, `systematic-debugging`, `verification`, `review`, `pickup`, `receiving-code-review`
 
 **Flexible skills** (adapt principles to context):
 - `brainstorm`, `search-first`

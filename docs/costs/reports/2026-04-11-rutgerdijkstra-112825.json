@@ -1,0 +1,24 @@
+{
+  "date": "2026-04-11",
+  "user": "rutgerdijkstra",
+  "branch": "feature/18-enforce-finalize-taskcreate-wiki-sync",
+  "totalTokens": 29937411,
+  "turns": 322,
+  "activities": {
+    "other": 26680586,
+    "skill:brainstorm": 52100,
+    "agent:Explore": 96773,
+    "review": 326162,
+    "skill:pickup": 123317,
+    "agent:general": 1131573,
+    "planning": 1030237,
+    "skill:review": 89573,
+    "agent:code-reviewer": 90132,
+    "skill:finalize": 100779,
+    "agent:finalize-execution": 106109,
+    "skill:wiki-sync": 110070
+  },
+  "models": {
+    "claude-sonnet-4-6": 29937411
+  }
+}

@@ -12,11 +12,7 @@ brainstorm → pickup → review → finalize → cleanup
 /envoy:brainstorm "Add user profile editing"
 ```
 
-Socratic dialogue that produces:
-- A design doc with architecture decisions
-- An implementation plan with numbered tasks
-- A GitHub issue linking the spec
-- A feature branch with the spec committed
+Socratic dialogue that produces a GitHub issue with design, architecture, acceptance criteria, and a full implementation task list (with exact file paths) for use by `/envoy:pickup`.
 
 Use `--design-only` to stop after the design doc (no plan).
 
@@ -59,17 +55,16 @@ Fixes all findings before proceeding.
 /envoy:finalize
 ```
 
-No local reviews — trusts that `/review` already ran.
+Assumes `/envoy:review` has already run. No local reviews here.
 
-1. Add docstrings to public APIs
-2. Push branch and create PR
-3. Poll for GitHub CodeRabbit comments
-4. Parse comments with regex (95%+ hit rate, Haiku fallback for the rest)
-5. Address ALL findings including nitpicks
-6. Reply to each comment with fix + commit hash, resolve thread
-7. Push fixes, re-poll (max 3 cycles)
-8. Final verification: tests, build, lint, health, zero unresolved conversations
-9. Wiki sync
+1. Push branch and create PR
+2. Poll for GitHub CodeRabbit comments
+3. Parse comments with regex (95%+ hit rate, Haiku fallback for the rest)
+4. Address ALL findings including nitpicks
+5. Reply to each comment with fix + commit hash, resolve thread
+6. Push fixes, re-poll (max 3 cycles)
+7. Final verification: tests, build, lint, health, zero unresolved conversations
+8. Wiki sync
 
 Uses the **completion signal protocol** — "no new comments" must be confirmed 3 consecutive times before the loop stops.
 

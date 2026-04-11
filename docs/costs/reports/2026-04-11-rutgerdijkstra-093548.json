@@ -1,0 +1,14 @@
+{
+  "date": "2026-04-11",
+  "user": "rutgerdijkstra",
+  "branch": "feature/18-enforce-finalize-taskcreate-wiki-sync",
+  "totalTokens": 2953600,
+  "turns": 67,
+  "activities": {
+    "other": 2901500,
+    "skill:brainstorm": 52100
+  },
+  "models": {
+    "claude-sonnet-4-6": 2953600
+  }
+}
