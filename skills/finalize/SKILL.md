@@ -325,7 +325,6 @@ Try: gh pr create --web
 
 ## Integration with Envoy
 
-- Replaces `envoy:finishing-branch` as the shipping step in the workflow
 - Assumes `envoy:review` (layered review) has already been run
 - Invokes `envoy:fix-ci` for CI failure auto-remediation
 - Uses `envoy:verification` principles (evidence before assertions)

@@ -48,7 +48,7 @@ gh issue comment <issue-number> --body "Started working on this issue in branch 
 
 ### Step 3: Create Feature Branch
 
-Create a NEW branch from main. Brainstorm no longer creates branches — pickup owns branch creation.
+Create a new branch from main:
 
 ```bash
 TOPIC=$(echo "<title>" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-' | head -c 40)
