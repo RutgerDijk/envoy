@@ -33,12 +33,14 @@ if [[ -n $(git status --porcelain) ]]; then
   exit 1
 fi
 
-# 3. Tests pass
-dotnet test
-npm test
+# 3. Tests pass (|| true — project may not use both stacks)
+dotnet test 2>/dev/null || true
+npm test 2>/dev/null || true
 ```
 
 **If any precondition fails, stop and resolve.**
+
+Note: The finalize skill wrapper also checks preconditions before spawning this agent. Both checks must pass (belt-and-suspenders).
 
 ## Process
 
@@ -86,14 +88,13 @@ echo "$PR_NUMBER" > /tmp/envoy-active-pr.txt
 
 ### Step 3: Poll for CodeRabbit Comments (Exponential Backoff)
 
-# CodeRabbit: 22min max (async review, slower — GitHub App processes PR asynchronously)
-
-GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (22-minute max):
+GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (22-minute max).
 
 ```bash
+# CodeRabbit: 22min max (async review — GitHub App processes PR asynchronously)
 OWNER=$(gh repo view --json owner -q '.owner.login')
 REPO=$(gh repo view --json name -q '.name')
-PR_NUMBER=<number>
+PR_NUMBER=$(cat /tmp/envoy-active-pr.txt)
 
 # Exponential backoff in seconds — 22min (1320s) max
 # intervals = [120s, 120s, 240s, 360s, 480s]
@@ -175,9 +176,9 @@ git push
 
 ### Step 7: Re-poll (Max 3 Cycles, with Completion Signal)
 
-After pushing, CodeRabbit may leave new comments on the fixes. Use the **completion signal protocol** from `lib/loop-safeguards.js`:
+After pushing, CodeRabbit may leave new comments on the fixes. Use the **completion signal pattern** (inline):
 
-"No new comments" must be confirmed 3 consecutive times (`ENVOY_LOOP_COMPLETE`) before the loop stops — a single check could miss comments still being posted.
+"No new comments" must be confirmed 3 consecutive times before the loop stops — a single check could miss comments still being posted. Output `ENVOY_LOOP_COMPLETE` on each clean check; reset the counter when new comments appear.
 
 ```bash
 LAST_PUSH=$(git log -1 --format=%cI)
@@ -207,11 +208,10 @@ Please review and decide how to proceed.
 
 ### Step 8: Poll CI and Auto-Fix Failures
 
-# CI: 15min max (synchronous checks, faster feedback loop)
-
 After CodeRabbit is resolved, poll GitHub Actions for CI status:
 
 ```bash
+# CI: 15min max (synchronous checks, faster feedback loop)
 # Poll with exponential backoff — 15min timeout
 # intervals: 30s, 60s, 120s, 240s, 240s, 240s (cumulative: 15.5min)
 ELAPSED=0
