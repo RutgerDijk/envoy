@@ -33,8 +33,8 @@ If no changed files: stop with "Nothing to review. Make changes first."
 
 ```bash
 CHANGED=$(git diff --name-only main...HEAD)
-FILE_COUNT=$(echo "$CHANGED" | wc -l)
-LINE_COUNT=$(git diff main...HEAD --stat | tail -1 | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+')
+FILE_COUNT=$(echo "$CHANGED" | grep -c '.' || echo 0)
+LINE_COUNT=$(git diff main...HEAD --numstat | awk '{sum += $1} END {print sum+0}')
 ```
 
 | Tier | Criteria | Layers |

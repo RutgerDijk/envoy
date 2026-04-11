@@ -12,7 +12,7 @@ brainstorm → pickup → review → finalize → cleanup
 /envoy:brainstorm "Add user profile editing"
 ```
 
-Socratic dialogue that produces a GitHub issue with design, architecture, and acceptance criteria.
+Socratic dialogue that produces a GitHub issue with design, architecture, acceptance criteria, and a full implementation task list (with exact file paths) for use by `/envoy:pickup`.
 
 Use `--design-only` to stop after the design doc (no plan).
 

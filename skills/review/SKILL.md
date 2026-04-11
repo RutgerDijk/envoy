@@ -26,9 +26,13 @@ After this skill completes, use `/envoy:finalize` to create the PR.
 
 ```bash
 BRANCH=$(git branch --show-current)
-```
 
-Check for `--quick` flag in arguments.
+# Parse flags from arguments
+flags=""
+if [[ "$*" == *"--quick"* ]]; then
+  flags="--quick"
+fi
+```
 
 ### Step 2: Spawn Review Execution Agent
 

@@ -228,7 +228,9 @@ if (state.tasks.length > 0) {
   console.log(`Resuming: ${done}/${state.tasks.length} tasks complete`);
   console.log('Recent decisions:', state.decisions.slice(-3));
 } else {
-  // Fresh start
+  // Fresh start — these variables are available from earlier steps
+  // currentBranch = output of `git branch --show-current`
+  // issueNumber = the argument passed to /envoy:pickup
   state.branch = currentBranch;
   state.plan = `issue #${issueNumber}`;
   for (const task of planTasks) {

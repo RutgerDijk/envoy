@@ -29,9 +29,18 @@ if [[ -n $(git status --porcelain) ]]; then
   exit 1
 fi
 
-# 3. Tests pass
-dotnet test 2>/dev/null || true
-npm test 2>/dev/null || true
+# 3. Tests pass (only run when tool + project are present)
+if command -v dotnet >/dev/null 2>&1 && find . \( -name '*.sln' -o -name '*.csproj' \) -print -quit | grep -q .; then
+  dotnet test
+else
+  echo "Skipping dotnet tests: dotnet or .NET project not present"
+fi
+
+if command -v npm >/dev/null 2>&1 && [[ -f package.json ]]; then
+  npm test
+else
+  echo "Skipping npm tests: npm or package.json not present"
+fi
 ```
 
 ## Process

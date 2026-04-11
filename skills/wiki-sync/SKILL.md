@@ -31,9 +31,8 @@ fi
 # Check for content
 FILE_COUNT=$(find docs/wiki -name "*.md" | wc -l)
 if [ "$FILE_COUNT" -eq 0 ]; then
-  echo "docs/wiki/ has no markdown files — nothing to sync."
-  echo "(This is a no-op. If you expected files, verify docs/wiki/ has *.md files.)"
-  exit 0
+  echo "docs/wiki/ has no markdown files. Add documentation before syncing."
+  exit 1
 fi
 
 echo "Found $FILE_COUNT markdown files in docs/wiki/"
