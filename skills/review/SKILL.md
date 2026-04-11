@@ -13,6 +13,8 @@ After this skill completes, use `/envoy:finalize` to create the PR. GitHub CodeR
 
 **Announce at start:** "I'm using envoy:review to run a multi-layer code review."
 
+**Discipline rule:** This is a rigid skill. Each layer MUST be executed, not narrated. Do not write "I would do X" or "I did X" — actually do X. Before executing each layer, announce: "Running Layer N: <name>..."
+
 ## Arguments
 
 | Flag | Effect |
@@ -133,12 +135,15 @@ dotnet build
 
 ## Layer 0.5: Cleanup Pass (All Tiers Except Trivial)
 
+**YOU MUST spawn an Agent tool call here. Inline cleanup without spawning an agent is wrong. Do not skip this.**
+
 Spawn a fresh cleanup agent that ONLY sees the diff — no implementation context, no conversation history. This is a focused mandate to remove AI-generated slop.
 
 **Key principle:** Never add "don't do X" instructions to the implementing agent — let it implement freely, then run this focused cleanup.
 
 ```
 Agent({
+  model: "sonnet",
   description: "Cleanup pass",
   prompt: `You are a code cleanup agent. Your job is to remove slop
   from a recent implementation.
@@ -278,6 +283,10 @@ git checkout -- .   # revert failed category
 ---
 
 ## Layer 1: AI Code Review (Small+ Tiers)
+
+**YOU MUST spawn an Agent tool call here with `subagent_type: "envoy:code-reviewer"`. Inline review without spawning an agent is wrong. Do not skip this.**
+
+**If you do not spawn an Agent tool call here, the review is incomplete. Do not proceed to Layer 2. STOP and spawn the agent.**
 
 Spawn a fresh **Sonnet** agent with NO implementation context. The agent uses **iterative retrieval** to understand codebase context:
 

@@ -24,7 +24,7 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 - Each skill lives in `skills/<skill-name>/SKILL.md`
 - Frontmatter: only `name` and `description` fields, max 1024 chars
 - Description must be under 30 words and start with "Use when..." — triggering conditions only
-- Rigid skills (TDD, debugging, verification): follow exactly, no adaptation
+- Rigid skills (TDD, debugging, verification, review, pickup, receiving-code-review): follow exactly, no adaptation
 - Flexible skills (brainstorming, planning): adapt principles to context
 - Include "Announce at start" directive and "Integration with Envoy" section
 
