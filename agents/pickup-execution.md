@@ -140,6 +140,24 @@ Before dispatching any task:
 - If stale: surface specific staleness to user, let them decide to proceed or update the issue.
 - If viable: continue.
 
+### Step 2b: Search-First Pattern Check
+
+Before executing any task, check whether the functionality already exists in the codebase:
+
+1. Search for existing similar patterns, utilities, or components referenced in the issue.
+2. Use keywords from the task titles and acceptance criteria to grep/glob the repo.
+
+Decision tree:
+
+| Search result | Response |
+|---------------|----------|
+| **Nothing found** | Continue. This is a Build. |
+| **Partial match — could extend** | STOP. Surface: "Found `<file>` which may cover part of this. Options: A) Extend it, B) Build new alongside it, C) Proceed as planned." Wait for user decision. |
+| **Strong match — could adopt** | STOP. Surface: "Found `<file>` which appears to already implement `<capability>`. Options: A) Adopt it, B) Compose it into the new solution, C) Proceed as planned (build new)." Wait for user decision. |
+
+**If user chooses Adopt or Extend or Compose:** update the plan accordingly, then continue.
+**If user chooses Build (or no match found):** proceed to Step 3.
+
 ### Step 3: Dependency Analysis
 
 Before executing ANY task, analyze dependencies to identify parallelization opportunities.
