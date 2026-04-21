@@ -25,7 +25,7 @@ Use `--design-only` to stop after the design doc (no plan).
 - Fetches the GitHub issue
 - Creates a git worktree from the feature branch
 - Loads the spec and detects stack profiles
-- Auto-continues to execution if the spec has implementation tasks
+- Shows plan summary and waits for approval before executing tasks
 
 Use `--plan-only` to stop after workspace setup.
 
@@ -58,12 +58,12 @@ Fixes all findings before proceeding.
 Assumes `/envoy:review` has already run. No local reviews here.
 
 1. Push branch and create PR
-2. Poll for GitHub CodeRabbit comments
-3. Parse comments with regex (95%+ hit rate, Haiku fallback for the rest)
-4. Address ALL findings including nitpicks
-5. Reply to each comment with fix + commit hash, resolve thread
-6. Push fixes, re-poll (max 3 cycles)
-7. Final verification: tests, build, lint, health, zero unresolved conversations
+2. Poll for GitHub CodeRabbit comments (exponential backoff, 22min max)
+3. Address ALL findings including nitpicks
+4. Reply to each comment with fix + commit hash, resolve thread
+5. Push fixes, re-poll (max 3 cycles)
+6. Poll CI, auto-fix failures via `/envoy:fix-ci`
+7. Final verification: tests, build, lint, zero unresolved conversations
 8. Wiki sync
 
 Uses the **completion signal protocol** — "no new comments" must be confirmed 3 consecutive times before the loop stops.
