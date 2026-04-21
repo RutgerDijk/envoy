@@ -79,3 +79,11 @@ After the PR is merged:
 - Deletes the feature branch
 
 Use `--all` to clean up all merged worktrees at once.
+
+---
+
+## Platform constraints
+
+Claude Code subagents cannot spawn subagents. When an agent definition declares `tools: [Agent, ...]`, the `Agent` tool is silently stripped from the subagent's runtime allowlist — only non-Agent tools come through.
+
+Envoy's orchestrator skills (`review`, `pickup`, `finalize`) therefore run orchestration **in the skill itself** and spawn only leaf subagents (one level of nesting). Each skill loads shared discipline content from `contexts/discipline-*.md` and injects it verbatim into every subagent prompt so rules stay consistent across workers.
