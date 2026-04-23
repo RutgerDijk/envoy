@@ -1,0 +1,39 @@
+{
+  "skill": "fix-ci",
+  "scenarios": [
+    {
+      "name": "missing finalize state → fatal (no PR to fix CI for)",
+      "setup": { "files": {} },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "finalize state|PR"
+      }
+    },
+    {
+      "name": "finalize state with pending CI → ok; loop counter initialised",
+      "setup": {
+        "files": {
+          ".envoy/finalize/state.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"prNumber\":123,\"prUrl\":\"https://example/pr/123\",\"ciStatus\":\"pending\",\"createdAt\":\"2026-04-23T00:00:00Z\"}"
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "stdout_matches": "PR #123|ci pending",
+        "artifacts_created": [".envoy/loops/fix-ci.json"]
+      }
+    },
+    {
+      "name": "loop exhausted (maxCycles reached with no confirms) → fatal",
+      "setup": {
+        "files": {
+          ".envoy/finalize/state.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"prNumber\":123,\"ciStatus\":\"failure\",\"createdAt\":\"2026-04-23T00:00:00Z\"}",
+          ".envoy/loops/fix-ci.json": "{\"loop\":\"fix-ci\",\"confirmed\":0,\"maxCycles\":3,\"cyclesSeen\":3,\"history\":[]}"
+        }
+      },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "max.*cycles|exhausted"
+      }
+    }
+  ]
+}

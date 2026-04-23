@@ -1,0 +1,42 @@
+{
+  "skill": "pickup",
+  "scenarios": [
+    {
+      "name": "missing tasks file for issue → fatal with remediation",
+      "setup": { "files": {} },
+      "env": { "ENVOY_ISSUE_NUMBER": "23" },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "tasks file.*not found|\\.envoy-tasks/23\\.json",
+        "artifacts_missing": [".envoy/pickup/session.json"]
+      }
+    },
+    {
+      "name": "valid tasks file → ok; session.json created",
+      "setup": {
+        "files": {
+          ".envoy-tasks/23.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":23,\"strategy\":\"batch\",\"tasks\":[{\"id\":\"task-1\",\"title\":\"Add feature\",\"files\":[\"src/foo.ts\"],\"acceptance\":[\"works\"]}]}"
+        }
+      },
+      "env": { "ENVOY_ISSUE_NUMBER": "23" },
+      "expected": {
+        "status": "ok",
+        "stdout_matches": "1 task",
+        "artifacts_created": [".envoy/pickup/session.json", ".envoy/active-skill.json"]
+      }
+    },
+    {
+      "name": "tasks file has wrong schema version → fatal",
+      "setup": {
+        "files": {
+          ".envoy-tasks/23.json": "{\"$schemaVersion\":\"99\",\"issueNumber\":23,\"tasks\":[]}"
+        }
+      },
+      "env": { "ENVOY_ISSUE_NUMBER": "23" },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "schema"
+      }
+    }
+  ]
+}

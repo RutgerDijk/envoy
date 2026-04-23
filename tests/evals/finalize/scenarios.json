@@ -1,0 +1,39 @@
+{
+  "skill": "finalize",
+  "scenarios": [
+    {
+      "name": "missing review handoff → fatal",
+      "setup": { "files": {} },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "handoff|review",
+        "artifacts_missing": [".envoy/finalize/state.json"]
+      }
+    },
+    {
+      "name": "valid review handoff with approved status → ok; finalize state initialised",
+      "setup": {
+        "files": {
+          ".envoy/review/handoff-to-finalize.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"reviewStatus\":\"approved\",\"layers\":[{\"name\":\"lint\",\"status\":\"passed\"}],\"commitShas\":[\"aaaaaaa\"],\"producedAt\":\"2026-04-23T00:00:00Z\"}"
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "stdout_matches": "approved|ready to finalize",
+        "artifacts_created": [".envoy/finalize/state.json", ".envoy/active-skill.json"]
+      }
+    },
+    {
+      "name": "review handoff marked needs-fixes → fatal (should not finalize)",
+      "setup": {
+        "files": {
+          ".envoy/review/handoff-to-finalize.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"reviewStatus\":\"needs-fixes\",\"layers\":[],\"commitShas\":[],\"producedAt\":\"2026-04-23T00:00:00Z\"}"
+        }
+      },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "needs-fixes|not approved"
+      }
+    }
+  ]
+}
