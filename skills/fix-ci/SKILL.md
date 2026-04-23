@@ -1,6 +1,19 @@
 ---
 name: fix-ci
-description: Use when CI/CD checks fail on a PR and you need to diagnose and fix test, build, or lint failures
+description: Fix-CI expert. ALWAYS invoke when the /envoy:fix-ci command fires or when a PR has failing CI checks. Classifies failures, fixes root cause, pushes, re-polls — max 3 cycles. Do not push ad-hoc CI fixes without invoking the skill.
+when_to_use:
+  - When the user types /envoy:fix-ci [PR]
+  - When GitHub Actions reports a failing check on the current PR
+  - When /envoy:finalize Step 8 detects a failed CI check
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
+  - Skill
+  - WebFetch
 ---
 
 # Fix CI/CD Failures

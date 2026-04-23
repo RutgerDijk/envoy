@@ -1,6 +1,17 @@
 ---
 name: systematic-debugging
-description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes
+description: Debugging expert. ALWAYS invoke when encountering any bug, test failure, or unexpected behavior. Drives hypothesis → evidence → root-cause loop. Do not patch symptoms without the skill.
+when_to_use:
+  - When a test fails unexpectedly
+  - When behavior differs from what was intended
+  - When a fix did not resolve the reported issue
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
 ---
 
 # Systematic Debugging

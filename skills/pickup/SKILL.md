@@ -1,6 +1,19 @@
 ---
 name: pickup
-description: Use when ready to implement a GitHub issue — creates worktree, writes plan, executes with TDD
+description: Pickup expert. ALWAYS invoke when the /envoy:pickup command fires or when starting a GitHub issue. Creates worktree, verifies plan, executes tasks with TDD. Do not implement without invoking the skill.
+when_to_use:
+  - When the user types /envoy:pickup <issue>
+  - When ready to implement a GitHub issue with a brainstorm-generated plan
+  - When resuming after a context compaction mid-execution
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
+  - Skill
+  - Agent
 ---
 
 # Pickup Issue

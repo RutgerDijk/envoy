@@ -1,6 +1,19 @@
 ---
 name: coderabbit-pr-review
-description: Use when a PR has GitHub CodeRabbit comments that need to be addressed and resolved
+description: CodeRabbit PR reviewer expert. ALWAYS invoke when a PR has CodeRabbit comments to address or when the /envoy:coderabbit-pr-review command fires. Fixes every finding, replies and resolves each thread. Do not ignore or cherry-pick findings.
+when_to_use:
+  - When coderabbitai has posted comments on the current PR
+  - When the user types /envoy:coderabbit-pr-review
+  - As part of /envoy:finalize Steps 3–7
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
+  - Skill
+  - WebFetch
 ---
 
 # CodeRabbit PR Comment Resolution

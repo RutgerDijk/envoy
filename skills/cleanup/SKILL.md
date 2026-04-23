@@ -1,6 +1,16 @@
 ---
 name: cleanup
-description: Use after your PR has been merged to main, before starting new work
+description: Cleanup expert. ALWAYS invoke when the /envoy:cleanup command fires or after a PR is merged into main. Removes worktree, deletes feature branch, clears .envoy runtime state. Do not delete worktrees or branches manually.
+when_to_use:
+  - After your PR has merged to main and before starting new work
+  - When the user types /envoy:cleanup
+  - When clearing a stale feature branch + worktree pair
+allowed-tools:
+  - Read
+  - Bash
+  - Grep
+  - Glob
+  - Skill
 ---
 
 # Cleanup After Merge

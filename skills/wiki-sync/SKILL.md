@@ -1,6 +1,19 @@
 ---
 name: wiki-sync
-description: Use after updating documentation in docs/wiki/, or as part of PR finalization
+description: Wiki sync expert. ALWAYS invoke when docs/wiki/ has been modified or when the /envoy:wiki-sync command fires. Syncs docs/wiki/ to the GitHub wiki repository. Do not edit the wiki remote directly.
+when_to_use:
+  - When docs/wiki/ has been updated in the current branch
+  - When the user types /envoy:wiki-sync
+  - As part of /envoy:finalize Step 10 when docs/wiki/ changes are detected
+paths:
+  - docs/wiki/**
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
 ---
 
 # Wiki Sync

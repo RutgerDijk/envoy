@@ -1,6 +1,22 @@
 ---
 name: review
-description: Use after implementation is complete, before creating PR or finalizing work
+description: Review expert. ALWAYS invoke when the /envoy:review command fires or after implementation is complete and before creating a PR. Runs layered review (lint, cleanup, AI review, visual, docs). Do not perform inline review.
+when_to_use:
+  - After implementation is complete and before creating a PR
+  - When the user types /envoy:review
+  - When /envoy:pickup hands off by writing .envoy/pickup/handoff-to-review.json
+  - Before /envoy:finalize
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
+  - Skill
+  - Agent
+  - WebFetch
+model: opus
 ---
 
 # Multi-Layer Code Review

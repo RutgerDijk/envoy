@@ -1,6 +1,19 @@
 ---
 name: finalize
-description: Use when review is complete and you're ready to push, create PR, and ship
+description: Finalize expert. ALWAYS invoke when the /envoy:finalize command fires or after /envoy:review approves. Pushes branch, opens PR, drives CodeRabbit and CI loops, runs wiki-sync. Do not push or open PRs manually while this skill is applicable.
+when_to_use:
+  - After /envoy:review writes .envoy/review/handoff-to-finalize.json with reviewStatus "approved"
+  - When the user types /envoy:finalize
+  - When ready to ship reviewed work to a PR
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
+  - Skill
+  - WebFetch
 ---
 
 # Finalize
