@@ -1,0 +1,29 @@
+{
+  "$schemaVersion": "1",
+  "$id": "envoy/handoff-pickup-to-review",
+  "description": "Handoff from pickup to review — lives at .envoy/pickup/handoff-to-review.json.",
+  "type": "object",
+  "required": ["$schemaVersion", "issueNumber", "branch", "baseSha", "headSha", "tasksCompleted"],
+  "properties": {
+    "$schemaVersion": { "type": "string", "const": "1" },
+    "issueNumber": { "type": "number" },
+    "branch": { "type": "string" },
+    "baseSha": { "type": "string" },
+    "headSha": { "type": "string" },
+    "tasksCompleted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "commitSha"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "commitSha": { "type": "string" },
+          "filesChanged": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "stackProfiles": { "type": "array", "items": { "type": "string" } },
+    "producedAt": { "type": "string" }
+  }
+}

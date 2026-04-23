@@ -1,0 +1,28 @@
+{
+  "$schemaVersion": "1",
+  "$id": "envoy/handoff-review-to-finalize",
+  "description": "Handoff from review to finalize — lives at .envoy/review/handoff-to-finalize.json.",
+  "type": "object",
+  "required": ["$schemaVersion", "issueNumber", "branch", "reviewStatus", "layers"],
+  "properties": {
+    "$schemaVersion": { "type": "string", "const": "1" },
+    "issueNumber": { "type": "number" },
+    "branch": { "type": "string" },
+    "reviewStatus": { "type": "string", "enum": ["approved", "needs-fixes", "blocked"] },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["passed", "fixed", "skipped", "failed"] },
+          "findings": { "type": "number" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "commitShas": { "type": "array", "items": { "type": "string" } },
+    "producedAt": { "type": "string" }
+  }
+}

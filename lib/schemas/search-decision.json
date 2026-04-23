@@ -1,0 +1,25 @@
+{
+  "$schemaVersion": "1",
+  "$id": "envoy/search-decision",
+  "description": "Search-first outcome per task — lives at .envoy/search-decisions/<task-id>.json.",
+  "type": "object",
+  "required": ["$schemaVersion", "taskId", "decision"],
+  "properties": {
+    "$schemaVersion": { "type": "string", "const": "1" },
+    "taskId": { "type": "string" },
+    "decision": { "type": "string", "enum": ["build-new", "adopt", "extend", "compose"] },
+    "matches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "strength": { "type": "string", "enum": ["partial", "strong"] },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "rationale": { "type": "string" },
+    "decidedAt": { "type": "string" }
+  }
+}
