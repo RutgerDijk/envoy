@@ -14,6 +14,7 @@ allowed-tools:
   - Glob
   - Skill
   - WebFetch
+context: fork
 hooks:
   PreToolUse:
     - matcher: Agent

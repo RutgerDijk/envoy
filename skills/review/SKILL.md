@@ -17,6 +17,7 @@ allowed-tools:
   - Agent
   - WebFetch
 model: opus
+context: fork
 hooks:
   PreToolUse:
     - matcher: Agent
