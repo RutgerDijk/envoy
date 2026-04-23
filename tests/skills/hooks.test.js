@@ -131,7 +131,7 @@ test('code-reviewer prompt missing iterative-retrieval fails', () => {
     tool_input: {
       subagent_type: 'envoy:code-reviewer',
       description: 'AI code review',
-      prompt: 'Run AI code review\n\ngit diff main...HEAD\n(no mention of iterative-retrieval.md)',
+      prompt: 'Run AI code review\n\ngit diff main...HEAD\n(retrieval protocol not referenced)',
     },
   };
   const r = runHook(hook, tmp, input);
