@@ -99,71 +99,26 @@ LINE_COUNT=$(git diff main...HEAD --numstat | awk '{sum += $1} END {print sum+0}
 
 If `--quick` flag is set, override tier mapping: run Layers 0 and 0.5 only regardless of complexity.
 
-### 4. Score File Relevance
+### 4. Inputs produced by preflight
 
-Use `lib/relevance-scorer.js` to determine read depth per file:
+The inline `## Briefing` at the top of this skill runs `preflight.js`, which:
 
-```javascript
-const { scoreTaskRelevance, formatForPrompt } = require('../../lib/relevance-scorer');
-const changedFiles = getChangedFiles();
-const results = scoreTaskRelevance(changedFiles, projectRoot);
-const relevanceBriefing = formatForPrompt(results);
-```
+- Validates the pickup handoff at `.envoy/pickup/handoff-to-review.json`
+- Writes `.envoy/active-skill.json`
+- Prints the issue number, branch, diff range, and stack profiles
 
-Depth recommendations:
-- **full** — directly changed or critical dependency (score >= 0.5)
-- **focused** — read signatures + changed sections (score 0.2-0.5)
-- **skim** — scan exports only (score 0.1-0.2)
-- **skip** — not relevant
+You do NOT need to invoke library utilities yourself — preflight is the
+single source of truth for relevance scoring, stack detection, review
+learnings, and output compression. Consume its briefing; treat
+`.envoy/pickup/handoff-to-review.json` as the contract.
 
-Include `relevanceBriefing` in the Layer 1 AI reviewer prompt.
-
-### 5. Detect and Load Stack Profiles (Selective)
-
-Only load stacks relevant to changed files, and only the "Common Mistakes" section:
-
-| Changed File Pattern | Load These Stacks |
-|---------------------|-------------------|
-| `*.cs`, `*.csproj` | dotnet, entity-framework, api-patterns |
-| `*.tsx`, `*.ts` | react, typescript, tailwind |
-| `*.bicep` | bicep, azure-container-apps |
-| `*test*` | testing-dotnet or testing-playwright |
-
-```javascript
-const { loadStackSection } = require('../../lib/stack-loader');
-const mistakes = loadStackSection('dotnet', 'Common Mistakes');
-```
-
-### 6. Load Known Review Patterns
-
-```javascript
-const { loadConfirmedPatterns, loadCorrections } = require('../../lib/learning-loader');
-const patterns = loadConfirmedPatterns(detectedStacks);
-const corrections = loadCorrections();
-```
-
-Load confirmed patterns from both `memory/review-learnings.md` AND `memory/coderabbit-patterns.md`. Known patterns can be flagged immediately as a cheap local check before the AI review.
-
-Also load corrections — items in corrections are team decisions, not bugs. Do not flag these during review.
-
-### 7. Load Discipline Contexts
+### 5. Load Discipline Contexts
 
 Load shared discipline content once; reuse in subagent prompts:
 
 ```bash
 EXECUTION_ANNOUNCE=$(cat contexts/execution-announce.md)
 ```
-
-### 8. Shell Output Compression
-
-When running build/test/lint commands during review, use `lib/output-compressor.js` to reduce noisy output:
-
-```javascript
-const { compress } = require('../../lib/output-compressor');
-const result = compress(rawOutput, 'dotnet test');
-```
-
-Supported patterns: `dotnet build`, `dotnet test`, `npm install`, `npm run build`, `jest`, `vitest`, `playwright`, `cargo build/test`, `git status/log`, `docker compose`.
 
 ---
 
