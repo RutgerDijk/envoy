@@ -8,7 +8,7 @@ GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backo
 
 ```bash
 # CodeRabbit: 22min max (async review — GitHub App processes PR asynchronously)
-PR_NUMBER=$(cat /tmp/envoy-active-pr.txt)
+PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
 
 # Exponential backoff in seconds — 22min (1320s) max
 # intervals = [120s, 120s, 240s, 360s, 480s]

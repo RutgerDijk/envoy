@@ -40,7 +40,7 @@ Auto-diagnose and fix CI/CD failures from GitHub Actions. Polls for failed runs,
 
 | Flag | Effect |
 |------|--------|
-| `<pr-number>` | PR to check (default: detect from current branch or `/tmp/envoy-active-pr.txt`) |
+| `<pr-number>` | PR to check (default: detect from `.envoy/finalize/state.json` or current branch) |
 
 ## Process
 
@@ -48,7 +48,7 @@ Auto-diagnose and fix CI/CD failures from GitHub Actions. Polls for failed runs,
 
 PR detection order:
 1. **Argument:** `/envoy:fix-ci <pr-number>` — explicit PR number passed
-2. **File:** `/tmp/envoy-active-pr.txt` — written by `envoy:finalize` after PR creation
+2. **File:** `.envoy/finalize/state.json` — written by `envoy:finalize` preflight + Step 2 (retired path: `/tmp/envoy-active-pr.txt`)
 3. **Git:** `gh pr view` — current branch's associated PR
 4. **FAIL:** "Cannot find PR. Specify: `/envoy:fix-ci <pr-number>`"
 
@@ -56,8 +56,8 @@ PR detection order:
 # Detect PR number
 if [ -n "$1" ]; then
   PR_NUMBER=$1
-elif [ -f /tmp/envoy-active-pr.txt ]; then
-  PR_NUMBER=$(cat /tmp/envoy-active-pr.txt)
+elif [ -f .envoy/finalize/state.json ]; then
+  PR_NUMBER=$(jq -r '.prNumber // empty' .envoy/finalize/state.json)
 else
   PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null)
 fi

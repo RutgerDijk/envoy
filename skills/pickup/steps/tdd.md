@@ -48,6 +48,8 @@ Decision tree:
 **If user chooses Adopt or Extend or Compose:** update the plan accordingly, then continue.
 **If user chooses Build (or no match found):** proceed to Step 12.
 
+**Record the outcome:** write `.envoy/search-decisions/<task-id>.json` conforming to `lib/schemas/search-decision.json` (decision ∈ build-new|adopt|extend|compose; optional matches, rationale, decidedAt). The review layer reads this to verify the team's search-first conclusions were recorded.
+
 ### Step 12: Dependency Analysis
 
 Before executing ANY task, analyze dependencies to identify parallelization opportunities.

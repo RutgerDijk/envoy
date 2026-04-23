@@ -211,6 +211,33 @@ Ready for: /envoy:finalize
 
 Use ⊘ for layers that were skipped due to tier.
 
+## Write the finalize handoff
+
+Write `.envoy/review/handoff-to-finalize.json` conforming to `lib/schemas/handoff-review-to-finalize.json`:
+
+```javascript
+const handoff = {
+  $schemaVersion: '1',
+  issueNumber: handoffIn.issueNumber,
+  branch: handoffIn.branch,
+  reviewStatus: allLayersPassed ? 'approved' : 'needs-fixes',
+  layers: [
+    { name: 'lint', status: 'passed', findings: 0 },
+    { name: 'cleanup', status: 'fixed', findings: cleanupCount },
+    { name: 'ai-review', status: 'fixed', findings: reviewCount },
+    { name: 'visual', status: visualStatus, findings: 0 },
+    { name: 'docs', status: docsStatus, findings: 0 },
+  ],
+  commitShas: git.log('main..HEAD'),
+  producedAt: new Date().toISOString(),
+};
+
+fs.mkdirSync('.envoy/review', { recursive: true });
+fs.writeFileSync('.envoy/review/handoff-to-finalize.json', JSON.stringify(handoff, null, 2));
+```
+
+Finalize preflight requires `reviewStatus === "approved"`; any other value blocks finalize.
+
 ---
 
 ## Integration with Envoy

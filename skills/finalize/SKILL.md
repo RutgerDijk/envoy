@@ -143,9 +143,19 @@ PREOF
 ```
 
 ```bash
-# Store PR number for fix-ci auto-detection
+# Update .envoy/finalize/state.json (seeded by preflight) with the PR info.
+# fix-ci and cleanup read this file — do NOT write /tmp/envoy-active-pr.txt; that path is retired.
 PR_NUMBER=$(gh pr view --json number -q .number)
-echo "$PR_NUMBER" > /tmp/envoy-active-pr.txt
+PR_URL=$(gh pr view --json url -q .url)
+node -e "
+  const fs = require('fs');
+  const p = '.envoy/finalize/state.json';
+  const state = JSON.parse(fs.readFileSync(p, 'utf8'));
+  state.prNumber = Number(process.env.PR_NUMBER);
+  state.prUrl = process.env.PR_URL;
+  state.updatedAt = new Date().toISOString();
+  fs.writeFileSync(p, JSON.stringify(state, null, 2));
+" PR_NUMBER="$PR_NUMBER" PR_URL="$PR_URL"
 ```
 
 ---
