@@ -14,7 +14,27 @@ allowed-tools:
   - Glob
   - Skill
   - Agent
+hooks:
+  PreToolUse:
+    - matcher: Agent
+      command: node ${CLAUDE_SKILL_DIR}/hooks/agent-guard.js
+      once: true
+  Stop:
+    - command: node ${CLAUDE_SKILL_DIR}/hooks/stop-audit.js
+      once: true
 ---
+
+## Briefing
+
+!`node ${CLAUDE_SKILL_DIR}/preflight.js`
+
+### Checklist
+
+- [ ] Step 1–6: Fetch issue, create worktree, detect stacks (`steps/worktree.md`)
+- [ ] Step 7–8: Viability check, pause for approval (`steps/plan.md`)
+- [ ] Step 9–13: Session state, search-first, dependency analysis, execute (`steps/tdd.md`)
+- [ ] Step 14: Spec compliance sweep (`steps/verify.md`)
+- [ ] Step 15: Handoff to review (`steps/handoff.md`)
 
 # Pickup Issue
 

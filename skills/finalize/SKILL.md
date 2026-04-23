@@ -14,7 +14,28 @@ allowed-tools:
   - Glob
   - Skill
   - WebFetch
+hooks:
+  PreToolUse:
+    - matcher: Agent
+      command: node ${CLAUDE_SKILL_DIR}/hooks/agent-guard.js
+      once: true
+  Stop:
+    - command: node ${CLAUDE_SKILL_DIR}/hooks/stop-audit.js
+      once: true
 ---
+
+## Briefing
+
+!`node ${CLAUDE_SKILL_DIR}/preflight.js`
+
+### Checklist
+
+- [ ] Step 1: Preconditions check
+- [ ] Step 2: Push and create PR
+- [ ] Steps 3–7: CodeRabbit poll/address/reply/re-poll (`steps/coderabbit.md`)
+- [ ] Step 8: Poll CI; invoke fix-ci on failure (`steps/ci.md`)
+- [ ] Steps 9, 11: Final verification and ship report (`steps/verify.md`)
+- [ ] Step 10: Wiki sync if `docs/wiki/` changed (`steps/wiki.md`)
 
 # Finalize
 

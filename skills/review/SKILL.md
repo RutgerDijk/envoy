@@ -17,7 +17,27 @@ allowed-tools:
   - Agent
   - WebFetch
 model: opus
+hooks:
+  PreToolUse:
+    - matcher: Agent
+      command: node ${CLAUDE_SKILL_DIR}/hooks/agent-guard.js
+      once: true
+  Stop:
+    - command: node ${CLAUDE_SKILL_DIR}/hooks/stop-audit.js
+      once: true
 ---
+
+## Briefing
+
+!`node ${CLAUDE_SKILL_DIR}/preflight.js`
+
+### Checklist
+
+- [ ] Layer 0: Lint (`layers/lint.md`)
+- [ ] Layer 0.5: Cleanup pass (`layers/cleanup.md`)
+- [ ] Layer 1: AI code review (`layers/ai-review.md`)
+- [ ] Layer 2: Visual review (`layers/visual.md`)
+- [ ] Layer 3: Documentation (`layers/docs.md`)
 
 # Multi-Layer Code Review
 
