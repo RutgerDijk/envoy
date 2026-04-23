@@ -1,0 +1,10 @@
+{
+  "skill": "finalize",
+  "agentInvariants": [],
+  "requiredArtifacts": [
+    { "path": ".envoy/active-skill.json", "committed": false },
+    { "path": ".envoy/finalize/state.json", "committed": false }
+  ],
+  "loopSignals": ["coderabbit", "fix-ci"],
+  "handoffOut": ".envoy/finalize/state.json"
+}

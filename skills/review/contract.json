@@ -1,0 +1,23 @@
+{
+  "skill": "review",
+  "agentInvariants": [
+    {
+      "matchPrompt": "Cleanup pass",
+      "subagentType": "general-purpose",
+      "promptMustContain": ["git diff main...HEAD", "never change functionality"],
+      "promptMustNotContain": []
+    },
+    {
+      "matchPrompt": "AI code review",
+      "subagentType": "envoy:code-reviewer",
+      "promptMustContain": ["iterative-retrieval.md", "Read-only review", "git diff main...HEAD"],
+      "promptMustNotContain": ["Edit", "Write"]
+    }
+  ],
+  "requiredArtifacts": [
+    { "path": ".envoy/active-skill.json", "committed": false },
+    { "path": ".envoy/review/handoff-to-finalize.json", "committed": false }
+  ],
+  "loopSignals": [],
+  "handoffOut": ".envoy/review/handoff-to-finalize.json"
+}
