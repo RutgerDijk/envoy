@@ -1,0 +1,39 @@
+{
+  "skill": "review",
+  "scenarios": [
+    {
+      "name": "missing pickup handoff → fatal with remediation pointing to pickup",
+      "setup": { "files": {} },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "handoff|pickup",
+        "artifacts_missing": [".envoy/review/handoff-to-finalize.json"]
+      }
+    },
+    {
+      "name": "valid pickup handoff → ok; review state primed",
+      "setup": {
+        "files": {
+          ".envoy/pickup/handoff-to-review.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"baseSha\":\"aaaaaaa\",\"headSha\":\"bbbbbbb\",\"tasksCompleted\":[{\"id\":\"task-1\",\"commitSha\":\"ccccccc\"}],\"stackProfiles\":[],\"producedAt\":\"2026-04-23T00:00:00Z\"}"
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "stdout_matches": "1 task",
+        "artifacts_created": [".envoy/active-skill.json"]
+      }
+    },
+    {
+      "name": "handoff points to missing base/head SHAs → degraded (continues with warning)",
+      "setup": {
+        "files": {
+          ".envoy/pickup/handoff-to-review.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"baseSha\":\"zzzzzzz\",\"headSha\":\"yyyyyyy\",\"tasksCompleted\":[],\"stackProfiles\":[],\"producedAt\":\"2026-04-23T00:00:00Z\"}"
+        }
+      },
+      "expected": {
+        "status": "degraded",
+        "stdout_matches": "DEGRADED|sha"
+      }
+    }
+  ]
+}

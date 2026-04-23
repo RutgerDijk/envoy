@@ -1,6 +1,19 @@
 ---
 name: receiving-code-review
-description: Use when receiving code review feedback, before implementing suggestions
+description: Review-receiver expert. ALWAYS invoke before implementing any review feedback. Classifies comments, proposes fixes, resolves threads with evidence. Do not ignore or silently skip review comments.
+when_to_use:
+  - When human reviewers post comments on a PR
+  - When CodeRabbit posts findings
+  - Before implementing suggestions from any PR review
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
+  - Skill
+  - WebFetch
 ---
 
 # Receiving Code Review

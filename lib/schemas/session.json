@@ -1,0 +1,40 @@
+{
+  "$schemaVersion": "1",
+  "$id": "envoy/session",
+  "description": "Pickup session state — replaces .envoy-session.json; lives at .envoy/pickup/session.json.",
+  "type": "object",
+  "required": ["$schemaVersion", "branch", "tasks"],
+  "properties": {
+    "$schemaVersion": { "type": "string", "const": "1" },
+    "branch": { "type": "string" },
+    "plan": { "type": "string" },
+    "issueNumber": { "type": "number" },
+    "startedAt": { "type": "string" },
+    "updatedAt": { "type": "string" },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "in_progress", "done", "blocked"] },
+          "commitSha": { "type": "string" },
+          "blocker": { "type": "string" }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "at": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "nextSteps": { "type": "array", "items": { "type": "string" } }
+  }
+}

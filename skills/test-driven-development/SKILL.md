@@ -1,6 +1,17 @@
 ---
 name: test-driven-development
-description: Use when implementing any feature or bugfix, before writing implementation code
+description: TDD expert. ALWAYS invoke before writing any implementation code. Enforces RED-GREEN-REFACTOR with test commits preceding implementation commits. Do not write production code without a failing test first.
+when_to_use:
+  - Before writing implementation code for any feature or bugfix
+  - When /envoy:pickup dispatches an implementer agent
+  - When reviewing whether a commit sequence follows TDD discipline
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
 ---
 
 # Test-Driven Development (TDD)

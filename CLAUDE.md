@@ -22,11 +22,44 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 
 ### Skills
 - Each skill lives in `skills/<skill-name>/SKILL.md`
-- Frontmatter: only `name` and `description` fields, max 1024 chars
-- Description must be under 30 words and start with "Use when..." — triggering conditions only
-- Rigid skills (TDD, systematic-debugging, verification, review, pickup, receiving-code-review): follow exactly, no adaptation
-- Flexible skills (brainstorming, planning): adapt principles to context
-- Include "Announce at start" directive and "Integration with Envoy" section
+- Rigid skills follow a contract-backed pattern (see `## Rigid Skills` below). Flexible skills (brainstorming, planning) use the simpler legacy frontmatter — `name`, `description`, and nothing else required.
+- Rigid skills: `review`, `pickup`, `finalize`, `cleanup`, `fix-ci`, `coderabbit-pr-review`, `wiki-sync`, `verification`, `test-driven-development`, `systematic-debugging`, `receiving-code-review`. Follow exactly, no adaptation.
+- Flexible skills: `brainstorm`, `using-envoy`, `search-first`, `dispatching-parallel-agents`, `pressure-test-scenarios`, `requesting-code-review`, etc. Adapt principles to context.
+- Include "Announce at start" directive and "Integration with Envoy" section.
+
+### Rigid skills (contract-backed)
+
+Rigid skills are enforced by files, not prose. Each lives in its own folder:
+
+```
+skills/<name>/
+├── SKILL.md              # body + frontmatter declaring hooks
+├── preflight.js          # invoked inline via !`node ${CLAUDE_SKILL_DIR}/preflight.js`
+├── contract.json         # declarative rules read by the skill's own hooks
+├── hooks/
+│   ├── agent-guard.js    # PreToolUse[Agent] — validates subagent prompts
+│   └── stop-audit.js     # Stop — verifies required artifacts + loop signals
+└── steps/ or layers/     # long-form content, one file per phase (SKILL.md under 500 lines)
+```
+
+**Frontmatter primitives (in order):**
+- `name`, `description` (directive template: `<Skill> expert. ALWAYS invoke when… Do not…`)
+- `when_to_use:` — list of concrete trigger phrases
+- `allowed-tools:` — pins the skill's tool surface
+- `paths:` — glob for path-scoped activation (`docs/wiki/**`, etc.)
+- `model:` / `effort:` — optional per-skill tuning
+- `context: fork` — forks the conversation for pure task-shaped skills (review, finalize). Skip for skills with user-approval pauses (pickup).
+- `hooks:` — declares `PreToolUse[Agent]` → `hooks/agent-guard.js` and `Stop` → `hooks/stop-audit.js`, both with `once: true`.
+
+**Inline preflight pattern:** each rigid SKILL.md body opens with
+`## Briefing\n!`node ${CLAUDE_SKILL_DIR}/preflight.js``, immediately
+followed by a visible checklist of steps/layers. Preflight prints
+`## STATUS: ok|degraded|fatal` as its first content line. `fatal` stops
+the skill. `ENVOY_HOOK_PROFILE=strict` promotes `degraded` → `fatal`.
+
+**Deferred-pending-upstream:** `disable-model-invocation` is intentionally
+NOT set on any skill; Claude Code plugin support is tracked in
+anthropics/claude-code#22345.
 
 ### Stack Profiles
 - Each profile in `stacks/<stack-name>.md`
@@ -60,14 +93,71 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 - `lib/automation-suggester.js` generates prevention suggestions for 5x patterns
 - Archived patterns (not seen in 5 reviews) get re-promoted if they reappear
 
+### Schema-backed handoffs and runtime state
+
+Rigid skills hand off to each other through validated JSON artifacts,
+not through prose conventions. Two locations:
+
+- `.envoy-tasks/<issue>.json` — **committed**. Brainstorm → pickup.
+  Conforms to `lib/schemas/tasks.json`. Visible in PR diffs so the
+  contract is reviewable.
+- `.envoy/` — **gitignored** runtime state:
+  - `.envoy/active-skill.json` (which skill currently owns the session)
+  - `.envoy/pickup/session.json` (replaces the retired `.envoy-session.json`)
+  - `.envoy/pickup/handoff-to-review.json`
+  - `.envoy/review/handoff-to-finalize.json`
+  - `.envoy/finalize/state.json` (replaces the retired `/tmp/envoy-active-pr.txt`)
+  - `.envoy/search-decisions/<task-id>.json`
+  - `.envoy/loops/<name>.json`
+
+**Schemas** live in `lib/schemas/`, all with `"$schemaVersion": "1"`.
+`lib/validate-schema.js` exposes `validate(name, data)` and
+`validateFile(name, path)`; every preflight uses it to reject invalid
+handoffs at fatal tier.
+
+### Loop discipline (CLI)
+
+`lib/loop-safeguards.js` is a Node CLI — no more prose protocol:
+
+```
+node lib/loop-safeguards.js confirm <name>
+node lib/loop-safeguards.js status  <name>
+node lib/loop-safeguards.js reset   <name> --reason "<why>"
+node lib/loop-safeguards.js cleanup <name>
+node lib/loop-safeguards.js history <name>
+```
+
+State lives in `.envoy/loops/<name>.json` as `{loop, confirmed,
+maxCycles, cyclesSeen, history[]}`. Exit codes: 0 confirmed, 1 pending,
+2 blocked on maxCycles. Stop-audit hooks call `status` to gate
+completion. The module still exports `COMPLETION_SIGNAL`,
+`REQUIRED_CONSECUTIVE`, and `PROTOCOL` for existing consumers.
+
+### Evaluation-driven development
+
+Rigid-skill behaviour is validated by a scenario harness:
+
+- `tests/evals/<skill>/scenarios.json` — at least 3 scenarios per
+  skill, listing `setup.files`, `env`, and `expected` (status / regex /
+  artifacts_created / artifacts_missing)
+- `tests/evals/run-evals.js` — sandboxed harness; run
+  `node tests/evals/run-evals.js [--skill <name>]`
+
+Per Anthropic best-practices, evaluation scenarios are written BEFORE
+the contracts that satisfy them; scenarios drive preflight and hook
+design. Scenarios PENDING when `preflight.js` is missing, and turn
+into real pass/fail once the script exists.
+
 ### Context Efficiency (lean-ctx inspired)
-- `lib/session-state.js` — Cross-session task continuity via `.envoy-session.json`; auto-detected by `session-start.sh`
 - `lib/agent-scratchpad.js` — Multi-agent coordination via `.envoy-scratchpad.json`; agents register, post findings, check file ownership
 - `lib/context-budget.js` — LITM-aware prompt structuring; classifies complexity (mechanical→architectural), orders sections for U-curve attention
 - `lib/relevance-scorer.js` — Task-aware file scoring via import chain heat diffusion; recommends read depth (full/focused/skim/skip)
 - `lib/output-compressor.js` — Shell output compression (patterns: dotnet, npm, jest, playwright, cargo, git, docker); safeguard ratio prevents over-compression
 - `lib/cost-reporter.js` — Token usage analytics from Claude Code session JSONL logs; per-model/branch/session breakdown
-- `.envoy-session.json` and `.envoy-scratchpad.json` are gitignored ephemeral files
+
+Preflight scripts own the plumbing — rigid SKILL.md files do NOT tell
+Claude to `require('../../lib/relevance-scorer.js')` any more. They
+describe what Claude does; preflight supplies the inputs.
 
 ### Context Fragments
 - Phase-specific context in `contexts/` (review.md, implement.md, research.md)

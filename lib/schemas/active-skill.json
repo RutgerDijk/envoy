@@ -1,0 +1,15 @@
+{
+  "$schemaVersion": "1",
+  "$id": "envoy/active-skill",
+  "description": "Active-skill marker — lives at .envoy/active-skill.json; signals which rigid skill currently owns the session.",
+  "type": "object",
+  "required": ["$schemaVersion", "skill", "startedAt"],
+  "properties": {
+    "$schemaVersion": { "type": "string", "const": "1" },
+    "skill": { "type": "string" },
+    "issueNumber": { "type": "number" },
+    "branch": { "type": "string" },
+    "startedAt": { "type": "string" },
+    "pid": { "type": "number" }
+  }
+}

@@ -1,6 +1,15 @@
 ---
 name: verification
-description: Use when changes need verification before committing or claiming a task is complete
+description: Verification expert. ALWAYS invoke before committing work or claiming a task is complete. Runs tests, build, lint, and real-world smoke checks with evidence. Do not assert done without evidence.
+when_to_use:
+  - Before committing work
+  - Before claiming a task is complete
+  - When the user asks "is this working?" or "did it pass?"
+allowed-tools:
+  - Read
+  - Bash
+  - Grep
+  - Glob
 ---
 
 # Verification Before Completion

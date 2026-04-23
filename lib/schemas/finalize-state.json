@@ -1,0 +1,19 @@
+{
+  "$schemaVersion": "1",
+  "$id": "envoy/finalize-state",
+  "description": "Finalize state — lives at .envoy/finalize/state.json; replaces /tmp/envoy-active-pr.txt.",
+  "type": "object",
+  "required": ["$schemaVersion", "issueNumber", "branch", "prNumber"],
+  "properties": {
+    "$schemaVersion": { "type": "string", "const": "1" },
+    "issueNumber": { "type": "number" },
+    "branch": { "type": "string" },
+    "prNumber": { "type": "number" },
+    "prUrl": { "type": "string" },
+    "baseBranch": { "type": "string" },
+    "ciStatus": { "type": "string", "enum": ["pending", "success", "failure", "unknown"] },
+    "coderabbitStatus": { "type": "string", "enum": ["pending", "resolved", "skipped", "unknown"] },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" }
+  }
+}

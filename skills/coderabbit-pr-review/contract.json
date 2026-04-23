@@ -1,0 +1,9 @@
+{
+  "skill": "coderabbit-pr-review",
+  "agentInvariants": [],
+  "requiredArtifacts": [
+    { "path": ".envoy/active-skill.json", "committed": false }
+  ],
+  "loopSignals": ["coderabbit"],
+  "handoffOut": null
+}

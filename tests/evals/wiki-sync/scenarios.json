@@ -1,0 +1,38 @@
+{
+  "skill": "wiki-sync",
+  "scenarios": [
+    {
+      "name": "no docs/wiki directory → fatal",
+      "setup": { "files": {} },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "docs/wiki"
+      }
+    },
+    {
+      "name": "docs/wiki present with Home.md → ok",
+      "setup": {
+        "files": {
+          "docs/wiki/Home.md": "# Home\n",
+          "docs/wiki/Getting-Started.md": "# Getting Started\n"
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "stdout_matches": "2 wiki page|Home"
+      }
+    },
+    {
+      "name": "docs/wiki present but missing Home.md → degraded",
+      "setup": {
+        "files": {
+          "docs/wiki/Other.md": "# Other\n"
+        }
+      },
+      "expected": {
+        "status": "degraded",
+        "stdout_matches": "Home\\.md|DEGRADED"
+      }
+    }
+  ]
+}

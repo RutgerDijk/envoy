@@ -1,0 +1,9 @@
+{
+  "skill": "wiki-sync",
+  "agentInvariants": [],
+  "requiredArtifacts": [
+    { "path": ".envoy/active-skill.json", "committed": false }
+  ],
+  "loopSignals": [],
+  "handoffOut": null
+}

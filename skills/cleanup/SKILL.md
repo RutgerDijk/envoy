@@ -1,7 +1,29 @@
 ---
 name: cleanup
-description: Use after your PR has been merged to main, before starting new work
+description: Cleanup expert. ALWAYS invoke when the /envoy:cleanup command fires or after a PR is merged into main. Removes worktree, deletes feature branch, clears .envoy runtime state. Do not delete worktrees or branches manually.
+when_to_use:
+  - After your PR has merged to main and before starting new work
+  - When the user types /envoy:cleanup
+  - When clearing a stale feature branch + worktree pair
+allowed-tools:
+  - Read
+  - Bash
+  - Grep
+  - Glob
+  - Skill
+hooks:
+  PreToolUse:
+    - matcher: Agent
+      command: node ${CLAUDE_SKILL_DIR}/hooks/agent-guard.js
+      once: true
+  Stop:
+    - command: node ${CLAUDE_SKILL_DIR}/hooks/stop-audit.js
+      once: true
 ---
+
+## Briefing
+
+!`node ${CLAUDE_SKILL_DIR}/preflight.js`
 
 # Cleanup After Merge
 
@@ -60,12 +82,19 @@ git pull origin main
 
 ### Step 4: Clear Session State
 
-Remove ephemeral session files from the worktree before it is removed:
+Read the finalize state (if present) to recover the branch / PR before the worktree is removed, then clear all ephemeral envoy state from the worktree:
 
 ```bash
-# Clear session state before removing worktree
-rm -f "$WORKTREE_PATH/.envoy-session.json"
-rm -f "$WORKTREE_PATH/.envoy-scratchpad.json"
+# Recover branch + PR info from .envoy/finalize/state.json if available
+if [ -f "$WORKTREE_PATH/.envoy/finalize/state.json" ]; then
+  FINALIZE_BRANCH=$(jq -r '.branch // empty' "$WORKTREE_PATH/.envoy/finalize/state.json")
+  FINALIZE_PR=$(jq -r '.prNumber // empty' "$WORKTREE_PATH/.envoy/finalize/state.json")
+fi
+
+# Clear ephemeral envoy state before removing worktree
+rm -rf "$WORKTREE_PATH/.envoy"
+rm -f  "$WORKTREE_PATH/.envoy-session.json"      # retired path
+rm -f  "$WORKTREE_PATH/.envoy-scratchpad.json"   # retired path
 ```
 
 ### Step 5: Wiki Sync
@@ -152,7 +181,8 @@ git branch -a | grep "$BRANCH"
 # Should return nothing
 
 # Session state cleared
-[ ! -f "$WORKTREE_PATH/.envoy-session.json" ] && echo "✓ session.json gone" || echo "✗ session.json still exists"
+[ ! -d "$WORKTREE_PATH/.envoy" ] && echo "✓ .envoy/ gone" || echo "✗ .envoy/ still exists"
+[ ! -f "$WORKTREE_PATH/.envoy-session.json" ] && echo "✓ retired session file gone" || echo "✗ retired session file still exists"
 [ ! -f "$WORKTREE_PATH/.envoy-scratchpad.json" ] && echo "✓ scratchpad.json gone" || echo "✗ scratchpad.json still exists"
 
 # Issue closed

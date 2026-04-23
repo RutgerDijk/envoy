@@ -1,7 +1,44 @@
 ---
 name: review
-description: Use after implementation is complete, before creating PR or finalizing work
+description: Review expert. ALWAYS invoke when the /envoy:review command fires or after implementation is complete and before creating a PR. Runs layered review (lint, cleanup, AI review, visual, docs). Do not perform inline review.
+when_to_use:
+  - After implementation is complete and before creating a PR
+  - When the user types /envoy:review
+  - When /envoy:pickup hands off by writing .envoy/pickup/handoff-to-review.json
+  - Before /envoy:finalize
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
+  - Skill
+  - Agent
+  - WebFetch
+model: opus
+context: fork
+hooks:
+  PreToolUse:
+    - matcher: Agent
+      command: node ${CLAUDE_SKILL_DIR}/hooks/agent-guard.js
+      once: true
+  Stop:
+    - command: node ${CLAUDE_SKILL_DIR}/hooks/stop-audit.js
+      once: true
 ---
+
+## Briefing
+
+!`node ${CLAUDE_SKILL_DIR}/preflight.js`
+
+### Checklist
+
+- [ ] Layer 0: Lint (`layers/lint.md`)
+- [ ] Layer 0.5: Cleanup pass (`layers/cleanup.md`)
+- [ ] Layer 1: AI code review (`layers/ai-review.md`)
+- [ ] Layer 2: Visual review (`layers/visual.md`)
+- [ ] Layer 3: Documentation (`layers/docs.md`)
 
 # Multi-Layer Code Review
 
@@ -62,54 +99,20 @@ LINE_COUNT=$(git diff main...HEAD --numstat | awk '{sum += $1} END {print sum+0}
 
 If `--quick` flag is set, override tier mapping: run Layers 0 and 0.5 only regardless of complexity.
 
-### 4. Score File Relevance
+### 4. Inputs produced by preflight
 
-Use `lib/relevance-scorer.js` to determine read depth per file:
+The inline `## Briefing` at the top of this skill runs `preflight.js`, which:
 
-```javascript
-const { scoreTaskRelevance, formatForPrompt } = require('../../lib/relevance-scorer');
-const changedFiles = getChangedFiles();
-const results = scoreTaskRelevance(changedFiles, projectRoot);
-const relevanceBriefing = formatForPrompt(results);
-```
+- Validates the pickup handoff at `.envoy/pickup/handoff-to-review.json`
+- Writes `.envoy/active-skill.json`
+- Prints the issue number, branch, diff range, and stack profiles
 
-Depth recommendations:
-- **full** — directly changed or critical dependency (score >= 0.5)
-- **focused** — read signatures + changed sections (score 0.2-0.5)
-- **skim** — scan exports only (score 0.1-0.2)
-- **skip** — not relevant
+You do NOT need to invoke library utilities yourself — preflight is the
+single source of truth for relevance scoring, stack detection, review
+learnings, and output compression. Consume its briefing; treat
+`.envoy/pickup/handoff-to-review.json` as the contract.
 
-Include `relevanceBriefing` in the Layer 1 AI reviewer prompt.
-
-### 5. Detect and Load Stack Profiles (Selective)
-
-Only load stacks relevant to changed files, and only the "Common Mistakes" section:
-
-| Changed File Pattern | Load These Stacks |
-|---------------------|-------------------|
-| `*.cs`, `*.csproj` | dotnet, entity-framework, api-patterns |
-| `*.tsx`, `*.ts` | react, typescript, tailwind |
-| `*.bicep` | bicep, azure-container-apps |
-| `*test*` | testing-dotnet or testing-playwright |
-
-```javascript
-const { loadStackSection } = require('../../lib/stack-loader');
-const mistakes = loadStackSection('dotnet', 'Common Mistakes');
-```
-
-### 6. Load Known Review Patterns
-
-```javascript
-const { loadConfirmedPatterns, loadCorrections } = require('../../lib/learning-loader');
-const patterns = loadConfirmedPatterns(detectedStacks);
-const corrections = loadCorrections();
-```
-
-Load confirmed patterns from both `memory/review-learnings.md` AND `memory/coderabbit-patterns.md`. Known patterns can be flagged immediately as a cheap local check before the AI review.
-
-Also load corrections — items in corrections are team decisions, not bugs. Do not flag these during review.
-
-### 7. Load Discipline Contexts
+### 5. Load Discipline Contexts
 
 Load shared discipline content once; reuse in subagent prompts:
 
@@ -117,319 +120,19 @@ Load shared discipline content once; reuse in subagent prompts:
 EXECUTION_ANNOUNCE=$(cat contexts/execution-announce.md)
 ```
 
-### 8. Shell Output Compression
-
-When running build/test/lint commands during review, use `lib/output-compressor.js` to reduce noisy output:
-
-```javascript
-const { compress } = require('../../lib/output-compressor');
-const result = compress(rawOutput, 'dotnet test');
-```
-
-Supported patterns: `dotnet build`, `dotnet test`, `npm install`, `npm run build`, `jest`, `vitest`, `playwright`, `cargo build/test`, `git status/log`, `docker compose`.
-
 ---
 
-## Layer 0: Lint (All Tiers)
-
-Announce: `Running Layer 0: Lint...`
-
-Run project linters:
-
-```bash
-npm run lint
-dotnet build
-```
-
-**If lint fails:**
-- Fix auto-fixable issues: `npm run lint -- --fix`
-- Fix remaining issues manually
-- Commit:
-  ```bash
-  git add <fixed-files>
-  git commit -m "fix: resolve lint issues"
-  ```
-
-**For trivial tier: stop here.** Report and suggest `/envoy:finalize`.
-
----
-
-## Layer 0.5: Cleanup Pass (All Tiers Except Trivial)
-
-Announce: `Running Layer 0.5: Cleanup Pass...`
-
-**YOU MUST spawn an Agent tool call here. Inline cleanup without spawning an agent is wrong. Do not skip this.**
-
-Spawn a fresh cleanup agent that ONLY sees the diff — no implementation context, no conversation history. This is a focused mandate to remove AI-generated slop.
-
-**Key principle:** Never add "don't do X" instructions to the implementing agent — let it implement freely, then run this focused cleanup.
-
-```
-Agent({
-  model: "sonnet",
-  description: "Cleanup pass",
-  prompt: `${EXECUTION_ANNOUNCE}
-
-  You are a code cleanup agent. Your job is to remove slop from a recent implementation.
-
-  Read the diff:
-  git diff main...HEAD
-
-  Then read each changed file in full to understand context.
-
-  Remove the categories below IN ORDER. Edit files directly.
-  Run tests after each category. Commit after each category.
-
-  IMPORTANT:
-  - Only remove things that are genuinely unnecessary
-  - If in doubt, leave it
-  - Never change functionality — only remove noise
-  - Never touch test assertions that verify real behavior
-  - Intentional defensive code with explanatory comments is NOT slop
-
-  Tools: Read, Edit, Write, Bash, Grep, Glob
-  `
-})
-```
-
-### Category 1: Unnecessary Defensive Checks
-
-Remove:
-- Null checks on parameters that can't be null (required params, just-constructed objects)
-- Try/catch around code that can't throw (simple assignments, arithmetic)
-- Redundant type guards (checking type after TypeScript already narrowed)
-- `if (x !== undefined)` when x is always defined
-- Empty catch blocks that swallow errors silently
-
-**Keep:**
-- Null checks on external input (API responses, user input, database results)
-- Try/catch around I/O operations (file, network, database)
-- Defensive checks documented as intentional (explicit comment explaining why)
-
-```bash
-dotnet test && npm test
-git add <changed-files>
-git commit -m "refactor: remove unnecessary defensive checks"
-```
-
-### Category 2: Over-Engineering
-
-Remove:
-- Interfaces/abstractions with only one implementation (and no documented plan for more)
-- Generic type parameters that are always the same concrete type
-- Factory functions that just call `new`
-- Configuration objects for values that never change
-- Premature caching/memoization without evidence of performance need
-- Feature flags for non-optional features
-- Backwards-compatibility shims for code that was just written
-
-**Keep:**
-- Abstractions required by the framework (dependency injection, etc.)
-- Generics that genuinely serve multiple types
-- Configuration that's documented as user-facing
-
-```bash
-dotnet test && npm test
-git add <changed-files>
-git commit -m "refactor: remove over-engineering"
-```
-
-### Category 3: Redundant Tests
-
-Remove:
-- Tests that just assert the mock returns what you told it to return
-- Tests that duplicate another test with trivially different input (keep one, parameterize if needed)
-- Tests for framework behavior (e.g., testing that React renders a div)
-- Tests that only verify the test setup (e.g., "service is defined")
-
-**Keep:**
-- Tests for actual business logic
-- Edge case tests that exercise different code paths
-- Integration tests that verify real behavior
-- Tests for error handling
-
-```bash
-dotnet test && npm test
-git add <changed-files>
-git commit -m "refactor: remove redundant tests"
-```
-
-### Category 4: Excessive Comments
-
-Remove:
-- Comments that restate the code (`// increment counter` above `counter++`)
-- JSDoc/XML-doc on private methods with obvious signatures
-- `// TODO` comments for things that are already done
-- Commented-out code (it's in git history if needed)
-- Section dividers that don't add information (`// ---- Helper Functions ----`)
-- "This function does X" when the function name already says X
-
-**Keep:**
-- Comments explaining WHY (not what)
-- Comments marking intentional trade-offs or workarounds
-- JSDoc/XML-doc on public API methods
-- Regulatory/compliance comments
-
-```bash
-dotnet test && npm test
-git add <changed-files>
-git commit -m "refactor: remove excessive comments"
-```
-
-### Category 5: Dead Code and Unused Imports
-
-Remove:
-- Imports not referenced anywhere in the file
-- Functions/methods defined but never called
-- Variables assigned but never read
-- Type definitions not used
-- Files created but not imported anywhere
-- Unreachable branches
-
-**Keep:**
-- Exports that are part of the public API (even if not used internally)
-- Types used only in test files
-
-```bash
-dotnet test && npm test
-git add <changed-files>
-git commit -m "refactor: remove dead code and unused imports"
-```
-
-### Error Handling for Cleanup
-
-If tests fail after any cleanup category: **revert that category's changes** and continue with the next category. Do not leave broken code.
-
-```bash
-git checkout -- .   # revert failed category
-```
-
----
-
-## Layer 1: AI Code Review (Small+ Tiers)
-
-Announce: `Running Layer 1: AI Code Review...`
-
-**YOU MUST spawn an Agent tool call here with `subagent_type: "envoy:code-reviewer"`. Inline review without spawning an agent is wrong. Do not skip this.**
-
-**If you do not spawn an Agent tool call, STOP — do not proceed to Layer 2.**
-
-Spawn a fresh **Sonnet** agent with NO implementation context. The agent uses **iterative retrieval** to understand codebase context:
-
-```
-Agent({
-  subagent_type: "envoy:code-reviewer",
-  model: "sonnet",
-  description: "AI code review",
-  prompt: `You are reviewing code changes. Context provided via files, not inline.
-
-  FIRST: Read contexts/iterative-retrieval.md for the retrieval protocol.
-
-  **Pre-scored file relevance (from dependency analysis):**
-  ${relevanceBriefing}
-
-  Use these scores to guide your retrieval — start with 'full' and 'focused'
-  files, then expand if needed:
-  1. Read git diff main...HEAD
-  2. Read 'full' relevance files first, then 'focused' files
-  3. If <3 files scored >=0.7 after reading pre-scored files, follow one more hop
-  4. Stop when 3+ files have relevance >=0.7 or 3 cycles done
-
-  Report your retrieval context before reviewing.
-
-  Also read:
-  - <spec-path> (acceptance criteria)
-  - <stack-common-mistakes> (patterns to check)
-
-  Focus areas:
-  1. Spec/acceptance criteria compliance
-  2. TDD verification: git log shows test commits before implementation?
-  3. Codebase pattern consistency (informed by retrieved context)
-  4. Stack profile common mistakes
-
-  DO NOT check (GitHub CodeRabbit handles these on the PR):
-  - Style, naming, formatting
-  - Security basics
-  - Common language mistakes
-  - Performance anti-patterns
-
-  Tools allowed: Read, Grep, Glob ONLY (read-only review)
-
-  Output format:
-  **Retrieval context:**
-  - <file> (<score>) — <reason>
-
-  **Review findings:**
-  - Pass: <description>
-  - Concern: <file>:<line> — <description>
-  - Issue: <file>:<line> — <description>
-  `
-})
-```
-
-### Apply Fixes from Layer 1
-
-For each finding:
-- **Obvious fixes** — apply immediately
-- **Ambiguous** — present to user for decision
-
-```bash
-git add <fixed-files>
-git commit -m "fix: address review findings
-
-- <fix 1>
-- <fix 2>"
-```
-
-### If Layer 1 Produced Fixes: Re-run Layer 0.5
-
-When Layer 1 fixes introduce new code, re-run cleanup but **scoped to files changed by Layer 1 fixes only**. Same five categories, same order, same test-after-each rule. This prevents review fixes from introducing new slop.
-
-```bash
-# Get files changed by Layer 1 fixes
-L1_FILES=$(git diff --name-only HEAD~1)
-```
-
-Run the cleanup agent again with the diff scoped to these files. Commit messages use the same pattern but this pass appears as "0.5 re-run" in the report.
-
----
-
-## Layer 2: Visual Review (Medium+ Tiers)
-
-Announce: `Running Layer 2: Visual Review...`
-
-Invoke `envoy:visual-review` for Chrome DevTools verification.
-
-1. **Identify affected pages** from changed files
-2. **For each affected page:**
-   - Navigate to page
-   - Take screenshot
-   - Check console for errors
-   - Check network for failures
-3. **Test user flows** from acceptance criteria
-4. **App health check:**
-   ```bash
-   curl -sf http://localhost:5000/health && echo "Backend OK" || echo "Backend DOWN"
-   curl -sf http://localhost:5173 && echo "Frontend OK" || echo "Frontend DOWN"
-   ```
-
-Fix console errors, network failures, and visual bugs before proceeding. Commit fixes.
-
----
-
-## Layer 3: Documentation (Medium+ Tiers)
-
-Announce: `Running Layer 3: Documentation...`
-
-Invoke `envoy:docstrings` for public API documentation.
-
-Scope: only changed files that have public APIs. Filter to code files:
-- C#: `*.cs` (exclude `*.Designer.cs`, `Migrations/`)
-- TypeScript: `*.ts`, `*.tsx` (exclude `*.d.ts`, `*.spec.ts`, `*.test.ts`)
-
-Skip if no changed files have public APIs.
-
----
+## Layers
+
+Each layer is documented in its own file. Execute them in order for the tier:
+
+| Layer | File | When |
+|-------|------|------|
+| 0: Lint | `layers/lint.md` | All tiers |
+| 0.5: Cleanup | `layers/cleanup.md` | All tiers except trivial |
+| 1: AI Review | `layers/ai-review.md` | Small+ tiers |
+| 2: Visual | `layers/visual.md` | Medium+ tiers |
+| 3: Docs | `layers/docs.md` | Medium+ tiers |
 
 ## Complexity Tier Mapping
 
@@ -463,6 +166,33 @@ Ready for: /envoy:finalize
 ```
 
 Use ⊘ for layers that were skipped due to tier.
+
+## Write the finalize handoff
+
+Write `.envoy/review/handoff-to-finalize.json` conforming to `lib/schemas/handoff-review-to-finalize.json`:
+
+```javascript
+const handoff = {
+  $schemaVersion: '1',
+  issueNumber: handoffIn.issueNumber,
+  branch: handoffIn.branch,
+  reviewStatus: allLayersPassed ? 'approved' : 'needs-fixes',
+  layers: [
+    { name: 'lint', status: 'passed', findings: 0 },
+    { name: 'cleanup', status: 'fixed', findings: cleanupCount },
+    { name: 'ai-review', status: 'fixed', findings: reviewCount },
+    { name: 'visual', status: visualStatus, findings: 0 },
+    { name: 'docs', status: docsStatus, findings: 0 },
+  ],
+  commitShas: git.log('main..HEAD'),
+  producedAt: new Date().toISOString(),
+};
+
+fs.mkdirSync('.envoy/review', { recursive: true });
+fs.writeFileSync('.envoy/review/handoff-to-finalize.json', JSON.stringify(handoff, null, 2));
+```
+
+Finalize preflight requires `reviewStatus === "approved"`; any other value blocks finalize.
 
 ---
 

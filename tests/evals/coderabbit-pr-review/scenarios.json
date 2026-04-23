@@ -1,0 +1,37 @@
+{
+  "skill": "coderabbit-pr-review",
+  "scenarios": [
+    {
+      "name": "missing finalize state → fatal (no PR context)",
+      "setup": { "files": {} },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "finalize state|PR number"
+      }
+    },
+    {
+      "name": "finalize state present with PR → ok; ready to fetch CodeRabbit comments",
+      "setup": {
+        "files": {
+          ".envoy/finalize/state.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"prNumber\":123,\"prUrl\":\"https://example/pr/123\",\"createdAt\":\"2026-04-23T00:00:00Z\"}"
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "stdout_matches": "PR #123|coderabbit"
+      }
+    },
+    {
+      "name": "finalize state has no prNumber → fatal",
+      "setup": {
+        "files": {
+          ".envoy/finalize/state.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"createdAt\":\"2026-04-23T00:00:00Z\"}"
+        }
+      },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "prNumber|PR number"
+      }
+    }
+  ]
+}

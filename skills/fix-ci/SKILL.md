@@ -1,7 +1,32 @@
 ---
 name: fix-ci
-description: Use when CI/CD checks fail on a PR and you need to diagnose and fix test, build, or lint failures
+description: Fix-CI expert. ALWAYS invoke when the /envoy:fix-ci command fires or when a PR has failing CI checks. Classifies failures, fixes root cause, pushes, re-polls — max 3 cycles. Do not push ad-hoc CI fixes without invoking the skill.
+when_to_use:
+  - When the user types /envoy:fix-ci [PR]
+  - When GitHub Actions reports a failing check on the current PR
+  - When /envoy:finalize Step 8 detects a failed CI check
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
+  - Skill
+  - WebFetch
+hooks:
+  PreToolUse:
+    - matcher: Agent
+      command: node ${CLAUDE_SKILL_DIR}/hooks/agent-guard.js
+      once: true
+  Stop:
+    - command: node ${CLAUDE_SKILL_DIR}/hooks/stop-audit.js
+      once: true
 ---
+
+## Briefing
+
+!`node ${CLAUDE_SKILL_DIR}/preflight.js`
 
 # Fix CI/CD Failures
 
@@ -15,7 +40,7 @@ Auto-diagnose and fix CI/CD failures from GitHub Actions. Polls for failed runs,
 
 | Flag | Effect |
 |------|--------|
-| `<pr-number>` | PR to check (default: detect from current branch or `/tmp/envoy-active-pr.txt`) |
+| `<pr-number>` | PR to check (default: detect from `.envoy/finalize/state.json` or current branch) |
 
 ## Process
 
@@ -23,7 +48,7 @@ Auto-diagnose and fix CI/CD failures from GitHub Actions. Polls for failed runs,
 
 PR detection order:
 1. **Argument:** `/envoy:fix-ci <pr-number>` — explicit PR number passed
-2. **File:** `/tmp/envoy-active-pr.txt` — written by `envoy:finalize` after PR creation
+2. **File:** `.envoy/finalize/state.json` — written by `envoy:finalize` preflight + Step 2 (retired path: `/tmp/envoy-active-pr.txt`)
 3. **Git:** `gh pr view` — current branch's associated PR
 4. **FAIL:** "Cannot find PR. Specify: `/envoy:fix-ci <pr-number>`"
 
@@ -31,8 +56,8 @@ PR detection order:
 # Detect PR number
 if [ -n "$1" ]; then
   PR_NUMBER=$1
-elif [ -f /tmp/envoy-active-pr.txt ]; then
-  PR_NUMBER=$(cat /tmp/envoy-active-pr.txt)
+elif [ -f .envoy/finalize/state.json ]; then
+  PR_NUMBER=$(jq -r '.prNumber // empty' .envoy/finalize/state.json)
 else
   PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null)
 fi

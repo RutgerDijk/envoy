@@ -1,0 +1,10 @@
+{
+  "skill": "fix-ci",
+  "agentInvariants": [],
+  "requiredArtifacts": [
+    { "path": ".envoy/active-skill.json", "committed": false },
+    { "path": ".envoy/loops/fix-ci.json", "committed": false }
+  ],
+  "loopSignals": ["fix-ci"],
+  "handoffOut": null
+}

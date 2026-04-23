@@ -1,0 +1,27 @@
+{
+  "$schemaVersion": "1",
+  "$id": "envoy/tasks",
+  "description": "Task list for a GitHub issue — emitted by brainstorm, consumed by pickup.",
+  "type": "object",
+  "required": ["$schemaVersion", "issueNumber", "tasks"],
+  "properties": {
+    "$schemaVersion": { "type": "string", "const": "1" },
+    "issueNumber": { "type": "number" },
+    "strategy": { "type": "string", "enum": ["sequential", "batch", "parallel"] },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "files", "acceptance"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "files": { "type": "array", "items": { "type": "string" } },
+          "acceptance": { "type": "array", "items": { "type": "string" } },
+          "dependsOn": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 .worktrees/
+.envoy/
 .envoy-session.json
 .envoy-session.json.tmp
 .envoy-scratchpad.json

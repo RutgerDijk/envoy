@@ -1,0 +1,30 @@
+{
+  "skill": "pickup",
+  "agentInvariants": [
+    {
+      "matchPrompt": "Implement Task",
+      "subagentType": "general-purpose",
+      "promptMustContain": ["TDD Iron Law", "Scope Iron Law"],
+      "promptMustNotContain": []
+    },
+    {
+      "matchPrompt": "Spec compliance review",
+      "subagentType": "general-purpose",
+      "promptMustContain": ["Do Not Trust the Report", "git log"],
+      "promptMustNotContain": []
+    },
+    {
+      "matchPrompt": "Code quality review",
+      "subagentType": "general-purpose",
+      "promptMustContain": ["TDD compliance", "Stack common mistakes"],
+      "promptMustNotContain": []
+    }
+  ],
+  "requiredArtifacts": [
+    { "path": ".envoy/active-skill.json", "committed": false },
+    { "path": ".envoy/pickup/session.json", "committed": false },
+    { "path": ".envoy/pickup/handoff-to-review.json", "committed": false }
+  ],
+  "loopSignals": [],
+  "handoffOut": ".envoy/pickup/handoff-to-review.json"
+}
