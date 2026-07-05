@@ -408,8 +408,9 @@ test('aggregateTeamReports filters by days', () => {
     date: '2020-01-01', user: 'old', branch: 'main', totalTokens: 9999, turns: 1,
     activities: {}, models: {},
   }));
-  fs.writeFileSync(path.join(reportsDir, '2026-04-06-recent.json'), JSON.stringify({
-    date: '2026-04-06', user: 'recent', branch: 'main', totalTokens: 100, turns: 1,
+  const today = new Date().toISOString().slice(0, 10);
+  fs.writeFileSync(path.join(reportsDir, `${today}-recent.json`), JSON.stringify({
+    date: today, user: 'recent', branch: 'main', totalTokens: 100, turns: 1,
     activities: {}, models: {},
   }));
 
