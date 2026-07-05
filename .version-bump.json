@@ -1,0 +1,6 @@
+{
+  "manifests": [
+    { "path": ".claude-plugin/plugin.json", "fields": ["version"] },
+    { "path": ".claude-plugin/marketplace.json", "fields": ["metadata.version", "plugins[*].version"] }
+  ]
+}
