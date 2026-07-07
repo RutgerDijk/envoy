@@ -123,5 +123,74 @@ test('apply writes files with two-space indent and trailing newline', () => {
   assert.ok(raw.includes('\n  "version"'), 'file must use two-space indent');
 });
 
+// --- structural rot: zero-target specs and non-semver values must fail check ---
+
+test('check fails when a field spec expands to zero targets (missing intermediate)', () => {
+  const root = makeRepo('2.4.1', '2.4.1', ['2.4.1']);
+  const file = path.join(root, '.claude-plugin', 'marketplace.json');
+  const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+  delete doc.metadata;
+  fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
+  const result = check(root);
+  assert.strictEqual(result.ok, false);
+  assert.ok(
+    result.mismatches.some(m => m.fieldPath === 'metadata.version' && m.value === undefined),
+    'missing intermediate must surface as a mismatch for its field spec'
+  );
+});
+
+test('check fails when a wildcard spec matches an empty array', () => {
+  const root = makeRepo('2.4.1', '2.4.1', []);
+  const result = check(root);
+  assert.strictEqual(result.ok, false);
+  assert.ok(
+    result.mismatches.some(m => m.fieldPath === 'plugins[*].version'),
+    'empty plugins array must surface the unexpanded spec as a mismatch'
+  );
+});
+
+test('check fails when values agree but are not semver', () => {
+  const root = makeRepo('oops', 'oops', ['oops']);
+  const result = check(root);
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.mismatches.length, 4);
+});
+
+// --- CLI: exit codes and output are the acceptance criteria ---
+
+const { execFileSync } = require('child_process');
+const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'sync-versions.js');
+
+function runCli(root, args) {
+  try {
+    const stdout = execFileSync('node', [SCRIPT, ...args], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return { code: 0, stdout, stderr: '' };
+  } catch (err) {
+    return { code: err.status, stdout: err.stdout || '', stderr: err.stderr || '' };
+  }
+}
+
+test('CLI --check exits 0 when manifests agree', () => {
+  const root = makeRepo('2.4.1', '2.4.1', ['2.4.1']);
+  const result = runCli(root, ['--check']);
+  assert.strictEqual(result.code, 0);
+  assert.ok(result.stdout.includes('all manifests at 2.4.1'));
+});
+
+test('CLI --check exits 1 listing each mismatch on drift', () => {
+  const root = makeRepo('2.4.0', '2.1.3', ['2.1.3']);
+  const result = runCli(root, ['--check']);
+  assert.strictEqual(result.code, 1);
+  assert.ok(result.stderr.includes('.claude-plugin/plugin.json#version = 2.4.0'));
+  assert.ok(result.stderr.includes('.claude-plugin/marketplace.json#metadata.version = 2.1.3'));
+});
+
+test('CLI --apply rewrites manifests and exits 0', () => {
+  const root = makeRepo('2.4.0', '2.1.3', ['2.1.3']);
+  const result = runCli(root, ['--apply', '2.4.1']);
+  assert.strictEqual(result.code, 0);
+  assert.strictEqual(runCli(root, ['--check']).code, 0);
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
