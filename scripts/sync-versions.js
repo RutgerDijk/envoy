@@ -93,7 +93,13 @@ function resolveTargets(root) {
   for (const manifest of config.manifests || []) {
     const doc = readManifest(root, manifest.path);
     for (const field of manifest.fields || []) {
-      for (const { fieldPath, segments } of expandField(doc, field)) {
+      const expanded = expandField(doc, field);
+      if (expanded.length === 0) {
+        // A spec that matches nothing is structural rot, not agreement.
+        targets.push({ file: manifest.path, fieldPath: field, segments: null, value: undefined });
+        continue;
+      }
+      for (const { fieldPath, segments } of expanded) {
         targets.push({
           file: manifest.path,
           fieldPath,
@@ -109,7 +115,7 @@ function resolveTargets(root) {
 function check(root) {
   const targets = resolveTargets(root);
   const versions = [...new Set(targets.map(t => t.value))];
-  if (versions.length === 1) {
+  if (versions.length === 1 && SEMVER.test(String(versions[0]))) {
     return { ok: true, version: versions[0], mismatches: [] };
   }
   // Report every target so the drift is fully visible, whichever value is "right".

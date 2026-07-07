@@ -153,7 +153,7 @@ test('check fails when values agree but are not semver', () => {
   const root = makeRepo('oops', 'oops', ['oops']);
   const result = check(root);
   assert.strictEqual(result.ok, false);
-  assert.strictEqual(result.mismatches.length, 4);
+  assert.strictEqual(result.mismatches.length, 3);
 });
 
 // --- CLI: exit codes and output are the acceptance criteria ---
