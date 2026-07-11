@@ -26,8 +26,11 @@ function test(name, fn) {
   }
 }
 
+const tempRoots = [];
+
 function makeRepo(pluginVersion, marketplaceMetaVersion, entryVersions) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-versions-'));
+  tempRoots.push(root);
   fs.mkdirSync(path.join(root, '.claude-plugin'), { recursive: true });
   fs.writeFileSync(
     path.join(root, '.claude-plugin', 'plugin.json'),
@@ -191,6 +194,31 @@ test('CLI --apply rewrites manifests and exits 0', () => {
   assert.strictEqual(result.code, 0);
   assert.strictEqual(runCli(root, ['--check']).code, 0);
 });
+
+// --- fail fast: apply must not write anything on structural rot ---
+
+test('apply refuses to write anything when a field spec expands to zero targets', () => {
+  const root = makeRepo('2.4.0', '2.1.3', ['2.1.3']);
+  const marketplaceFile = path.join(root, '.claude-plugin', 'marketplace.json');
+  const doc = JSON.parse(fs.readFileSync(marketplaceFile, 'utf8'));
+  delete doc.metadata;
+  fs.writeFileSync(marketplaceFile, JSON.stringify(doc, null, 2) + '\n');
+  const pluginFile = path.join(root, '.claude-plugin', 'plugin.json');
+  const pluginBefore = fs.readFileSync(pluginFile, 'utf8');
+  assert.throws(() => apply(root, '2.4.1'), /zero targets/);
+  assert.strictEqual(fs.readFileSync(pluginFile, 'utf8'), pluginBefore, 'no manifest may be written on failure');
+});
+
+test('resolveTargets throws when the config yields no targets at all', () => {
+  const root = makeRepo('2.4.0', '2.4.0', []);
+  fs.writeFileSync(path.join(root, '.version-bump.json'), JSON.stringify({ manifests: [] }, null, 2) + '\n');
+  assert.throws(() => resolveTargets(root), /no version targets/);
+  assert.throws(() => check(root), /no version targets/);
+});
+
+for (const root of tempRoots) {
+  fs.rmSync(root, { recursive: true, force: true });
+}
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
