@@ -30,14 +30,17 @@ function test(name, fn) {
 
 function runHook() {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'session-start-'));
-  const stdout = execFileSync('bash', [HOOK], {
-    cwd,
-    encoding: 'utf8',
-    input: JSON.stringify({ hook_event_name: 'SessionStart', source: 'startup', session_id: 'test', cwd }),
-    env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT }
-  });
-  fs.rmSync(cwd, { recursive: true, force: true });
-  return stdout;
+  try {
+    return execFileSync('bash', [HOOK], {
+      cwd,
+      encoding: 'utf8',
+      timeout: 30000,
+      input: JSON.stringify({ hook_event_name: 'SessionStart', source: 'startup', session_id: 'test', cwd }),
+      env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT }
+    });
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 }
 
 test('hook emits valid JSON', () => {
