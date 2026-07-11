@@ -2,6 +2,10 @@
 
 You are working in a project that uses the **Envoy professional workflow** for .NET/React/Azure development. Follow these instructions on every interaction.
 
+## Shared Rules (read first)
+
+If the repo root has an `AGENTS.md` (or `CLAUDE.md`) file, those are the canonical project rules for ALL coding agents — code style, naming, comments, version control, and testing rules. Those rules are authoritative; this file only adds the Copilot-specific workflow surface. The stack-specific `.instructions.md` files in `.github/instructions/` apply automatically by file type.
+
 ## Workflow Overview
 
 ```
@@ -16,14 +20,14 @@ Use the slash commands below (`.github/prompts/`) to drive each phase.
 |---------|-------------|
 | `/brainstorm` | Starting a new feature or significant change |
 | `/pickup` | Implementing a GitHub issue |
-| `/write-plan` | Adding a detailed implementation plan to an existing spec |
-| `/execute-plan` | Executing an existing spec/plan file |
-| `/review` | Full 4-layer review before creating a PR |
+| `/review` | Full layered review before creating a PR |
 | `/quick-review` | Fast AI-only review during development |
 | `/finalize` | Review + docstrings + wiki sync + PR creation |
 | `/docstrings` | Adding XML/JSDoc documentation to public APIs |
 | `/wiki-sync` | Syncing `docs/wiki/` to the GitHub wiki |
 | `/cleanup` | Removing worktree and branch after PR merge |
+
+> Implementation plans are committed as `.envoy-tasks/<issue-number>.json` task files (emitted by brainstorm, consumed by pickup). If an issue has no task file, treat it as not pickup-ready.
 
 > **Visual review** (`/visual-review`) requires the Chrome DevTools MCP server, which is only available in Claude Code. In Copilot, perform visual checks by inspecting browser screenshots or by running the app and describing what you see.
 
@@ -34,9 +38,7 @@ When the user asks you to do something, first decide which workflow applies:
 | User intent | Use |
 |-------------|-----|
 | "I have an idea / new feature" | `/brainstorm` |
-| "Pick up issue #N" or "implement this issue" | `/pickup` |
-| "I have a spec, create tasks" | `/write-plan` |
-| "Implement this plan / spec" | `/execute-plan` |
+| "Pick up issue #N" or "implement this issue" | `/pickup` (requires `.envoy-tasks/<N>.json`) |
 | "Review my changes" | `/review` |
 | "Quick check" | `/quick-review` |
 | "Create a PR / wrap up the branch" | `/finalize` |
@@ -44,6 +46,17 @@ When the user asks you to do something, first decide which workflow applies:
 | "Update the wiki" | `/wiki-sync` |
 | "PR was merged, clean up" | `/cleanup` |
 | "There's a bug" | Apply TDD: write failing test first, then fix |
+| "CI is failing on the PR" | Diagnose the failing check, fix the root cause, push — never bypass or skip checks |
+
+## Handoff State (shared with Claude Code sessions)
+
+Envoy sessions in a project — from any agent — share state through files, not conversation memory:
+
+- **`.envoy-tasks/<issue>.json`** (committed) — the brainstorm → pickup task contract. Visible in PR diffs.
+- **`.envoy/`** (gitignored, per-worktree) — runtime handoff state between workflow phases. Do not commit it; do not trust it over git history and the issue/PR state.
+- **Worktrees** live at `.worktrees/<issue-number>-<topic>/`, one per issue.
+
+If handoff state is missing, reconstruct from durable sources (git log, the committed task file, the GitHub issue/PR) rather than guessing.
 
 ## Iron Law: TDD
 
@@ -86,6 +99,8 @@ test(api): add integration tests for user creation
 docs(wiki): update authentication setup guide
 refactor(domain): extract value object for email address
 ```
+
+Never add AI attribution lines (`Co-Authored-By`, "Generated with …") to commit messages.
 
 ## When There Is No Applicable Command
 

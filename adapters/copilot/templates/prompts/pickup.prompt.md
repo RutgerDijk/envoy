@@ -62,7 +62,7 @@ Identify:
 
 ## Step 6: Execute the Plan
 
-Follow the `/execute-plan` workflow for the loaded spec, using the worktree as working directory.
+Execute the tasks from the committed `.envoy-tasks/<issue-number>.json` file in order, using the worktree as working directory and following TDD for each task.
 
 All implementation must follow TDD:
 1. Write failing test
