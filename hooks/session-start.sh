@@ -154,6 +154,9 @@ ESCAPED_CONTENT=$(escape_json "$OUTPUT_CONTENT")
 # Output JSON response
 cat << EOF
 {
-  "hookSpecificOutput": "$ESCAPED_CONTENT"
+  "hookSpecificOutput": {
+    "hookEventName": "SessionStart",
+    "additionalContext": "$ESCAPED_CONTENT"
+  }
 }
 EOF
