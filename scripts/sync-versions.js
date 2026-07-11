@@ -109,6 +109,9 @@ function resolveTargets(root) {
       }
     }
   }
+  if (targets.length === 0) {
+    throw new Error(`${CONFIG_FILE} yields no version targets — check its manifests/fields entries`);
+  }
   return targets;
 }
 
@@ -129,6 +132,13 @@ function check(root) {
 function apply(root, version) {
   if (!SEMVER.test(String(version))) {
     throw new Error(`not a plain semver version: ${version} (expected MAJOR.MINOR.PATCH)`);
+  }
+  // Fail fast before any write: a spec that matches nothing means the repo is
+  // structurally rotten, and a partial apply would leave manifests mixed.
+  const missing = resolveTargets(root).filter(t => t.segments === null);
+  if (missing.length > 0) {
+    const specs = missing.map(m => `${m.file}#${m.fieldPath}`).join(', ');
+    throw new Error(`field specs expanded to zero targets: ${specs} — nothing written`);
   }
   const config = loadConfig(root);
   for (const manifest of config.manifests || []) {

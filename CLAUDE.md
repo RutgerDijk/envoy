@@ -188,7 +188,7 @@ describe what Claude does; preflight supplies the inputs.
 Every manifest that carries the plugin version is listed in `.version-bump.json`; they must stay in lockstep.
 1. Bump: `node scripts/sync-versions.js --apply <MAJOR.MINOR.PATCH>`
 2. Verify: `node scripts/sync-versions.js --check` must exit 0
-3. Run the test suite (`node tests/**/*.test.js` files individually)
+3. Run the test suite: `for t in $(find tests -name "*.test.js"); do node "$t" || exit 1; done`
 4. After the release PR merges to main: `git tag v<version> && git push origin v<version>`
 
 ## Do Not
