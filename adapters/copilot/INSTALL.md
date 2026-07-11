@@ -53,8 +53,6 @@ In VS Code Copilot Chat, type `/` to see all available commands:
 |---------|-------------|
 | `/brainstorm` | Turn an idea into a GitHub issue + spec document |
 | `/pickup` | Pick up a GitHub issue and implement it |
-| `/write-plan` | Add a detailed task plan to an existing spec |
-| `/execute-plan` | Execute a spec file task by task with TDD |
 | `/review` | Full code review (lint, AI, docs, security) |
 | `/quick-review` | Fast AI-only review during development |
 | `/finalize` | Review + docstrings + wiki sync + PR creation |
@@ -127,8 +125,6 @@ envoy/adapters/copilot/
     │   ├── quick-review.prompt.md
     │   ├── finalize.prompt.md
     │   ├── cleanup.prompt.md
-    │   ├── write-plan.prompt.md
-    │   ├── execute-plan.prompt.md
     │   ├── docstrings.prompt.md
     │   ├── wiki-sync.prompt.md
     │   └── visual-review.prompt.md

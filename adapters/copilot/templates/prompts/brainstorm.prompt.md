@@ -46,7 +46,7 @@ Save to `docs/plans/YYYY-MM-DD-<topic>.md` where topic is a short kebab-case nam
 ```markdown
 # <Feature Name>
 
-> **For Copilot:** Use the `/execute-plan` command to implement this spec task-by-task, following TDD.
+> **For Copilot:** Use the `/pickup` command with the committed `.envoy-tasks/<issue-number>.json` task file to implement this issue task-by-task, following TDD.
 
 ## Overview
 
