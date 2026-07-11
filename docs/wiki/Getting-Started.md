@@ -55,7 +55,20 @@ Add to `~/.mcp.json`:
 Launch Chrome with debugging:
 
 ```bash
+# macOS
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
+
+# Linux
+google-chrome --remote-debugging-port=9222
+
+# Windows (PowerShell)
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
+```
+
+On a headless box (server / CI / remote dev VM) add `--headless=new --no-sandbox`:
+
+```bash
+google-chrome --headless=new --no-sandbox --remote-debugging-port=9222
 ```
 
 ### Verify Setup
