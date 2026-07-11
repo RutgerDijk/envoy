@@ -502,15 +502,18 @@ Chrome DevTools MCP enables visual verification by capturing screenshots, consol
 
    # Linux
    google-chrome --remote-debugging-port=9222
+   ```
 
-   # Windows (PowerShell)
+   ```powershell
+   # Windows
    & "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
    ```
 
-   On a headless box (server / CI / remote dev VM) add `--headless=new --no-sandbox`:
+   On a headless box (server / remote dev VM) add `--headless=new`:
    ```bash
-   google-chrome --headless=new --no-sandbox --remote-debugging-port=9222
+   google-chrome --headless=new --remote-debugging-port=9222
    ```
+   If Chrome refuses to start in a container or CI sandbox you trust, add `--no-sandbox` — it disables Chrome's sandbox, so use it only in isolated, trusted environments.
 
 **Without DevTools MCP**: The review skill skips visual verification (Layer 3) and continues with other layers.
 
