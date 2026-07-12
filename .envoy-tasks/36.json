@@ -1,0 +1,50 @@
+{
+  "$schemaVersion": "1",
+  "issueNumber": 36,
+  "strategy": "sequential",
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "pr-status CLI",
+      "description": "Zero-dep Node CLI gathering CI, CodeRabbit check state, GraphQL unresolved threads, rate-limit parse, reviewer states, idle time into one JSON snapshot.",
+      "files": [
+        "lib/pr-status.js"
+      ],
+      "acceptance": [
+        "Emits schema-stable JSON with ci, coderabbit (checkState, unresolvedThreads, rateLimit), reviewers, idle",
+        "Unresolved-thread count comes from GraphQL reviewThreads filtered to CR + isResolved=false",
+        "Rate-limit parse returns resetsAt from a CR rate-limit comment"
+      ]
+    },
+    {
+      "id": "task-2",
+      "title": "pr-status unit tests",
+      "description": "Fixture-based tests for CR comment/rate-limit parsing and GraphQL unresolved counting.",
+      "files": [
+        "tests/pr-status.test.js"
+      ],
+      "acceptance": [
+        "Tests cover CR comment shapes, rate-limit body parse, and GraphQL reviewThreads unresolved counting"
+      ],
+      "dependsOn": [
+        "task-1"
+      ]
+    },
+    {
+      "id": "task-3",
+      "title": "rewire finalize to pr-status",
+      "description": "Replace inline REST poll in finalize with calls to lib/pr-status.js; advance condition uses unresolved threads + terminal CR check.",
+      "files": [
+        "skills/finalize/steps/coderabbit.md"
+      ],
+      "acceptance": [
+        "finalize calls lib/pr-status.js",
+        "No REST-only comment count remains as the sole advance signal",
+        "Closes #25 race"
+      ],
+      "dependsOn": [
+        "task-1"
+      ]
+    }
+  ]
+}

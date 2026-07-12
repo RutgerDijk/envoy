@@ -1,0 +1,36 @@
+{
+  "$schemaVersion": "1",
+  "issueNumber": 37,
+  "strategy": "sequential",
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "babysit skill",
+      "description": "One-pass shepherd: read pr-status per open PR, take the single correct action (re-trigger CR / fix-ci / coderabbit-pr-review / report ready), summarize, suggest re-run cadence.",
+      "files": [
+        "skills/babysit/SKILL.md"
+      ],
+      "acceptance": [
+        "Describes one-pass model + action decision table",
+        "Re-triggers CR only when rateLimit.limited was true and resetsAt has passed",
+        "Invokes fix-ci on red CI and coderabbit-pr-review on unresolved threads",
+        "Never sleeps in-session; reports actions + suggested cadence"
+      ]
+    },
+    {
+      "id": "task-2",
+      "title": "babysit command",
+      "description": "Register /envoy:babysit and document composing with /loop.",
+      "files": [
+        "commands/babysit.md"
+      ],
+      "acceptance": [
+        "/envoy:babysit registered",
+        "Docs show /loop 15m /envoy:babysit composition"
+      ],
+      "dependsOn": [
+        "task-1"
+      ]
+    }
+  ]
+}

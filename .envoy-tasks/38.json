@@ -1,0 +1,34 @@
+{
+  "$schemaVersion": "1",
+  "issueNumber": 38,
+  "strategy": "sequential",
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "prs viewer skill",
+      "description": "Read-only skill rendering lib/pr-status.js snapshots for all open PRs as a status table with suggested next action per row.",
+      "files": [
+        "skills/prs/SKILL.md"
+      ],
+      "acceptance": [
+        "Renders per-PR table (CI, CodeRabbit incl. rate-limited, unresolved, idle, suggested next action)",
+        "Takes zero actions",
+        "Reuses lib/pr-status.js without duplicated gathering logic"
+      ]
+    },
+    {
+      "id": "task-2",
+      "title": "prs command",
+      "description": "Register /envoy:prs.",
+      "files": [
+        "commands/prs.md"
+      ],
+      "acceptance": [
+        "/envoy:prs registered"
+      ],
+      "dependsOn": [
+        "task-1"
+      ]
+    }
+  ]
+}
