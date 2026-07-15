@@ -74,5 +74,13 @@ test('each poll block self-derives PR_NUMBER (separate shell invocations)', () =
   );
 });
 
+test('both probes are non-fatal so the status-unavailable guard is reachable under set -e/pipefail', () => {
+  const guarded = md.match(/SNAP=\$\(\$PR_STATUS "\$PR_NUMBER" 2>\/dev\/null \|\| true\)/g) || [];
+  assert.ok(
+    guarded.length >= 2,
+    `a failing pr-status probe must not abort the step (needs "2>/dev/null || true"); found ${guarded.length} guarded probes`
+  );
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
