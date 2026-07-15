@@ -193,6 +193,73 @@ test('missing lastActivityAt yields null idleMinutes', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// summarizeChecks
+// ═══════════════════════════════════════════════════════════════════
+
+section('summarizeChecks: CI rollup state + CodeRabbit check derivation');
+
+test('empty rollup yields NONE state, no checks, null CodeRabbit state', () => {
+  const result = prStatus.summarizeChecks([]);
+  assert.strictEqual(result.ci.state, 'NONE');
+  assert.deepStrictEqual(result.ci.checks, []);
+  assert.strictEqual(result.coderabbitCheckState, null);
+});
+
+test('missing rollup (undefined) is treated as empty', () => {
+  const result = prStatus.summarizeChecks(undefined);
+  assert.strictEqual(result.ci.state, 'NONE');
+  assert.strictEqual(result.coderabbitCheckState, null);
+});
+
+test('all-success checks yield SUCCESS', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'test', conclusion: 'SUCCESS' },
+    { name: 'build', conclusion: 'SUCCESS' },
+  ]);
+  assert.strictEqual(result.ci.state, 'SUCCESS');
+});
+
+test('any failing check yields FAILURE (precedence over pending)', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'a', conclusion: 'PENDING' },
+    { name: 'b', conclusion: 'FAILURE' },
+    { name: 'c', conclusion: 'SUCCESS' },
+  ]);
+  assert.strictEqual(result.ci.state, 'FAILURE');
+});
+
+test('pending without failure yields PENDING', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'a', conclusion: 'SUCCESS' },
+    { name: 'b', status: 'IN_PROGRESS' },
+  ]);
+  assert.strictEqual(result.ci.state, 'PENDING');
+});
+
+test('name falls back context→unknown; state falls back conclusion→state→status→null', () => {
+  const result = prStatus.summarizeChecks([
+    { context: 'legacy-status', state: 'SUCCESS' },
+    { conclusion: 'SUCCESS' },
+  ]);
+  assert.strictEqual(result.ci.checks[0].name, 'legacy-status');
+  assert.strictEqual(result.ci.checks[1].name, 'unknown');
+  assert.strictEqual(result.ci.checks[0].state, 'SUCCESS');
+});
+
+test('CodeRabbit check state is picked out by name (case-insensitive)', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'CI', conclusion: 'SUCCESS' },
+    { name: 'CodeRabbit', conclusion: 'NEUTRAL' },
+  ]);
+  assert.strictEqual(result.coderabbitCheckState, 'NEUTRAL');
+});
+
+test('no CodeRabbit check yields null coderabbitCheckState', () => {
+  const result = prStatus.summarizeChecks([{ name: 'CI', conclusion: 'SUCCESS' }]);
+  assert.strictEqual(result.coderabbitCheckState, null);
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
 
