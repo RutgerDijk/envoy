@@ -35,10 +35,6 @@ function section(name) {
 
 section('parseRateLimit: CodeRabbit rate-limit comment bodies');
 
-test('parseRateLimit is exported', () => {
-  assert.strictEqual(typeof prStatus.parseRateLimit, 'function');
-});
-
 test('non-rate-limit body returns not rate-limited, null reset', () => {
   const result = prStatus.parseRateLimit('Actionable comments posted: 3\n\nLooks good overall.');
   assert.deepStrictEqual(result, { rateLimited: false, resetsAt: null });
@@ -93,10 +89,6 @@ test('rate-limit body with no parseable reset returns rateLimited true, null res
 
 section('countUnresolvedThreads: GraphQL reviewThreads filtered to CodeRabbit + unresolved');
 
-test('countUnresolvedThreads is exported', () => {
-  assert.strictEqual(typeof prStatus.countUnresolvedThreads, 'function');
-});
-
 function thread(login, isResolved) {
   return {
     isResolved,
@@ -139,10 +131,6 @@ test('thread with no comments is ignored', () => {
 // ═══════════════════════════════════════════════════════════════════
 
 section('buildSnapshot: schema-stable assembly from raw inputs');
-
-test('buildSnapshot is exported', () => {
-  assert.strictEqual(typeof prStatus.buildSnapshot, 'function');
-});
 
 const rawInputs = {
   pr: 42,
