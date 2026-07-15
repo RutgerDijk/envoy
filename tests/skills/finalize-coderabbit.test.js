@@ -82,5 +82,13 @@ test('both probes are non-fatal so the status-unavailable guard is reachable und
   );
 });
 
+test('both blocks check for an empty snapshot before running jq (guard, not jq tolerance)', () => {
+  const guards = md.match(/if \[ -z "\$SNAP" \]/g) || [];
+  assert.ok(
+    guards.length >= 2,
+    `both poll blocks must gate jq behind an explicit -z "$SNAP" check so a failed probe can't be misread; found ${guards.length}`
+  );
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
