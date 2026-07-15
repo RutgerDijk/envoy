@@ -10,6 +10,10 @@ GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backo
 # CodeRabbit: 22min max (async review — GitHub App processes PR asynchronously)
 PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
 
+# One snapshot source for the CodeRabbit signal: GraphQL unresolved review
+# threads (REST comment counts miss inline threads, #25) plus rate-limit state.
+PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
+
 # Exponential backoff in seconds — 22min (1320s) max
 # intervals = [120s, 120s, 240s, 360s, 480s]
 # cumulative =  2     4     8    14    22 min
@@ -18,15 +22,44 @@ for WAIT in 120 120 240 360 480; do
   sleep $WAIT
   ELAPSED=$((ELAPSED + WAIT))
 
-  COMMENTS=$(gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
-    --jq '[.[] | select(.user.login == "coderabbitai")] | length')
+  # Probe is non-fatal: a pr-status failure must not abort the step under set -e/pipefail.
+  SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
 
-  if [ "$COMMENTS" -gt 0 ]; then
-    echo "CodeRabbit left $COMMENTS comments after $((ELAPSED / 60))min. Addressing..."
+  # A missing snapshot (status probe failed) — keep polling, don't misread as clean.
+  # Check before jq so jq never runs on empty input.
+  if [ -z "$SNAP" ]; then
+    echo "CodeRabbit status unavailable. $((ELAPSED / 60))min elapsed; retrying..."
+    if [ "$ELAPSED" -ge 1320 ]; then break; fi
+    continue
+  fi
+
+  CR_STATE=$(echo "$SNAP" | jq -r '.coderabbit.checkState // empty')
+  UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty')
+  RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty')
+  RESETS_AT=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.resetsAt // empty')
+
+  # A rate-limited review is NOT a clean review — keep waiting past the reset.
+  if [ "$RATE_LIMITED" = "true" ]; then
+    echo "CodeRabbit is rate-limited (resets $RESETS_AT). $((ELAPSED / 60))min elapsed; waiting..."
+    if [ "$ELAPSED" -ge 1320 ]; then break; fi
+    continue
+  fi
+
+  # Unresolved CodeRabbit threads present — go address them.
+  if [ "$UNRESOLVED" -gt 0 ]; then
+    echo "CodeRabbit left $UNRESOLVED unresolved thread(s) after $((ELAPSED / 60))min. Addressing..."
     break
   fi
 
-  echo "No CodeRabbit comments yet. $((ELAPSED / 60))min elapsed."
+  # Terminal CodeRabbit check with zero unresolved threads — clean review.
+  case "$CR_STATE" in
+    SUCCESS|FAILURE|COMPLETED|NEUTRAL|SKIPPED|CANCELLED|TIMED_OUT|ACTION_REQUIRED)
+      echo "CodeRabbit review settled ($CR_STATE), no unresolved threads after $((ELAPSED / 60))min."
+      break
+      ;;
+  esac
+
+  echo "CodeRabbit review still pending. $((ELAPSED / 60))min elapsed."
   if [ "$ELAPSED" -ge 1320 ]; then break; fi
 done
 ```
@@ -97,34 +130,44 @@ git push
 
 ### Step 7: Re-poll (Max 3 Cycles, with Completion Signal)
 
-Announce: `Running Step 7: Re-poll for new comments...`
+Announce: `Running Step 7: Re-poll for unresolved threads...`
 
-After pushing, CodeRabbit may leave new comments on the fixes. Use the **completion signal pattern** (inline):
+After pushing, CodeRabbit may open new review threads on the fixes. Use the **completion signal pattern** (inline):
 
-"No new comments" must be confirmed 3 consecutive times before the loop stops — a single check could miss comments still being posted. Output `ENVOY_LOOP_COMPLETE` on each clean check; reset the counter when new comments appear.
+A settled review — not rate-limited AND zero unresolved CodeRabbit threads — must be confirmed 3 consecutive times before the loop stops; a single check could miss threads still being posted. Output `ENVOY_LOOP_COMPLETE` on each settled check; reset the counter when threads remain unresolved (or the status is rate-limited/unavailable).
 
 ```bash
-LAST_PUSH=$(git log -1 --format=%cI)
-NEW_COMMENTS=$(gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
-  --jq "[.[] | select(.user.login == \"coderabbitai\") | select(.created_at > \"$LAST_PUSH\")] | length")
+# Each step is a separate shell invocation — re-derive PR_NUMBER and PR_STATUS here.
+PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
+PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
+# Probe is non-fatal: a pr-status failure must not abort the step under set -e/pipefail.
+SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
 
-if [ "$NEW_COMMENTS" -eq 0 ]; then
-  echo "ENVOY_LOOP_COMPLETE — no new comments (check N/3)"
+# A missing snapshot means the status probe failed — do NOT treat that as a clean
+# review. Check before jq (same guard as Step 3) so jq never runs on empty input.
+if [ -z "$SNAP" ]; then
+  echo "CodeRabbit status unavailable — reset completion counter"
 else
-  echo "New comments found: $NEW_COMMENTS — reset completion counter"
+  UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty')
+  RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty')
+  if [ -n "$UNRESOLVED" ] && [ "$RATE_LIMITED" != "true" ] && [ "$UNRESOLVED" -eq 0 ]; then
+    echo "ENVOY_LOOP_COMPLETE — no unresolved CodeRabbit threads (check N/3)"
+  else
+    echo "Unresolved CodeRabbit threads: ${UNRESOLVED:-unknown} (rate-limited: ${RATE_LIMITED:-unknown}) — reset completion counter"
+  fi
 fi
 ```
 
-**If new comments:** address -> reply -> resolve -> push -> re-poll. Reset completion counter.
+**If threads remain unresolved:** address -> reply -> resolve -> push -> re-poll. Reset completion counter.
 
 **Max 3 address-and-push cycles.** After 3 cycles with remaining issues:
 
 ```
 **Escalation: CodeRabbit cycle limit reached**
 
-After 3 cycles, these comments remain unresolved:
-- <comment 1>
-- <comment 2>
+After 3 cycles, these threads remain unresolved:
+- <thread 1>
+- <thread 2>
 
 Please review and decide how to proceed.
 ```
