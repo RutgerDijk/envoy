@@ -1,6 +1,10 @@
 #!/usr/bin/env node
-// ABOUTME: Test suite for lib/pr-status.js pure functions.
-// ABOUTME: Fixture-based, no network — covers rate-limit parse, thread counting, snapshot assembly.
+/**
+ * PR status snapshot engine — Test Suite
+ *
+ * Fixture-based, no network — covers rate-limit parse, thread counting, snapshot assembly.
+ * Run: node tests/lib/pr-status.test.js
+ */
 
 const assert = require('assert');
 const path = require('path');
