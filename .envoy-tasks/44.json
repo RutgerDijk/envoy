@@ -1,0 +1,40 @@
+{
+  "$schemaVersion": "1",
+  "strategy": "sequential",
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "Paginate reviewThreads and add all-author unresolved count to pr-status.js",
+      "description": "Make fetchReviewThreads follow pageInfo.hasNextPage so counts are correct past 100 threads; add a pure countUnresolvedTotal(payload) (all authors) surfaced as a new top-level threads.unresolved block; keep coderabbit.unresolvedThreads unchanged.",
+      "files": [
+        "lib/pr-status.js",
+        "tests/lib/pr-status.test.js"
+      ],
+      "acceptance": [
+        "fetchReviewThreads paginates via pageInfo.hasNextPage/endCursor and accumulates all nodes across pages",
+        "New pure countUnresolvedTotal(payload) counts all-author unresolved threads; unit-tested with fixtures",
+        "Snapshot gains a top-level threads.unresolved field; coderabbit.unresolvedThreads is unchanged (finalize on main depends on it)",
+        "The schema-shape test is updated to include the new threads key; full suite green"
+      ]
+    },
+    {
+      "id": "task-2",
+      "title": "Route verification/SKILL.md conversation checks through pr-status.js",
+      "description": "Replace verification's inline all-author GraphQL check and its REST CodeRabbit comment-count with node lib/pr-status.js reads; drop $OWNER/$REPO string interpolation; use the non-fatal probe pattern with an empty-snapshot guard.",
+      "files": [
+        "skills/verification/SKILL.md",
+        "tests/skills/verification-prstatus.test.js"
+      ],
+      "acceptance": [
+        "Both verification conversation checks call lib/pr-status.js; no inline GraphQL and no REST comment-count remain",
+        "The all-author check reads .threads.unresolved; the CodeRabbit check reads .coderabbit.unresolvedThreads",
+        "The probe is non-fatal (2>/dev/null || true) with a -z \"$SNAP\" guard before jq",
+        "A new contract test tests/skills/verification-prstatus.test.js guards the routing"
+      ],
+      "dependsOn": [
+        "task-1"
+      ]
+    }
+  ],
+  "issueNumber": 44
+}
