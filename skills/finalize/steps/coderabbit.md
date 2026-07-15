@@ -22,18 +22,21 @@ for WAIT in 120 120 240 360 480; do
   sleep $WAIT
   ELAPSED=$((ELAPSED + WAIT))
 
-  SNAP=$($PR_STATUS "$PR_NUMBER")
-  CR_STATE=$(echo "$SNAP" | jq -r '.coderabbit.checkState // empty')
-  UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty')
-  RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty')
-  RESETS_AT=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.resetsAt // empty')
+  # Probe is non-fatal: a pr-status failure must not abort the step under set -e/pipefail.
+  SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
 
   # A missing snapshot (status probe failed) — keep polling, don't misread as clean.
-  if [ -z "$UNRESOLVED" ]; then
+  # Check before jq so jq never runs on empty input.
+  if [ -z "$SNAP" ]; then
     echo "CodeRabbit status unavailable. $((ELAPSED / 60))min elapsed; retrying..."
     if [ "$ELAPSED" -ge 1320 ]; then break; fi
     continue
   fi
+
+  CR_STATE=$(echo "$SNAP" | jq -r '.coderabbit.checkState // empty')
+  UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty')
+  RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty')
+  RESETS_AT=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.resetsAt // empty')
 
   # A rate-limited review is NOT a clean review — keep waiting past the reset.
   if [ "$RATE_LIMITED" = "true" ]; then
@@ -137,9 +140,10 @@ A settled review — not rate-limited AND zero unresolved CodeRabbit threads —
 # Each step is a separate shell invocation — re-derive PR_NUMBER and PR_STATUS here.
 PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
 PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
-SNAP=$($PR_STATUS "$PR_NUMBER")
-UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty')
-RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty')
+# Probe is non-fatal: a pr-status failure must not abort the step under set -e/pipefail.
+SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
+UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty' 2>/dev/null)
+RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty' 2>/dev/null)
 
 # A missing snapshot (empty UNRESOLVED) means the status probe failed — do NOT
 # treat that as a clean review; reset the counter and re-poll.
