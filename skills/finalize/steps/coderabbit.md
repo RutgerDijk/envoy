@@ -23,10 +23,17 @@ for WAIT in 120 120 240 360 480; do
   ELAPSED=$((ELAPSED + WAIT))
 
   SNAP=$($PR_STATUS "$PR_NUMBER")
-  CR_STATE=$(echo "$SNAP" | jq -r '.coderabbit.checkState')
-  UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads')
-  RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited')
-  RESETS_AT=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.resetsAt')
+  CR_STATE=$(echo "$SNAP" | jq -r '.coderabbit.checkState // empty')
+  UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty')
+  RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty')
+  RESETS_AT=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.resetsAt // empty')
+
+  # A missing snapshot (status probe failed) — keep polling, don't misread as clean.
+  if [ -z "$UNRESOLVED" ]; then
+    echo "CodeRabbit status unavailable. $((ELAPSED / 60))min elapsed; retrying..."
+    if [ "$ELAPSED" -ge 1320 ]; then break; fi
+    continue
+  fi
 
   # A rate-limited review is NOT a clean review — keep waiting past the reset.
   if [ "$RATE_LIMITED" = "true" ]; then
@@ -43,8 +50,8 @@ for WAIT in 120 120 240 360 480; do
 
   # Terminal CodeRabbit check with zero unresolved threads — clean review.
   case "$CR_STATE" in
-    SUCCESS|FAILURE|COMPLETED|NEUTRAL|SKIPPED)
-      echo "CodeRabbit review complete, no unresolved threads after $((ELAPSED / 60))min."
+    SUCCESS|FAILURE|COMPLETED|NEUTRAL|SKIPPED|CANCELLED|TIMED_OUT|ACTION_REQUIRED)
+      echo "CodeRabbit review settled ($CR_STATE), no unresolved threads after $((ELAPSED / 60))min."
       break
       ;;
   esac
@@ -120,37 +127,39 @@ git push
 
 ### Step 7: Re-poll (Max 3 Cycles, with Completion Signal)
 
-Announce: `Running Step 7: Re-poll for new comments...`
+Announce: `Running Step 7: Re-poll for unresolved threads...`
 
-After pushing, CodeRabbit may leave new comments on the fixes. Use the **completion signal pattern** (inline):
+After pushing, CodeRabbit may open new review threads on the fixes. Use the **completion signal pattern** (inline):
 
-"No new comments" must be confirmed 3 consecutive times before the loop stops — a single check could miss comments still being posted. Output `ENVOY_LOOP_COMPLETE` on each clean check; reset the counter when new comments appear.
+A settled review — not rate-limited AND zero unresolved CodeRabbit threads — must be confirmed 3 consecutive times before the loop stops; a single check could miss threads still being posted. Output `ENVOY_LOOP_COMPLETE` on each settled check; reset the counter when threads remain unresolved (or the status is rate-limited/unavailable).
 
 ```bash
+# Each step is a separate shell invocation — re-derive PR_NUMBER and PR_STATUS here.
+PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
 PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
 SNAP=$($PR_STATUS "$PR_NUMBER")
-UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads')
-RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited')
+UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty')
+RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty')
 
-# Completion requires a settled review: not rate-limited AND zero unresolved
-# CodeRabbit threads (GraphQL reviewThreads, not a REST comment count).
-if [ "$RATE_LIMITED" != "true" ] && [ "$UNRESOLVED" -eq 0 ]; then
+# A missing snapshot (empty UNRESOLVED) means the status probe failed — do NOT
+# treat that as a clean review; reset the counter and re-poll.
+if [ -n "$UNRESOLVED" ] && [ "$RATE_LIMITED" != "true" ] && [ "$UNRESOLVED" -eq 0 ]; then
   echo "ENVOY_LOOP_COMPLETE — no unresolved CodeRabbit threads (check N/3)"
 else
-  echo "Unresolved CodeRabbit threads: $UNRESOLVED (rate-limited: $RATE_LIMITED) — reset completion counter"
+  echo "Unresolved CodeRabbit threads: ${UNRESOLVED:-unknown} (rate-limited: ${RATE_LIMITED:-unknown}) — reset completion counter"
 fi
 ```
 
-**If new comments:** address -> reply -> resolve -> push -> re-poll. Reset completion counter.
+**If threads remain unresolved:** address -> reply -> resolve -> push -> re-poll. Reset completion counter.
 
 **Max 3 address-and-push cycles.** After 3 cycles with remaining issues:
 
 ```
 **Escalation: CodeRabbit cycle limit reached**
 
-After 3 cycles, these comments remain unresolved:
-- <comment 1>
-- <comment 2>
+After 3 cycles, these threads remain unresolved:
+- <thread 1>
+- <thread 2>
 
 Please review and decide how to proceed.
 ```
