@@ -142,15 +142,19 @@ PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
 PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
 # Probe is non-fatal: a pr-status failure must not abort the step under set -e/pipefail.
 SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
-UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty' 2>/dev/null)
-RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty' 2>/dev/null)
 
-# A missing snapshot (empty UNRESOLVED) means the status probe failed — do NOT
-# treat that as a clean review; reset the counter and re-poll.
-if [ -n "$UNRESOLVED" ] && [ "$RATE_LIMITED" != "true" ] && [ "$UNRESOLVED" -eq 0 ]; then
-  echo "ENVOY_LOOP_COMPLETE — no unresolved CodeRabbit threads (check N/3)"
+# A missing snapshot means the status probe failed — do NOT treat that as a clean
+# review. Check before jq (same guard as Step 3) so jq never runs on empty input.
+if [ -z "$SNAP" ]; then
+  echo "CodeRabbit status unavailable — reset completion counter"
 else
-  echo "Unresolved CodeRabbit threads: ${UNRESOLVED:-unknown} (rate-limited: ${RATE_LIMITED:-unknown}) — reset completion counter"
+  UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty')
+  RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty')
+  if [ -n "$UNRESOLVED" ] && [ "$RATE_LIMITED" != "true" ] && [ "$UNRESOLVED" -eq 0 ]; then
+    echo "ENVOY_LOOP_COMPLETE — no unresolved CodeRabbit threads (check N/3)"
+  else
+    echo "Unresolved CodeRabbit threads: ${UNRESOLVED:-unknown} (rate-limited: ${RATE_LIMITED:-unknown}) — reset completion counter"
+  fi
 fi
 ```
 
