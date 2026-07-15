@@ -66,5 +66,13 @@ test('no REST-only coderabbit comment-count is the sole advance signal', () => {
   );
 });
 
+test('each poll block self-derives PR_NUMBER (separate shell invocations)', () => {
+  const defs = md.match(/PR_NUMBER=\$\(jq -r \.prNumber \.envoy\/finalize\/state\.json\)/g) || [];
+  assert.ok(
+    defs.length >= 2,
+    `both the initial poll and the re-poll block must derive PR_NUMBER in their own shell; found ${defs.length}`
+  );
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
