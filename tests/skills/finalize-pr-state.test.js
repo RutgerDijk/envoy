@@ -38,15 +38,20 @@ const md = fs.readFileSync(SKILL, 'utf8');
 
 section('finalize Step 2: PR-state write passes env correctly');
 
+// Tolerate whitespace and either PR_NUMBER/PR_URL ordering — the contract is
+// "env assignments are a prefix before node", not an exact byte sequence.
+const envAssign = 'PR_(?:NUMBER|URL)="\\$PR_(?:NUMBER|URL)"';
+
 test('uses an env prefix before node (process.env resolves)', () => {
+  const prefixForm = new RegExp(`(?:${envAssign}\\s+){2}node\\s+-e`);
   assert.ok(
-    md.includes('PR_NUMBER="$PR_NUMBER" PR_URL="$PR_URL" node -e'),
+    prefixForm.test(md),
     'the PR-state write must set PR_NUMBER/PR_URL as an env prefix before `node -e`'
   );
 });
 
 test('does NOT place env assignments after node (which become argv → NaN)', () => {
-  const buggySuffix = /node -e "[\s\S]*?"\s*PR_NUMBER="\$PR_NUMBER"\s+PR_URL="\$PR_URL"/;
+  const buggySuffix = new RegExp(`node\\s+-e\\s+"[\\s\\S]*?"\\s*${envAssign}`);
   assert.ok(
     !buggySuffix.test(md),
     'env assignments after `node -e` are read as argv, not env — process.env.PR_NUMBER would be undefined → NaN'
