@@ -1,0 +1,61 @@
+{
+  "$schemaVersion": "1",
+  "issueNumber": 47,
+  "strategy": "sequential",
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "fix NaN PR-state write in finalize",
+      "description": "Move PR_NUMBER/PR_URL to an env prefix before node -e so process.env resolves; contract test pins the shape.",
+      "files": [
+        "skills/finalize/SKILL.md",
+        "tests/finalize-pr-state.test.js"
+      ],
+      "acceptance": [
+        "PR-state write sets numeric prNumber and real prUrl (no NaN/undefined)",
+        "Contract test asserts env prefix precedes node -e and no post-node arg passing remains"
+      ]
+    },
+    {
+      "id": "task-2",
+      "title": "route verification CodeRabbit check through pr-status",
+      "description": "Replace REST /pulls/comments coderabbitai count in verification/SKILL.md with lib/pr-status.js unresolved-thread count.",
+      "files": [
+        "skills/verification/SKILL.md",
+        "tests/verification-cr-source.test.js"
+      ],
+      "acceptance": [
+        "verification CR completeness check uses pr-status unresolved-thread count",
+        "Contract test asserts no REST-only coderabbitai comment count remains"
+      ]
+    },
+    {
+      "id": "task-3",
+      "title": "standardize gh api GraphQL variable passing in finalize",
+      "description": "Convert shell-interpolated GraphQL queries in verify.md and coderabbit.md to gh api graphql -F/-f variables.",
+      "files": [
+        "skills/finalize/steps/verify.md",
+        "skills/finalize/steps/coderabbit.md",
+        "tests/finalize-gh-vars.test.js"
+      ],
+      "acceptance": [
+        "GraphQL calls pass owner/name/number as gh api variables",
+        "Contract test asserts no '$OWNER'/'$REPO'/'$PR_NUMBER' interpolation remains in query strings"
+      ]
+    },
+    {
+      "id": "task-4",
+      "title": "paginate reviewThreads in pr-status",
+      "description": "Add pageInfo hasNextPage/endCursor + after: loop so unresolved-thread counting spans all pages.",
+      "files": [
+        "lib/pr-status.js",
+        "tests/lib/pr-status.test.js"
+      ],
+      "acceptance": [
+        "Unresolved threads counted across pages (>100 threads)",
+        "RED unit test with a two-page mock proves >100 threads counted",
+        "Existing pr-status tests stay green"
+      ]
+    }
+  ]
+}
