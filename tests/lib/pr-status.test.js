@@ -333,6 +333,20 @@ test('single page (hasNextPage false) returns that page only', () => {
   assert.strictEqual(calls, 1);
 });
 
+test('aborts (does not hang) when hasNextPage stays true but the cursor never advances', () => {
+  // Safety cap so a missing guard surfaces as a distinct error, not an infinite hang.
+  let calls = 0;
+  const fakeFetchPage = () => {
+    if (++calls > 50) throw new Error('SAFETY: loop did not terminate');
+    return { nodes: [thread('rutger', false)], pageInfo: { hasNextPage: true, endCursor: null } };
+  };
+  assert.throws(
+    () => prStatus.fetchReviewThreads({ owner: 'o', repo: 'r' }, 7, fakeFetchPage),
+    /did not advance/,
+    'must abort with a clear invariant error, not hang, when the cursor does not advance'
+  );
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
