@@ -273,7 +273,7 @@ $ curl -sf http://localhost:5173
 
 ## PR Status
 Unresolved conversations: 0
-New CodeRabbit comments since last push: 0
+Unresolved CodeRabbit threads: 0
 
 ## Conclusion
 All verifications passed. Ready for human review.

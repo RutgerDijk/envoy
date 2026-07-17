@@ -97,5 +97,12 @@ test('empty-snapshot guard before jq (-z "$SNAP")', () => {
   );
 });
 
+test('no stale "new comments since last push" evidence phrasing remains', () => {
+  assert.ok(
+    !/new CodeRabbit comments since last push/i.test(md),
+    'the check now measures unresolved threads, not new comments since last push — stale phrasing must be gone'
+  );
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
