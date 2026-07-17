@@ -151,7 +151,7 @@ else
 fi
 ```
 
-### New CodeRabbit Comments Check
+### Unresolved CodeRabbit Threads Check
 
 After pushing fixes, verify no unresolved CodeRabbit threads remain. Read the
 CodeRabbit-only count from the same snapshot — `.coderabbit.unresolvedThreads`:
