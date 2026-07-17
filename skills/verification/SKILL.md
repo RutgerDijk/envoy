@@ -130,38 +130,46 @@ pgrep -f "vite" > /dev/null && echo "✓ Frontend running" || echo "✗ Frontend
 
 ### PR Conversation Check
 
-If a PR exists, verify zero unresolved conversations:
+If a PR exists, verify zero unresolved conversations. Read the count from the
+single status source (`lib/pr-status.js`) — its `.threads.unresolved` field
+counts unresolved review threads from every author via GraphQL (REST comment
+counts miss inline threads):
 
 ```bash
-OWNER=$(gh repo view --json owner -q '.owner.login')
-REPO=$(gh repo view --json name -q '.name')
 PR_NUMBER=<number>
+PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
 
-# Count unresolved review threads
-UNRESOLVED=$(gh api graphql -f query='
-  query {
-    repository(owner: "'$OWNER'", name: "'$REPO'") {
-      pullRequest(number: '$PR_NUMBER') {
-        reviewThreads(first: 100) {
-          nodes { isResolved }
-        }
-      }
-    }
-  }
-' --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length')
+# Probe is non-fatal: a pr-status failure must not abort under set -e/pipefail.
+SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
 
-echo "Unresolved PR conversations: $UNRESOLVED"
+# Check for an empty snapshot before jq so jq never runs on empty input.
+if [ -z "$SNAP" ]; then
+  echo "PR status unavailable — could not read unresolved conversation count."
+else
+  UNRESOLVED=$(echo "$SNAP" | jq -r '.threads.unresolved // empty')
+  echo "Unresolved PR conversations: $UNRESOLVED"
+fi
 ```
 
-### New CodeRabbit Comments Check
+### Unresolved CodeRabbit Threads Check
 
-After pushing fixes, verify no new CodeRabbit comments appeared:
+After pushing fixes, verify no unresolved CodeRabbit threads remain. Read the
+CodeRabbit-only count from the same snapshot — `.coderabbit.unresolvedThreads`:
 
 ```bash
-# Get comments since last push
-LAST_PUSH=$(git log -1 --format=%cI)
-gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments \
-  --jq "[.[] | select(.user.login == \"coderabbitai\") | select(.created_at > \"$LAST_PUSH\")] | length"
+PR_NUMBER=<number>
+PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
+
+# Probe is non-fatal: a pr-status failure must not abort under set -e/pipefail.
+SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
+
+# Check for an empty snapshot before jq so jq never runs on empty input.
+if [ -z "$SNAP" ]; then
+  echo "PR status unavailable — could not read CodeRabbit thread count."
+else
+  CR_UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty')
+  echo "Unresolved CodeRabbit threads: $CR_UNRESOLVED"
+fi
 ```
 
 ## Fix-and-Verify Cycle (Max 3, with Completion Signal)
@@ -265,7 +273,7 @@ $ curl -sf http://localhost:5173
 
 ## PR Status
 Unresolved conversations: 0
-New CodeRabbit comments since last push: 0
+Unresolved CodeRabbit threads: 0
 
 ## Conclusion
 All verifications passed. Ready for human review.

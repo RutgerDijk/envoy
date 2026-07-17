@@ -58,15 +58,15 @@ Fixes all findings before proceeding.
 Assumes `/envoy:review` has already run. No local reviews here.
 
 1. Push branch and create PR
-2. Poll for GitHub CodeRabbit comments (exponential backoff, 22min max)
+2. Poll GitHub CodeRabbit via the shared `lib/pr-status.js` snapshot — unresolved review threads (GraphQL, not REST comment counts) plus rate-limit state (exponential backoff, 22min max)
 3. Address ALL findings including nitpicks
 4. Reply to each comment with fix + commit hash, resolve thread
 5. Push fixes, re-poll (max 3 cycles)
 6. Poll CI, auto-fix failures via `/envoy:fix-ci`
-7. Final verification: tests, build, lint, zero unresolved conversations
+7. Final verification: tests, build, lint, zero unresolved conversations (read from the same `lib/pr-status.js` snapshot)
 8. Wiki sync
 
-Uses the **completion signal protocol** — "no new comments" must be confirmed 3 consecutive times before the loop stops.
+Uses the **completion signal protocol** — a settled review (not rate-limited AND zero unresolved CodeRabbit threads) must be confirmed 3 consecutive times before the loop stops.
 
 ## 5. Cleanup
 

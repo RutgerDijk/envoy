@@ -182,3 +182,16 @@ Both are loaded by `pickup` and `review` to avoid repeating the same mistakes.
 - Suggestion from ` ```suggestion ``` ` blocks
 
 Only send to Haiku (cheap LLM) when regex confidence < 0.95. Massive token savings.
+
+## PR Status Snapshot (single source)
+
+**Lib:** `lib/pr-status.js`
+
+`node lib/pr-status.js <pr>` returns one schema-stable JSON snapshot of a PR's health, and is the **single source** for every conversation-completion decision:
+
+- `ci` — check rollup state
+- `coderabbit` — check state, **unresolved CodeRabbit threads** (GraphQL `reviewThreads`, filtered to CodeRabbit + `isResolved=false`), and rate-limit state (`resetsAt`)
+- `threads.unresolved` — all-author unresolved review threads
+- `reviewers`, `idle`
+
+Review-thread fetching paginates (`pageInfo.hasNextPage`), so counts are correct past 100 threads. Both `finalize` (steps/coderabbit.md) and `verification` gate on this snapshot instead of REST comment counts — REST misses inline review threads and is fooled by rate-limiting, which is the CodeRabbit-poll race the single source fixes.
