@@ -152,7 +152,12 @@ const rawInputs = {
 
 test('snapshot has schema-stable top-level shape', () => {
   const snap = prStatus.buildSnapshot(rawInputs);
-  assert.deepStrictEqual(Object.keys(snap).sort(), ['ci', 'coderabbit', 'idle', 'pr', 'reviewers'].sort());
+  assert.deepStrictEqual(Object.keys(snap).sort(), ['ci', 'coderabbit', 'idle', 'pr', 'reviewers', 'threads'].sort());
+});
+
+test('threads block counts all-author unresolved threads from GraphQL', () => {
+  const snap = prStatus.buildSnapshot(rawInputs);
+  assert.strictEqual(snap.threads.unresolved, 3);
 });
 
 test('snapshot pr and ci pass through', () => {
@@ -257,6 +262,75 @@ test('CodeRabbit check state is picked out by name (case-insensitive)', () => {
 test('no CodeRabbit check yields null coderabbitCheckState', () => {
   const result = prStatus.summarizeChecks([{ name: 'CI', conclusion: 'SUCCESS' }]);
   assert.strictEqual(result.coderabbitCheckState, null);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// countUnresolvedTotal
+// ═══════════════════════════════════════════════════════════════════
+
+section('countUnresolvedTotal: all-author unresolved review threads');
+
+test('counts every unresolved thread regardless of author', () => {
+  const payload = {
+    nodes: [
+      thread('coderabbitai', false),   // count
+      thread('rutger', false),         // count
+      thread('someReviewer', false),   // count
+      thread('coderabbitai', true),    // resolved — skip
+      thread('rutger', true),          // resolved — skip
+    ],
+  };
+  assert.strictEqual(prStatus.countUnresolvedTotal(payload), 3);
+});
+
+test('accepts a bare nodes array as well as the reviewThreads object', () => {
+  const nodes = [thread('rutger', false), thread('coderabbitai', false), thread('rutger', true)];
+  assert.strictEqual(prStatus.countUnresolvedTotal(nodes), 2);
+  assert.strictEqual(prStatus.countUnresolvedTotal({ nodes }), 2);
+});
+
+test('empty / missing payload returns 0', () => {
+  assert.strictEqual(prStatus.countUnresolvedTotal({ nodes: [] }), 0);
+  assert.strictEqual(prStatus.countUnresolvedTotal(null), 0);
+  assert.strictEqual(prStatus.countUnresolvedTotal(undefined), 0);
+});
+
+test('threads without an explicit false isResolved are not counted', () => {
+  const payload = { nodes: [{ isResolved: true }, { isResolved: undefined }, {}] };
+  assert.strictEqual(prStatus.countUnresolvedTotal(payload), 0);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// fetchReviewThreads pagination (injected page-fetcher — no network)
+// ═══════════════════════════════════════════════════════════════════
+
+section('fetchReviewThreads: accumulates nodes across paginated fetchPage calls');
+
+test('accumulates all nodes across multiple pages', () => {
+  const pages = [
+    { nodes: [thread('rutger', false), thread('coderabbitai', false)], pageInfo: { hasNextPage: true, endCursor: 'c1' } },
+    { nodes: [thread('someReviewer', true)], pageInfo: { hasNextPage: true, endCursor: 'c2' } },
+    { nodes: [thread('rutger', true)], pageInfo: { hasNextPage: false, endCursor: 'c3' } },
+  ];
+  const seenCursors = [];
+  const fakeFetchPage = (repo, prNumber, after) => {
+    seenCursors.push(after);
+    return pages.shift();
+  };
+  const result = prStatus.fetchReviewThreads({ owner: 'o', repo: 'r' }, 7, fakeFetchPage);
+  assert.strictEqual(result.nodes.length, 4);
+  assert.deepStrictEqual(seenCursors, [null, 'c1', 'c2']);
+});
+
+test('single page (hasNextPage false) returns that page only', () => {
+  let calls = 0;
+  const fakeFetchPage = () => {
+    calls++;
+    return { nodes: [thread('rutger', false)], pageInfo: { hasNextPage: false, endCursor: 'c1' } };
+  };
+  const result = prStatus.fetchReviewThreads({ owner: 'o', repo: 'r' }, 7, fakeFetchPage);
+  assert.strictEqual(result.nodes.length, 1);
+  assert.strictEqual(calls, 1);
 });
 
 // ═══════════════════════════════════════════════════════════════════
