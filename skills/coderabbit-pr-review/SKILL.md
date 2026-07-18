@@ -160,23 +160,27 @@ gh api graphql -f query='
 **Note:** You need the thread's node ID, which may require fetching via GraphQL:
 
 ```bash
-gh api graphql -f query='
-  query {
-    repository(owner: "'$OWNER'", name: "'$REPO'") {
-      pullRequest(number: <pr-number>) {
-        reviewThreads(first: 100) {
-          nodes {
-            id
-            isResolved
-            comments(first: 1) {
-              nodes { body }
+gh api graphql \
+  -f query='
+    query($owner:String!, $repo:String!, $pr:Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $pr) {
+          reviewThreads(first: 100) {
+            nodes {
+              id
+              isResolved
+              comments(first: 1) {
+                nodes { body }
+              }
             }
           }
         }
       }
     }
-  }
-'
+  ' \
+  -F owner="$OWNER" \
+  -F repo="$REPO" \
+  -F pr=<pr-number>
 ```
 
 ### Step 7: Push Fixes
@@ -187,21 +191,24 @@ git push
 
 ### Step 8: Verify Resolution
 
-```bash
-# Check for any remaining unresolved threads
-UNRESOLVED=$(gh api graphql -f query='
-  query {
-    repository(owner: "'$OWNER'", name: "'$REPO'") {
-      pullRequest(number: <pr-number>) {
-        reviewThreads(first: 100) {
-          nodes { isResolved }
-        }
-      }
-    }
-  }
-' --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length')
+Read the remaining unresolved-thread count from the single status source
+(`lib/pr-status.js`) — its `.threads.unresolved` field counts unresolved review
+threads from every author via GraphQL:
 
-echo "Unresolved threads: $UNRESOLVED"
+```bash
+PR_NUMBER=<pr-number>
+PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
+
+# Probe is non-fatal: a pr-status failure must not abort under set -e/pipefail.
+SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
+
+# Check for an empty snapshot before jq so jq never runs on empty input.
+if [ -z "$SNAP" ]; then
+  echo "PR status unavailable — could not read unresolved thread count."
+else
+  UNRESOLVED=$(echo "$SNAP" | jq -r '.threads.unresolved // empty')
+  echo "Unresolved threads: $UNRESOLVED"
+fi
 ```
 
 ### Step 9: Report
