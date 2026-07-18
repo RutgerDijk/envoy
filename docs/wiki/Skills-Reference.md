@@ -1,6 +1,6 @@
 # Skills Reference
 
-Envoy includes 23 skills organized by purpose.
+Envoy includes 26 skills organized by purpose.
 
 ## Core Workflow
 
@@ -11,6 +11,14 @@ Envoy includes 23 skills organized by purpose.
 | `envoy:review` | After implementation, before creating PR |
 | `envoy:finalize` | Implementation reviewed, ready to create PR |
 | `envoy:cleanup` | After PR merged, before starting new work |
+
+## Lifecycle & PR Shepherding
+
+| Skill | Trigger |
+|-------|---------|
+| `envoy:babysit` | Move open PRs forward in one pass — re-trigger a rate-limited CodeRabbit, fix CI, resolve threads (composes with `/loop`) |
+| `envoy:prs` | Read-only status across open PRs — CI, CodeRabbit, unresolved threads, idle |
+| `envoy:hotfix` | Urgent single-defect fix on a fast path — worktree + failing test + verification, no brainstorm |
 
 ## Quality & Review
 
