@@ -32,7 +32,8 @@ SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
 if [ -z "$SNAP" ]; then
   echo "PR status unavailable — cannot confirm zero unresolved conversations."
 else
-  echo "$SNAP" | jq -r '.threads.unresolved'
+  UNRESOLVED=$(echo "$SNAP" | jq -r '.threads.unresolved // empty')
+  echo "Unresolved conversations: ${UNRESOLVED:-unknown}"
 fi
 ```
 

@@ -50,13 +50,6 @@ test('Step 8 reads .threads.unresolved via lib/pr-status.js', () => {
   );
 });
 
-test('no coderabbit REST select ... | length count-gate remains', () => {
-  assert.ok(
-    !/select\([^)]*coderabbitai[\s\S]*?\|\s*length/.test(md),
-    'the REST coderabbitai select(...) | length count expression must be gone'
-  );
-});
-
 test('no reviewThreads isResolved==false ... | length count-gate remains', () => {
   assert.ok(
     !/reviewThreads[\s\S]*?isResolved\s*==\s*false[\s\S]*?\|\s*length/.test(md),

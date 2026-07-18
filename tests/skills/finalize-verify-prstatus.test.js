@@ -83,5 +83,12 @@ test('empty-snapshot guard before jq (-z "$SNAP")', () => {
   );
 });
 
+test('reads the field with a // empty fallback (matches sibling idiom)', () => {
+  assert.ok(
+    /\.threads\.unresolved \/\/ empty/.test(md),
+    'the gate must use the // empty jq fallback like the other pr-status gates, not a bare read that prints null'
+  );
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
