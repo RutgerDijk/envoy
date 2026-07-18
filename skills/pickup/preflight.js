@@ -15,10 +15,41 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const CWD = process.cwd();
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
 const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
+const { extractEmbeddedBlock } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
+
+// Best-effort fetch of an issue body via gh. Returns the body string, or null
+// when gh is unavailable or the call fails — callers must tolerate null.
+// ENVOY_ISSUE_BODY_FILE overrides the source (test seam): read that file
+// instead of calling gh; unreadable ⇒ null.
+function fetchIssueBody(issueNumber) {
+  const override = process.env.ENVOY_ISSUE_BODY_FILE;
+  if (override) {
+    try {
+      return fs.readFileSync(override, 'utf8');
+    } catch (_err) {
+      return null;
+    }
+  }
+  try {
+    return execFileSync('gh', ['issue', 'view', String(issueNumber), '--json', 'body', '-q', '.body'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch (_err) {
+    return null;
+  }
+}
+
+// Recover the tasks payload embedded in the issue body, or null.
+function payloadFromIssue(issueNumber) {
+  const body = fetchIssueBody(issueNumber);
+  return body ? extractEmbeddedBlock(body) : null;
+}
 
 function say(line) { process.stdout.write(`${line}\n`); }
 function banner(tier) { say(`## STATUS: ${tier}`); }
@@ -57,15 +88,24 @@ function main() {
   }
 
   const tasksFile = path.join(CWD, '.envoy-tasks', `${issueNumber}.json`);
+  let materialized = false;
 
   if (!fs.existsSync(tasksFile)) {
-    banner('fatal');
-    say(`tasks file not found at .envoy-tasks/${issueNumber}.json`);
-    say('');
-    say('Remediation:');
-    say(`  1. Run /envoy:brainstorm for issue #${issueNumber} to produce the task list, OR`);
-    say(`  2. Write .envoy-tasks/${issueNumber}.json manually conforming to lib/schemas/tasks.json`);
-    return;
+    // Recover from the machine block embedded in the issue before giving up.
+    const recovered = payloadFromIssue(issueNumber);
+    if (recovered) {
+      recovered.issueNumber = Number(issueNumber);
+      writeJson(path.join('.envoy-tasks', `${issueNumber}.json`), recovered);
+      materialized = true;
+    } else {
+      banner('fatal');
+      say(`tasks file not found at .envoy-tasks/${issueNumber}.json`);
+      say('');
+      say('Remediation:');
+      say(`  1. Run /envoy:brainstorm for issue #${issueNumber} to produce the task list, OR`);
+      say(`  2. Write .envoy-tasks/${issueNumber}.json manually conforming to lib/schemas/tasks.json`);
+      return;
+    }
   }
 
   const result = validateFile('tasks', tasksFile);
@@ -79,6 +119,19 @@ function main() {
   }
 
   const tasks = JSON.parse(fs.readFileSync(tasksFile, 'utf8'));
+
+  // Non-fatal drift check: if the committed file and the issue's embedded block
+  // disagree on the task set, the issue was likely edited after filing.
+  let driftWarning = null;
+  if (!materialized) {
+    const issuePayload = payloadFromIssue(issueNumber);
+    if (issuePayload) {
+      const key = (p) => JSON.stringify((p.tasks || []).map((t) => [t.id, t.title]));
+      if (key(issuePayload) !== key(tasks)) {
+        driftWarning = 'committed .envoy-tasks differs from the issue\'s embedded task block (issue edited after filing?)';
+      }
+    }
+  }
 
   // Seed session.json
   const session = {
@@ -99,9 +152,18 @@ function main() {
   writeJson('.envoy/pickup/session.json', session);
   writeActiveSkill(issueNumber);
 
-  const tier = strictPromote('ok');
+  const tier = strictPromote(materialized ? 'degraded' : 'ok');
   banner(tier);
   say('');
+  if (materialized) {
+    say('NOTE: tasks file was reconstructed from the issue\'s embedded block.');
+    say('Confirm the recovered task list before proceeding.');
+    say('');
+  }
+  if (driftWarning) {
+    say(`WARNING: ${driftWarning}`);
+    say('');
+  }
   say(`Issue #${issueNumber} — ${tasks.tasks.length} task${tasks.tasks.length === 1 ? '' : 's'} loaded`);
   say(`Strategy: ${tasks.strategy || '(not specified — will be chosen during Step 12)'}`);
   say('');

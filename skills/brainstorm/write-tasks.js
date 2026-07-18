@@ -19,6 +19,11 @@ const path = require('path');
 
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
 const { validate } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
+const {
+  enforceSpecFields,
+  renderTasksSection,
+  renderEmbeddedBlock,
+} = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
 
 function fail(msg) {
   process.stderr.write(`write-tasks: ${msg}\n`);
@@ -61,11 +66,28 @@ function main() {
     process.exit(1);
   }
 
+  // New task lists must be spec-driven: intent + behavior + acceptance per task.
+  // (The schema keeps these optional so historical task files stay valid.)
+  const spec = enforceSpecFields(payload);
+  if (!spec.ok) {
+    process.stderr.write('write-tasks: spec-field enforcement failed:\n');
+    for (const e of spec.errors) process.stderr.write(`  - ${e}\n`);
+    process.exit(1);
+  }
+
   const outDir = path.join(process.cwd(), '.envoy-tasks');
   fs.mkdirSync(outDir, { recursive: true });
   const outPath = path.join(outDir, `${issueNumber}.json`);
   fs.writeFileSync(outPath, JSON.stringify(payload, null, 2) + '\n');
-  process.stdout.write(`wrote ${path.relative(process.cwd(), outPath)} (${(payload.tasks || []).length} tasks)\n`);
+
+  // stdout carries the issue-ready markdown (human section + recoverable block)
+  // so brainstorm splices it into the issue body from this single source;
+  // status goes to stderr to keep stdout clean for capture.
+  process.stdout.write(renderTasksSection(payload));
+  process.stdout.write('\n');
+  process.stdout.write(renderEmbeddedBlock(payload));
+  process.stdout.write('\n');
+  process.stderr.write(`wrote ${path.relative(process.cwd(), outPath)} (${(payload.tasks || []).length} tasks)\n`);
 }
 
 if (require.main === module) main();

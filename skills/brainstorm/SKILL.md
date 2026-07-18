@@ -45,10 +45,38 @@ This produces the implementation task list in the issue. Every referenced file p
 
 ### Phase 4: Create GitHub Issue and Task Handoff
 
-Once the design is confirmed, create the GitHub issue AND the
-schema-backed task handoff consumed by `/envoy:pickup`:
+The task list has a **single authoring surface**: you draft the spec-driven
+payload once, `write-tasks.js` renders the human `## Tasks` section and a
+recoverable machine block from it, and the issue carries both. `pickup`
+materializes `.envoy-tasks/<n>.json` from the committed file (and can recover
+it from the issue's block if the file is ever missing). Never hand-write the
+task section — it is rendered.
+
+Each task is **spec-driven**: `intent` (why), `behavior` (testable
+given/when/then that seeds the RED tests), and `acceptance` are REQUIRED;
+`contracts` and `outOfScope` are optional.
 
 ```bash
+# 1. Draft the spec-driven payload FIRST (validated against lib/schemas/tasks.json).
+cat > /tmp/envoy-tasks-payload.json <<'TASKS_EOF'
+{
+  "$schemaVersion": "1",
+  "strategy": "batch",
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "<name>",
+      "intent": "<why this task exists — the outcome, not the mechanics>",
+      "behavior": ["Given <state>, when <action>, then <result>"],
+      "files": ["exact/path/to/file.ext"],
+      "acceptance": ["<verifiable criterion>"],
+      "outOfScope": ["<explicit non-goal>"]
+    }
+  ]
+}
+TASKS_EOF
+
+# 2. Create the issue with Overview/Architecture/Acceptance — NOT the task list yet.
 ISSUE_URL=$(gh issue create --title "<Feature Name>" --body "$(cat <<'EOF'
 ## Overview
 
@@ -61,19 +89,6 @@ ISSUE_URL=$(gh issue create --title "<Feature Name>" --body "$(cat <<'EOF'
 ## Acceptance Criteria
 
 - [ ] Criterion 1
-- [ ] Criterion 2
-
-## Tasks
-
-> Every task in this spec is REQUIRED. Optional or stretch work goes in a separate issue.
-
-### Task 1: <name>
-**Files:** Create/Modify: `exact/path/to/file.ext`
-**What:** <one sentence describing the change>
-
-### Task 2: <name>
-**Files:** Create/Modify: `exact/path/to/file.ext`
-**What:** <one sentence describing the change>
 
 ---
 
@@ -82,25 +97,15 @@ EOF
 )" --label "<labels>")
 ISSUE_NUMBER=$(basename "$ISSUE_URL")
 
-# Emit the schema-backed task handoff (validated against lib/schemas/tasks.json).
-# pickup's preflight will fail fatal if this file is missing or invalid.
-cat > /tmp/envoy-tasks-payload.json <<'TASKS_EOF'
-{
-  "$schemaVersion": "1",
-  "strategy": "batch",
-  "tasks": [
-    {
-      "id": "task-1",
-      "title": "<name>",
-      "description": "<one sentence describing the change>",
-      "files": ["exact/path/to/file.ext"],
-      "acceptance": ["<criterion>"]
-    }
-  ]
-}
-TASKS_EOF
+# 3. write-tasks.js commits .envoy-tasks/<n>.json AND prints the issue-ready
+#    markdown (human ## Tasks section + recoverable block) to stdout.
+TASKS_MD=$(node "$(dirname "$0")/write-tasks.js" "$ISSUE_NUMBER" /tmp/envoy-tasks-payload.json)
 
-node "$(dirname "$0")/write-tasks.js" "$ISSUE_NUMBER" /tmp/envoy-tasks-payload.json
+# 4. Append the rendered tasks (single source) to the issue body.
+gh issue edit "$ISSUE_NUMBER" --body "$(gh issue view "$ISSUE_NUMBER" --json body -q .body)
+
+$TASKS_MD"
+
 git add ".envoy-tasks/$ISSUE_NUMBER.json"
 git commit -m "chore: task handoff for #$ISSUE_NUMBER"
 ```
