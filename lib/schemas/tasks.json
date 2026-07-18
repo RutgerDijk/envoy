@@ -17,6 +17,10 @@
           "id": { "type": "string" },
           "title": { "type": "string" },
           "description": { "type": "string" },
+          "intent": { "type": "string" },
+          "behavior": { "type": "array", "items": { "type": "string" } },
+          "contracts": { "type": "array", "items": { "type": "string" } },
+          "outOfScope": { "type": "array", "items": { "type": "string" } },
           "files": { "type": "array", "items": { "type": "string" } },
           "acceptance": { "type": "array", "items": { "type": "string" } },
           "dependsOn": { "type": "array", "items": { "type": "string" } }
