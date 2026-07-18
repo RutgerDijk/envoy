@@ -22,18 +22,19 @@ npm run lint
 gh pr checks $PR_NUMBER --json name,state,conclusion \
   --jq '.[] | select(.state != "PENDING" and .state != "QUEUED") | select(.conclusion != "SUCCESS") | .name + ": " + .conclusion'
 
-# Zero unresolved PR conversations
-gh api graphql -f query='
-  query {
-    repository(owner: "'$OWNER'", name: "'$REPO'") {
-      pullRequest(number: '$PR_NUMBER') {
-        reviewThreads(first: 100) {
-          nodes { isResolved }
-        }
-      }
-    }
-  }
-' --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length'
+# Zero unresolved PR conversations — one snapshot source (all-author unresolved
+# review threads) shared with CodeRabbit polling.
+PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
+# Probe is non-fatal: a pr-status failure must not abort the step under set -e/pipefail.
+SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
+# A missing snapshot (status probe failed) is NOT proof of zero unresolved
+# conversations. Check before jq so jq never runs on empty input.
+if [ -z "$SNAP" ]; then
+  echo "PR status unavailable — cannot confirm zero unresolved conversations."
+else
+  UNRESOLVED=$(echo "$SNAP" | jq -r '.threads.unresolved // empty')
+  echo "Unresolved conversations: ${UNRESOLVED:-unknown}"
+fi
 ```
 
 **All checks must pass with evidence.**

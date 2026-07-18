@@ -1,0 +1,33 @@
+{
+  "$schemaVersion": "1",
+  "issueNumber": 49,
+  "strategy": "sequential",
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "Route coderabbit-pr-review/SKILL.md unresolved-count gate through pr-status.js",
+      "description": "Migrate ONLY the Step 8 unresolved-thread count gate onto node lib/pr-status.js (.threads.unresolved). The Step 5 comment-body fetch and Step 6 thread-ID GraphQL stay (pr-status exposes counts, not bodies/IDs); switch the Step 6 query's $OWNER/$REPO interpolation to -F typed variables.",
+      "files": ["skills/coderabbit-pr-review/SKILL.md", "tests/skills/coderabbit-pr-review-prstatus.test.js"],
+      "acceptance": [
+        "The Step 8 unresolved-count gate reads .threads.unresolved from node lib/pr-status.js; no REST/inline 'reviewThreads ... | length' count-gate remains",
+        "The Step 5 comment-body fetch and the Step 6 thread-ID GraphQL are preserved (they provide data pr-status.js does not expose)",
+        "The Step 6 thread-ID query uses -F typed variables instead of $OWNER/$REPO string interpolation",
+        "The migrated gate uses the non-fatal probe (2>/dev/null || true) with a -z \"$SNAP\" guard before jq",
+        "New contract test tests/skills/coderabbit-pr-review-prstatus.test.js guards the routing; full suite green"
+      ]
+    },
+    {
+      "id": "task-2",
+      "title": "Route finalize/steps/verify.md through pr-status.js",
+      "description": "Migrate finalize/steps/verify.md's conversation checks onto node lib/pr-status.js: all-author gate reads .threads.unresolved, CodeRabbit gate reads .coderabbit.unresolvedThreads; remove inline GraphQL/REST and $OWNER/$REPO interpolation; non-fatal probe. Re-verify during pickup that verify.md's usage is count-only (like verification/SKILL.md) before deleting any query.",
+      "files": ["skills/finalize/steps/verify.md", "tests/skills/finalize-verify-prstatus.test.js"],
+      "acceptance": [
+        "Count/conversation gates route through node lib/pr-status.js (.threads.unresolved all-author, .coderabbit.unresolvedThreads for CR); no count-gate REST/inline query remains",
+        "Any query fetching data pr-status.js does not expose (bodies/IDs) is preserved; $OWNER/$REPO interpolation removed from what stays",
+        "Probe is non-fatal (2>/dev/null || true) with a -z \"$SNAP\" guard before jq",
+        "New contract test tests/skills/finalize-verify-prstatus.test.js guards the routing; full suite green"
+      ],
+      "dependsOn": ["task-1"]
+    }
+  ]
+}
