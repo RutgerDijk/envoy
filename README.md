@@ -310,7 +310,7 @@ The `pickup` skill includes rationalization counters:
 
 ## Skills
 
-Envoy includes 23 skills:
+Envoy includes 26 skills:
 
 ### Core Workflow (5 phases)
 
@@ -321,6 +321,14 @@ Envoy includes 23 skills:
 | `envoy:review` | After implementation, before PR (cleanup pass + lint + AI + visual + docs) |
 | `envoy:finalize` | Review complete, ready to create PR and ship |
 | `envoy:cleanup` | After PR merged (session clear + wiki sync + worktree removal) |
+
+### Lifecycle & PR Shepherding
+
+| Skill | When to Use |
+|-------|-------------|
+| `envoy:babysit` | Move open PRs forward in one pass (re-trigger CodeRabbit, fix CI, resolve threads) |
+| `envoy:prs` | Read-only status across open PRs — what's stuck and why |
+| `envoy:hotfix` | Urgent single-defect fix on a fast path (worktree + TDD + verification, no brainstorm) |
 
 ### Quality & Review
 
