@@ -1,0 +1,40 @@
+{
+  "$schemaVersion": "1",
+  "strategy": "sequential",
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "Route coderabbit-pr-review/SKILL.md through pr-status.js",
+      "description": "Replace the inline reviewThreads/REST CodeRabbit comment-count in coderabbit-pr-review with node lib/pr-status.js reads; CR gate reads .coderabbit.unresolvedThreads; drop $OWNER/$REPO interpolation; non-fatal probe with -z guard, mirroring finalize/steps/coderabbit.md.",
+      "files": [
+        "skills/coderabbit-pr-review/SKILL.md",
+        "tests/skills/coderabbit-pr-review-prstatus.test.js"
+      ],
+      "acceptance": [
+        "No inline reviewThreads(first:...) GraphQL, no REST coderabbitai ... | length count, and no $OWNER/$REPO-interpolated query remain in the file",
+        "The CodeRabbit gate reads .coderabbit.unresolvedThreads from node lib/pr-status.js",
+        "Probe is non-fatal (2>/dev/null || true) with a -z \"$SNAP\" guard before jq",
+        "New contract test tests/skills/coderabbit-pr-review-prstatus.test.js guards the routing; full suite green"
+      ]
+    },
+    {
+      "id": "task-2",
+      "title": "Route finalize/steps/verify.md through pr-status.js",
+      "description": "Migrate finalize/steps/verify.md's conversation checks onto node lib/pr-status.js: all-author gate reads .threads.unresolved, CodeRabbit gate reads .coderabbit.unresolvedThreads; remove inline GraphQL/REST and $OWNER/$REPO interpolation; non-fatal probe.",
+      "files": [
+        "skills/finalize/steps/verify.md",
+        "tests/skills/finalize-verify-prstatus.test.js"
+      ],
+      "acceptance": [
+        "No inline reviewThreads(first:...) GraphQL, no REST coderabbitai comment-count, and no $OWNER/$REPO-interpolated query remain",
+        "All-author gate reads .threads.unresolved; CodeRabbit gate reads .coderabbit.unresolvedThreads",
+        "Probe is non-fatal (2>/dev/null || true) with a -z \"$SNAP\" guard before jq",
+        "New contract test tests/skills/finalize-verify-prstatus.test.js guards the routing; full suite green"
+      ],
+      "dependsOn": [
+        "task-1"
+      ]
+    }
+  ],
+  "issueNumber": 49
+}
