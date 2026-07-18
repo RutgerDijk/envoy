@@ -6,7 +6,7 @@ Professional development workflows for Claude Code and GitHub Copilot.
 
 - [[Getting Started]] — Installation and setup
 - [[Workflow]] — The full brainstorm-to-merge pipeline
-- [[Skills Reference]] — All 23 skills with descriptions
+- [[Skills Reference]] — All 26 skills with descriptions
 - [[Hooks]] — Automation hooks and profiles
 - [[Stack Profiles]] — Technology-specific best practices
 - [[Token Optimization]] — How Envoy minimizes token usage
