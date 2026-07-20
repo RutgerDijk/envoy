@@ -46,7 +46,19 @@ git worktree add .worktrees/<N>-$TOPIC feature/<N>-$TOPIC
 
 # Copy Claude settings to worktree
 cp -r .claude .worktrees/<N>-$TOPIC/
+
+# Migrate any pre-worktree .envoy/ state into the worktree (fixes #1560 — pickup
+# preflight writes .envoy/ in the main checkout before the worktree exists, so it
+# would otherwise be stranded where a concurrent session could read or clobber it).
+node -e "require('${CLAUDE_SKILL_DIR}/../../lib/worktree-state').migrateEnvoyState(process.cwd(), '.worktrees/<N>-'+process.env.TOPIC)"
 ```
+
+After Step 5 `cd`s into the worktree, all subsequent `.envoy/` state writes are
+guarded by `assertInWorktree` (see `lib/worktree-state.js`): it throws if the
+process is not running in this exact, git-registered worktree. That invariant is
+what keeps a concurrent session in the main checkout from racing on Envoy state —
+the migration relocates the state, and the guard enforces that writes only ever
+happen from inside the worktree that owns it.
 
 ### Step 5: Merge Permissions (REQUIRED)
 
