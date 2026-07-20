@@ -1,0 +1,55 @@
+{
+  "$schemaVersion": "1",
+  "strategy": "sequential",
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "active-skill.json lifecycle",
+      "intent": "The enforcement gates key off active-skill.json; without a lifecycle a stale marker blocks everything. Give it TTL + session liveness + branch match + explicit clear.",
+      "behavior": [
+        "Given a fresh marker written by writeActiveSkill, when readActiveSkill runs, then it returns the marker object",
+        "Given a marker older than the TTL, or from a different git branch, when readActiveSkill runs, then it returns null (treated as absent)",
+        "Given clearActiveSkill, when it runs, then the marker file is removed and it does not throw if the file is already absent"
+      ],
+      "files": [
+        "lib/active-skill.js",
+        "tests/lib/active-skill.test.js",
+        "skills/cleanup/preflight.js"
+      ],
+      "acceptance": [
+        "lib/active-skill.js exports writeActiveSkill(dir, meta), readActiveSkill(dir) (null when stale by TTL/branch/session-liveness), clearActiveSkill(dir) (no throw if absent)",
+        "The marker carries startedAt + branch + session identifier so staleness can be judged",
+        "cleanup clears the marker via clearActiveSkill",
+        "Zero-dependency Node; unit-tested with temp dirs and injectable clock/branch (hermetic)"
+      ],
+      "outOfScope": [
+        "Migrating every skill preflight write in this task if it balloons scope — at minimum pickup's preflight writes via the helper",
+        "The gates themselves (task-2)"
+      ]
+    },
+    {
+      "id": "task-2",
+      "title": "plugin-level observe-mode gates",
+      "intent": "Make agent-guard/stop-audit actually register (Spike A: per-skill frontmatter never does) and gather false-positive data before ever blocking.",
+      "behavior": [
+        "Given the plugin hooks are installed, when an Agent tool use or a Stop occurs while a rigid skill is active, then agent-guard/stop-audit run at the plugin level, consult readActiveSkill + contract.json, and in observe mode append a would-block record to .envoy/observe-log.jsonl and exit 0",
+        "Given the guard script throws, when the hook runs, then it still exits 0 (fail-open on crash)"
+      ],
+      "files": [
+        "hooks/hooks.json",
+        "lib/contract-guard.js",
+        "tests/hooks/observe-gates.test.js"
+      ],
+      "acceptance": [
+        "hooks/hooks.json registers plugin-level PreToolUse matcher Agent -> agent-guard and Stop -> stop-audit (via the existing hook-runner path)",
+        "Observe mode: would-block events are appended to .envoy/observe-log.jsonl and the gate exits 0 always, including when the guard logic throws (fail-open)",
+        "The dead per-skill hooks: frontmatter blocks are removed from the rigid skills' SKILL.md",
+        "A contract/behaviour test proves registration + observe-logging + fail-open; full suite green under scripts/run-tests.js"
+      ],
+      "dependsOn": [
+        "task-1"
+      ]
+    }
+  ],
+  "issueNumber": 60
+}
