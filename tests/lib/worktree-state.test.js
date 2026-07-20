@@ -120,6 +120,35 @@ test('replaces pre-existing worktree/.envoy without crashing', () => {
   cleanup(root);
 });
 
+test('falls back to copy+delete when rename fails cross-device (EXDEV)', () => {
+  const root = makeTmp('wt-migrate-');
+  const mainDir = path.join(root, 'main');
+  const worktreeDir = path.join(root, 'wt');
+  fs.mkdirSync(path.join(mainDir, '.envoy'), { recursive: true });
+  fs.writeFileSync(path.join(mainDir, '.envoy', 'state.json'), '{"x":1}');
+  fs.mkdirSync(worktreeDir, { recursive: true });
+
+  const realRename = fs.renameSync;
+  fs.renameSync = () => {
+    const e = new Error('cross-device link not permitted');
+    e.code = 'EXDEV';
+    throw e;
+  };
+  try {
+    worktreeState.migrateEnvoyState(mainDir, worktreeDir);
+  } finally {
+    fs.renameSync = realRename;
+  }
+
+  assert.ok(!fs.existsSync(path.join(mainDir, '.envoy')), 'main/.envoy removed after EXDEV fallback');
+  assert.strictEqual(
+    fs.readFileSync(path.join(worktreeDir, '.envoy', 'state.json'), 'utf8'),
+    '{"x":1}',
+    'contents copied via the EXDEV fallback'
+  );
+  cleanup(root);
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // assertInWorktree
 // ═══════════════════════════════════════════════════════════════════
@@ -170,6 +199,24 @@ test('throws when expected path is not a registered worktree', () => {
         listWorktrees: () => [], // not registered
       }),
     /worktree/i
+  );
+  cleanup(root);
+});
+
+test('resolves a symlinked cwd against the real registered path (macOS /tmp pitfall)', () => {
+  const root = makeTmp('wt-guard-');
+  const real = path.join(root, 'real-wt');
+  fs.mkdirSync(real, { recursive: true });
+  const link = path.join(root, 'link-wt');
+  fs.symlinkSync(real, link);
+
+  // cwd + expected given via the symlink, registered via the real path — realpath
+  // resolution must make them compare equal so a legit worktree does not false-abort.
+  assert.doesNotThrow(() =>
+    worktreeState.assertInWorktree(link, {
+      cwd: link,
+      listWorktrees: () => [real],
+    })
   );
   cleanup(root);
 });
