@@ -136,19 +136,31 @@ test('aborts when cwd is the main checkout (a different registered path)', () =>
 
 section('pickup worktree step wires the migration');
 
-test('worktree.md references migrateEnvoyState', () => {
+test('worktree.md invokes migrateEnvoyState via a node -e call', () => {
   const md = fs.readFileSync(WORKTREE_STEP, 'utf8');
   assert.ok(
-    /migrateEnvoyState/.test(md),
-    'skills/pickup/steps/worktree.md must call migrateEnvoyState so state is relocated into the worktree'
+    /node -e "[^"]*migrateEnvoyState/.test(md),
+    'worktree.md must actually invoke migrateEnvoyState (node -e), not just mention it'
   );
 });
 
-test('worktree.md documents the assertInWorktree guard on state writes', () => {
+test('the migrate call gets the worktree path from the shell $TOPIC, not process.env.TOPIC', () => {
   const md = fs.readFileSync(WORKTREE_STEP, 'utf8');
   assert.ok(
-    /assertInWorktree/.test(md),
-    'worktree.md must reference assertInWorktree so the state-write invariant is documented'
+    !/process\.env\.TOPIC/.test(md),
+    'TOPIC is an un-exported shell var; process.env.TOPIC is undefined in a node -e child and strands state in .worktrees/<N>-undefined'
+  );
+  assert.ok(
+    /migrateEnvoyState[\s\S]*?"\.worktrees\/<N>-\$TOPIC"/.test(md),
+    'the worktree path must be passed via shell expansion ($TOPIC) as a node arg'
+  );
+});
+
+test('worktree.md INVOKES assertInWorktree to guard state writes (not just prose)', () => {
+  const md = fs.readFileSync(WORKTREE_STEP, 'utf8');
+  assert.ok(
+    /node -e "[^"]*assertInWorktree/.test(md),
+    'worktree.md must actually call assertInWorktree in a node -e guard, not only describe it'
   );
 });
 
