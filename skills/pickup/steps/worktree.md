@@ -50,15 +50,21 @@ cp -r .claude .worktrees/<N>-$TOPIC/
 # Migrate any pre-worktree .envoy/ state into the worktree (fixes #1560 — pickup
 # preflight writes .envoy/ in the main checkout before the worktree exists, so it
 # would otherwise be stranded where a concurrent session could read or clobber it).
-node -e "require('${CLAUDE_SKILL_DIR}/../../lib/worktree-state').migrateEnvoyState(process.cwd(), '.worktrees/<N>-'+process.env.TOPIC)"
+# Pass the worktree path via shell $TOPIC as a node arg — a `node -e` child cannot
+# see the un-exported shell var through its environment, so reading it that way
+# would be undefined and strand state in `.worktrees/<N>-undefined`.
+node -e "require('${CLAUDE_SKILL_DIR}/../../lib/worktree-state').migrateEnvoyState(process.cwd(), process.argv[1])" ".worktrees/<N>-$TOPIC"
+
+# Record this worktree's absolute path so later steps can prove they're inside it.
+node -e "const fs=require('fs'),path=require('path'),wt=path.resolve(process.argv[1]); fs.mkdirSync(wt+'/.envoy',{recursive:true}); fs.writeFileSync(wt+'/.envoy/expected-worktree', wt)" ".worktrees/<N>-$TOPIC"
 ```
 
-After Step 5 `cd`s into the worktree, all subsequent `.envoy/` state writes are
-guarded by `assertInWorktree` (see `lib/worktree-state.js`): it throws if the
-process is not running in this exact, git-registered worktree. That invariant is
-what keeps a concurrent session in the main checkout from racing on Envoy state —
-the migration relocates the state, and the guard enforces that writes only ever
-happen from inside the worktree that owns it.
+Step 5 `cd`s into the worktree and then **invokes** `assertInWorktree` (see
+`lib/worktree-state.js`) against the `.envoy/expected-worktree` marker written
+above: the guard throws if the process isn't running in this exact, git-registered
+worktree. Because the migration removed `.envoy/` from the main checkout, a state
+write attempted from the main checkout finds no marker and aborts — that's what
+keeps a concurrent main-checkout session from racing on Envoy state.
 
 ### Step 5: Merge Permissions (REQUIRED)
 
@@ -102,6 +108,10 @@ Read `.worktrees/$TOPIC/.claude/settings.local.json` and ensure these permission
 
 ```bash
 cd .worktrees/<N>-$TOPIC
+
+# Guard: abort before any .envoy/ write if we're not actually inside this worktree
+# (fixes #1560 — a write from the main checkout would strand or clobber state).
+node -e "const ws=require('${CLAUDE_SKILL_DIR}/../../lib/worktree-state'),fs=require('fs'); ws.assertInWorktree(fs.readFileSync('.envoy/expected-worktree','utf8').trim())"
 ```
 
 ### Step 6: Detect Stack Profiles
