@@ -1,9 +1,7 @@
 {
   "skill": "cleanup",
   "agentInvariants": [],
-  "requiredArtifacts": [
-    { "path": ".envoy/active-skill.json", "committed": false }
-  ],
+  "requiredArtifacts": [],
   "loopSignals": [],
   "handoffOut": null
 }

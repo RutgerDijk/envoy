@@ -9,6 +9,7 @@
     "skill": { "type": "string" },
     "issueNumber": { "type": "number" },
     "branch": { "type": "string" },
+    "session": { "type": "string" },
     "startedAt": { "type": "string" },
     "pid": { "type": "number" }
   }
