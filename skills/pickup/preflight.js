@@ -21,6 +21,7 @@ const CWD = process.cwd();
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
 const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
 const { extractEmbeddedBlock } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
+const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 
 // Best-effort fetch of an issue body via gh. Returns the body string, or null
 // when gh is unavailable or the call fails — callers must tolerate null.
@@ -66,16 +67,6 @@ function writeJson(rel, data) {
 }
 
 function nowIso() { return new Date().toISOString(); }
-
-function writeActiveSkill(issueNumber) {
-  writeJson('.envoy/active-skill.json', {
-    $schemaVersion: '1',
-    skill: 'pickup',
-    issueNumber: issueNumber ? Number(issueNumber) : undefined,
-    startedAt: nowIso(),
-    pid: process.pid,
-  });
-}
 
 function main() {
   const issueNumber = process.env.ENVOY_ISSUE_NUMBER;
@@ -150,7 +141,7 @@ function main() {
     nextSteps: [],
   };
   writeJson('.envoy/pickup/session.json', session);
-  writeActiveSkill(issueNumber);
+  writeActiveSkill(CWD, { skill: 'pickup', issueNumber: issueNumber ? Number(issueNumber) : undefined });
 
   const tier = strictPromote(materialized ? 'degraded' : 'ok');
   banner(tier);

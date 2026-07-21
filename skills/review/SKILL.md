@@ -18,14 +18,6 @@ allowed-tools:
   - WebFetch
 model: opus
 context: fork
-hooks:
-  PreToolUse:
-    - matcher: Agent
-      command: node ${CLAUDE_SKILL_DIR}/hooks/agent-guard.js
-      once: true
-  Stop:
-    - command: node ${CLAUDE_SKILL_DIR}/hooks/stop-audit.js
-      once: true
 ---
 
 ## Briefing

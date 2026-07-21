@@ -5,38 +5,31 @@
  * Cleanup preflight (stub).
  *
  * Cleanup runs after merge; it tolerates missing state (that's the point —
- * we're about to remove it). Mainly, we write the active-skill marker so
- * Stop-audit can tell the difference between "cleanup is running" and
- * "something else wandered into .worktrees/".
+ * we're about to remove it). It is also the active-skill marker's explicit
+ * clear point: whatever skill last owned the session is done, so we drop the
+ * marker rather than leave it as a stale global tripwire.
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const CWD = process.cwd();
+const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
+const { readActiveSkill, clearActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 
 function say(line) { process.stdout.write(`${line}\n`); }
 function banner(tier) { say(`## STATUS: ${tier}`); }
 
-function writeJson(rel, data) {
-  const full = path.join(CWD, rel);
-  fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, JSON.stringify(data, null, 2));
-}
-
-function nowIso() { return new Date().toISOString(); }
-
 function main() {
-  writeJson('.envoy/active-skill.json', {
-    $schemaVersion: '1',
-    skill: 'cleanup',
-    startedAt: nowIso(),
-    pid: process.pid,
-  });
+  const priorMarker = readActiveSkill(CWD);
+  clearActiveSkill(CWD);
 
   const statePath = path.join(CWD, '.envoy', 'finalize', 'state.json');
   banner('ok');
   say('');
+  if (priorMarker) {
+    say(`Cleared active-skill marker (was: ${priorMarker.skill}).`);
+  }
   if (fs.existsSync(statePath)) {
     try {
       const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
