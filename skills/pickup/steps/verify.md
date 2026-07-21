@@ -36,6 +36,8 @@ const handoff = {
 
 fs.mkdirSync('.envoy/pickup', { recursive: true });
 fs.writeFileSync('.envoy/pickup/handoff-to-review.json', JSON.stringify(handoff, null, 2));
+
+require('../../lib/ledger').appendEvent(process.cwd(), { type: 'handoff-written', from: 'pickup', to: 'review' });
 ```
 
 Review preflight will read this file and fail fatal if it's missing, so skipping this write blocks the pipeline.

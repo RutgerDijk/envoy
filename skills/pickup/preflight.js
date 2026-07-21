@@ -22,6 +22,7 @@ const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '
 const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
 const { extractEmbeddedBlock } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
 const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
+const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
 
 // Best-effort fetch of an issue body via gh. Returns the body string, or null
 // when gh is unavailable or the call fails — callers must tolerate null.
@@ -142,6 +143,7 @@ function main() {
   };
   writeJson('.envoy/pickup/session.json', session);
   writeActiveSkill(CWD, { skill: 'pickup', issueNumber: issueNumber ? Number(issueNumber) : undefined });
+  appendEvent(CWD, { type: 'skill-started', skill: 'pickup', issue: Number(issueNumber) });
 
   const tier = strictPromote(materialized ? 'degraded' : 'ok');
   banner(tier);

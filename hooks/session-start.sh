@@ -125,6 +125,42 @@ Load full state with: \`const session = require('./lib/session-state').load()\`
 To clear after branch is done: \`require('./lib/session-state').clear()\`"
 fi
 
+# Recent workflow record from the durable ledger (trust the record over recollection)
+WORKFLOW_RECORD=""
+if [ -f ".envoy/ledger.jsonl" ]; then
+    LEDGER_TAIL=$(node -e '
+      try {
+        const { tailLedger } = require(process.argv[1]);
+        const events = tailLedger(process.cwd(), 10);
+        const lines = events.map((e) => {
+          const parts = [e.ts, e.branch, e.type || e.event || "event"];
+          if (e.issue !== undefined && e.issue !== null) parts.push("#" + e.issue);
+          if (e.skill) parts.push(e.skill);
+          if (e.detail) parts.push(e.detail);
+          return "- " + parts.filter(Boolean).join(" ");
+        });
+        process.stdout.write(lines.join("\n"));
+      } catch (_err) {}
+    ' "$PLUGIN_DIR/lib/ledger" 2>/dev/null)
+
+    if [ -n "$LEDGER_TAIL" ]; then
+        WORKFLOW_RECORD="---
+
+**Recent workflow record (trust this + git log over recollection)**
+
+Ledger (last events):
+$LEDGER_TAIL"
+
+        GIT_LOG=$(git log --oneline -10 2>/dev/null)
+        if [ -n "$GIT_LOG" ]; then
+            WORKFLOW_RECORD="$WORKFLOW_RECORD
+
+Recent git log:
+$GIT_LOG"
+        fi
+    fi
+fi
+
 # Build stack list for output
 if [ -n "$DETECTED_STACKS" ]; then
     STACK_INFO="**Detected stacks:** $DETECTED_STACKS
@@ -146,6 +182,7 @@ $SKILL_CONTENT
 
 $STACK_INFO
 $SESSION_STATE
+$WORKFLOW_RECORD
 </EXTREMELY_IMPORTANT>"
 
 # Escape for JSON

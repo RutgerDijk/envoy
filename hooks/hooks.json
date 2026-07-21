@@ -68,6 +68,18 @@
         ]
       }
     ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" pre-compact",
+            "_profiles": ["minimal", "standard", "strict"]
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": "",
