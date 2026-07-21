@@ -85,8 +85,8 @@ if (require.main === module) {
       process.stdin.setEncoding('utf8');
       process.stdin.on('data', (chunk) => { data += chunk; });
       process.stdin.on('end', () => {
-        hook.run(data);
-        process.exit(0);
+        const code = hook.run(data);
+        process.exit(typeof code === 'number' ? code : 0);
       });
     }
   } catch (err) {

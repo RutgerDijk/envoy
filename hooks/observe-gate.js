@@ -77,7 +77,15 @@ function observe(gate, data) {
     appendObserveLog(cwd, record);
 
     if (process.env.ENVOY_HOOK_PROFILE === 'strict') {
-      process.stderr.write(`Envoy ${gate} (strict) blocked: ${decision.reason}\n`);
+      // Escape hatch: a strict block is never an unrecoverable dead end.
+      // With ENVOY_OVERRIDE set, log the override and allow the call through.
+      if (process.env.ENVOY_OVERRIDE) {
+        appendObserveLog(cwd, { kind: 'override', ...record });
+        return 0;
+      }
+      process.stderr.write(
+        `Envoy ${gate} (strict) blocked: ${decision.reason}. To override: set ENVOY_OVERRIDE=1 and retry.\n`
+      );
       return 2;
     }
     return 0;
