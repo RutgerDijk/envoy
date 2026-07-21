@@ -33,14 +33,13 @@ Rigid skills are enforced by files, not prose. Each lives in its own folder:
 
 ```
 skills/<name>/
-├── SKILL.md              # body + frontmatter declaring hooks
+├── SKILL.md              # body + frontmatter (no hooks: block — enforcement is plugin-level)
 ├── preflight.js          # invoked inline via !`node ${CLAUDE_SKILL_DIR}/preflight.js`
-├── contract.json         # declarative rules read by the skill's own hooks
-├── hooks/
-│   ├── agent-guard.js    # PreToolUse[Agent] — validates subagent prompts
-│   └── stop-audit.js     # Stop — verifies required artifacts + loop signals
+├── contract.json         # declarative rules read by the plugin-level enforcement gates
 └── steps/ or layers/     # long-form content, one file per phase (SKILL.md under 500 lines)
 ```
+
+**Enforcement (plugin-level, observe mode):** `hooks/hooks.json` registers `PreToolUse[Agent]` → agent-guard and `Stop` → stop-audit at the plugin level (per-skill frontmatter hooks silently never registered). `hooks/observe-gate.js` reads `.envoy/active-skill.json` (lifecycle-aware via `lib/active-skill.js`), resolves the active skill's `contract.json`, evaluates the would-block decision (`lib/contract-guard.js` `evaluate*`), and in observe mode appends it to `.envoy/observe-log.jsonl` and exits 0 (fail-open). Arming exit-2 (strict) is deferred until observe-log data shows zero false positives.
 
 **Frontmatter primitives (in order):**
 - `name`, `description` (directive template: `<Skill> expert. ALWAYS invoke when… Do not…`)
@@ -49,7 +48,8 @@ skills/<name>/
 - `paths:` — glob for path-scoped activation (`docs/wiki/**`, etc.)
 - `model:` / `effort:` — optional per-skill tuning
 - `context: fork` — forks the conversation for pure task-shaped skills (review, finalize). Skip for skills with user-approval pauses (pickup).
-- `hooks:` — declares `PreToolUse[Agent]` → `hooks/agent-guard.js` and `Stop` → `hooks/stop-audit.js`, both with `once: true`.
+
+(No `hooks:` frontmatter — enforcement is registered once at the plugin level; see **Enforcement** above.)
 
 **Inline preflight pattern:** each rigid SKILL.md body opens with
 `## Briefing\n!`node ${CLAUDE_SKILL_DIR}/preflight.js``, immediately
