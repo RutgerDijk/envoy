@@ -4,12 +4,16 @@
  * ABOUTME: Plugin-level observe-mode gate core for agent-guard and stop-audit.
  * ABOUTME: Resolves the active skill's contract, logs would-block decisions, never blocks.
  *
- * OBSERVE MODE: these gates only watch. When the active rigid skill's contract
- * would block an Agent dispatch or a Stop, we append one JSON line to
- * .envoy/observe-log.jsonl and exit 0 anyway. Enforcement (exit 2) stays out of
- * this path entirely — we call the non-exiting evaluate* variants, never run*.
+ * OBSERVE MODE (default): these gates only watch. When the active rigid skill's
+ * contract would block an Agent dispatch or a Stop, we append one JSON line to
+ * .envoy/observe-log.jsonl and return 0 (allow) anyway.
  *
- * FAIL-OPEN: any error is swallowed. A broken gate must never block a tool call.
+ * STRICT MODE (ENVOY_HOOK_PROFILE=strict): the same would-block decision is
+ * ENFORCED — we still log it, write the reason to stderr, and return 2 (block)
+ * so the model sees why. Off by default; only the env var flips it.
+ *
+ * FAIL-OPEN: any error is swallowed and we return 0. A broken gate must never
+ * block a tool call — this holds even under strict.
  */
 
 const fs = require('fs');
@@ -31,16 +35,20 @@ function appendObserveLog(cwd, record) {
 }
 
 /**
- * Run one observe gate. Resolves the active skill (null → no-op), evaluates the
- * contract's would-block decision, and logs it. Always returns without throwing.
+ * Run one observe gate and return the exit code the runner should exit with.
+ * Resolves the active skill (null → 0), evaluates the contract's would-block
+ * decision, and logs it. Under ENVOY_HOOK_PROFILE=strict a would-block returns 2
+ * (and writes the reason to stderr); otherwise it returns 0 (observe only).
+ * Never throws — any error fails open to 0.
  * @param {'agent-guard'|'stop-audit'} gate
  * @param {string} data raw stdin payload (the tool-use / stop event JSON)
+ * @returns {number} exit code: 0 to allow, 2 to block (strict + would-block only)
  */
 function observe(gate, data) {
   try {
     const cwd = process.cwd();
     const active = readActiveSkill(cwd);
-    if (!active) return; // no rigid skill owns the session — nothing to guard
+    if (!active) return 0; // no rigid skill owns the session — nothing to guard
 
     const contractPath = path.join(PLUGIN_ROOT, 'skills', active.skill, 'contract.json');
 
@@ -50,14 +58,14 @@ function observe(gate, data) {
       try {
         event = JSON.parse(data || '{}');
       } catch {
-        return; // malformed event — fail open, nothing to observe
+        return 0; // malformed event — fail open, nothing to observe
       }
       decision = evaluateAgentGuard(contractPath, event);
     } else {
       decision = evaluateStopAudit(contractPath, cwd);
     }
 
-    if (!decision || !decision.block) return;
+    if (!decision || !decision.block) return 0;
 
     const record = {
       ts: new Date().toISOString(),
@@ -67,8 +75,26 @@ function observe(gate, data) {
     };
     if (decision.tool) record.tool = decision.tool;
     appendObserveLog(cwd, record);
+
+    if (process.env.ENVOY_HOOK_PROFILE === 'strict') {
+      // Escape hatch: a strict block is never an unrecoverable dead end.
+      // With ENVOY_OVERRIDE set (to anything but a falsy string), log the
+      // override and allow the call through. "0"/"false"/"" mean off, so a
+      // user who sets ENVOY_OVERRIDE=0 is not surprised by an enabled override.
+      const ov = (process.env.ENVOY_OVERRIDE || '').trim().toLowerCase();
+      if (ov !== '' && ov !== '0' && ov !== 'false') {
+        appendObserveLog(cwd, { kind: 'override', ...record });
+        return 0;
+      }
+      process.stderr.write(
+        `Envoy ${gate} (strict) blocked: ${decision.reason}. To override: set ENVOY_OVERRIDE=1 and retry.\n`
+      );
+      return 2;
+    }
+    return 0;
   } catch {
-    // fail-open: never block a tool call on gate failure
+    // fail-open: never block a tool call on gate failure, even under strict
+    return 0;
   }
 }
 

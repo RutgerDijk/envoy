@@ -11,9 +11,10 @@ const { observe } = require('./observe-gate');
 /**
  * Entry point invoked by hook-runner with the raw stdin payload.
  * @param {string} data
+ * @returns {number} exit code from the gate (0 allow, 2 block under strict)
  */
 function run(data) {
-  observe('agent-guard', data);
+  return observe('agent-guard', data);
 }
 
 if (require.main === module) {
@@ -23,8 +24,13 @@ if (require.main === module) {
   } catch {
     input = '';
   }
-  run(input);
-  process.exit(0);
+  let code = 0;
+  try {
+    code = run(input);
+  } catch {
+    code = 0; // belt-and-suspenders: never block on gate failure
+  }
+  process.exit(code === 2 ? 2 : 0);
 }
 
 module.exports = { run };
