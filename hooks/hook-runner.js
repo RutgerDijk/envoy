@@ -23,6 +23,7 @@ const path = require('path');
 const HOOK_PROFILES = {
   'session-start':          ['minimal', 'standard', 'strict'],
   'config-protection':      ['minimal', 'standard', 'strict'],
+  'pre-compact':            ['minimal', 'standard', 'strict'],
   'post-edit-accumulator':  ['standard', 'strict'],
   'stop-batch-lint':        ['standard', 'strict'],
   'learning-extractor':     ['standard', 'strict'],
