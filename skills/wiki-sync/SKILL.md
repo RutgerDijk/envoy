@@ -14,14 +14,6 @@ allowed-tools:
   - Bash
   - Grep
   - Glob
-hooks:
-  PreToolUse:
-    - matcher: Agent
-      command: node ${CLAUDE_SKILL_DIR}/hooks/agent-guard.js
-      once: true
-  Stop:
-    - command: node ${CLAUDE_SKILL_DIR}/hooks/stop-audit.js
-      once: true
 ---
 
 ## Briefing
