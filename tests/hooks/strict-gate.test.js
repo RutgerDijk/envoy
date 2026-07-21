@@ -20,6 +20,7 @@ const { spawnSync } = require('child_process');
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const AGENT_GUARD = path.join(REPO_ROOT, 'hooks', 'agent-guard.js');
 const STOP_AUDIT = path.join(REPO_ROOT, 'hooks', 'stop-audit.js');
+const HOOK_RUNNER = path.join(REPO_ROOT, 'hooks', 'hook-runner.js');
 const OBSERVE_LOG = path.join('.envoy', 'observe-log.jsonl');
 
 const SESSION = 'strict-gate-test-session';
@@ -65,6 +66,16 @@ function writeMarker(cwd, skill) {
 /** Spawn the gate script directly, merging `env` over a base that sets the session. */
 function runGate(gateScript, cwd, input, env = {}) {
   return spawnSync('node', [gateScript], {
+    cwd,
+    encoding: 'utf8',
+    input: typeof input === 'string' ? input : JSON.stringify(input || {}),
+    env: { ...process.env, CLAUDE_SESSION_ID: SESSION, ...env },
+  });
+}
+
+/** Spawn the hook through hook-runner (the real CLI dispatch path). */
+function runViaRunner(hookName, cwd, input, env = {}) {
+  return spawnSync('node', [HOOK_RUNNER, hookName], {
     cwd,
     encoding: 'utf8',
     input: typeof input === 'string' ? input : JSON.stringify(input || {}),
@@ -192,6 +203,107 @@ test('stop-audit strict + no active skill → exit 0 and no observe-log', () => 
     const r = runGate(STOP_AUDIT, tmp, {}, { ENVOY_HOOK_PROFILE: 'strict' });
     assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
     assert.strictEqual(readLog(tmp), null, 'no observe-log should exist when no skill is active');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+section('logged override escape hatch: ENVOY_OVERRIDE lets a strict block through');
+
+test('agent-guard strict + would-block + ENVOY_OVERRIDE=1 → exit 0, override logged', () => {
+  const tmp = mkTmp();
+  try {
+    writeMarker(tmp, 'pickup');
+    const r = runGate(AGENT_GUARD, tmp, blockingAgentEvent, {
+      ENVOY_HOOK_PROFILE: 'strict',
+      ENVOY_OVERRIDE: '1',
+    });
+    assert.strictEqual(r.status, 0, `override must allow, got ${r.status}\n${r.stderr}`);
+    const log = readLog(tmp);
+    assert.ok(log && log.length >= 1, 'override must be logged');
+    const override = log.find((rec) => rec.kind === 'override');
+    assert.ok(override, 'an override record must exist in the observe-log');
+    assert.strictEqual(override.gate, 'agent-guard');
+    assert.strictEqual(override.tool, 'Agent');
+    assert.strictEqual(override.skill, 'pickup');
+    assert.ok(override.reason && override.ts, 'override record carries reason + ts');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('agent-guard strict + would-block, no override → exit 2, stderr names ENVOY_OVERRIDE', () => {
+  const tmp = mkTmp();
+  try {
+    writeMarker(tmp, 'pickup');
+    const r = runGate(AGENT_GUARD, tmp, blockingAgentEvent, { ENVOY_HOOK_PROFILE: 'strict' });
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    assert.ok(r.stderr.includes('ENVOY_OVERRIDE'), 'stderr must name the override mechanism');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+section('end-to-end through hook-runner: exit code propagates (the whole point)');
+
+test('hook-runner agent-guard strict + would-block → exit 2', () => {
+  const tmp = mkTmp();
+  try {
+    writeMarker(tmp, 'pickup');
+    const r = runViaRunner('agent-guard', tmp, blockingAgentEvent, { ENVOY_HOOK_PROFILE: 'strict' });
+    assert.strictEqual(r.status, 2, `hook-runner must propagate exit 2, got ${r.status}\n${r.stderr}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('hook-runner stop-audit strict + would-block → exit 2', () => {
+  const tmp = mkTmp();
+  try {
+    writeMarker(tmp, 'pickup');
+    const r = runViaRunner('stop-audit', tmp, {}, { ENVOY_HOOK_PROFILE: 'strict' });
+    assert.strictEqual(r.status, 2, `hook-runner must propagate exit 2, got ${r.status}\n${r.stderr}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('hook-runner agent-guard strict + would-block + ENVOY_OVERRIDE=1 → exit 0', () => {
+  const tmp = mkTmp();
+  try {
+    writeMarker(tmp, 'pickup');
+    const r = runViaRunner('agent-guard', tmp, blockingAgentEvent, {
+      ENVOY_HOOK_PROFILE: 'strict',
+      ENVOY_OVERRIDE: '1',
+    });
+    assert.strictEqual(r.status, 0, `override through hook-runner must allow, got ${r.status}\n${r.stderr}`);
+    const log = readLog(tmp);
+    assert.ok(log && log.some((rec) => rec.kind === 'override'), 'override logged through hook-runner');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('hook-runner backward compat: undefined-returning hook → exit 0', () => {
+  const tmp = mkTmp();
+  try {
+    // post-edit-accumulator.run() returns undefined for a non-Edit/Write event.
+    const r = runViaRunner('post-edit-accumulator', tmp, { tool_name: 'Read', tool_input: {} }, {
+      ENVOY_HOOK_PROFILE: 'strict',
+    });
+    assert.strictEqual(r.status, 0, `undefined-return hook must exit 0, got ${r.status}\n${r.stderr}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('hook-runner fail-open: throwing gate path → exit 0 even under strict', () => {
+  const tmp = mkTmp();
+  try {
+    writeMarker(tmp, 'pickup');
+    fs.mkdirSync(path.join(tmp, '.envoy', 'observe-log.jsonl'), { recursive: true });
+    const r = runViaRunner('agent-guard', tmp, blockingAgentEvent, { ENVOY_HOOK_PROFILE: 'strict' });
+    assert.strictEqual(r.status, 0, `hook-runner must fail open on throw, got ${r.status}\n${r.stderr}`);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
