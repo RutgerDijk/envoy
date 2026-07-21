@@ -78,8 +78,11 @@ function observe(gate, data) {
 
     if (process.env.ENVOY_HOOK_PROFILE === 'strict') {
       // Escape hatch: a strict block is never an unrecoverable dead end.
-      // With ENVOY_OVERRIDE set, log the override and allow the call through.
-      if (process.env.ENVOY_OVERRIDE) {
+      // With ENVOY_OVERRIDE set (to anything but a falsy string), log the
+      // override and allow the call through. "0"/"false"/"" mean off, so a
+      // user who sets ENVOY_OVERRIDE=0 is not surprised by an enabled override.
+      const ov = (process.env.ENVOY_OVERRIDE || '').trim().toLowerCase();
+      if (ov !== '' && ov !== '0' && ov !== 'false') {
         appendObserveLog(cwd, { kind: 'override', ...record });
         return 0;
       }

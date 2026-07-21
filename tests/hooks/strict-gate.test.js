@@ -244,6 +244,17 @@ test('agent-guard strict + would-block, no override → exit 2, stderr names ENV
   }
 });
 
+test('ENVOY_OVERRIDE=0 does NOT override (still blocks under strict)', () => {
+  const tmp = mkTmp();
+  try {
+    writeMarker(tmp, 'pickup');
+    const r = runGate(AGENT_GUARD, tmp, blockingAgentEvent, { ENVOY_HOOK_PROFILE: 'strict', ENVOY_OVERRIDE: '0' });
+    assert.strictEqual(r.status, 2, `ENVOY_OVERRIDE=0 must not enable override; expected exit 2, got ${r.status}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 section('end-to-end through hook-runner: exit code propagates (the whole point)');
 
 test('hook-runner agent-guard strict + would-block → exit 2', () => {
