@@ -177,6 +177,92 @@ test('pre-manifest install: identical files are adopted as managed, differing fi
   );
 });
 
+// ─── Revert recovery ─────────────────────────────────────────────────────────
+
+test('reverting local edits makes the file managed again and it takes the next upstream update', () => {
+  const fixture = makeFixture();
+  runInstall(fixture);
+
+  const localPath = path.join(fixture.project, '.github', 'copilot-instructions.md');
+  fs.writeFileSync(localPath, 'core v1 + my tweaks\n');
+  runInstall(fixture); // skip-run: must keep the manifest entry alive
+
+  fs.writeFileSync(localPath, 'core v1\n'); // user reverts their edits
+  fs.writeFileSync(
+    path.join(fixture.envoyDir, 'adapters', 'copilot', 'templates', 'copilot-instructions.md'),
+    'core v2\n'
+  );
+  const output = runInstall(fixture);
+
+  assert.strictEqual(fs.readFileSync(localPath, 'utf8'), 'core v2\n');
+  assert.doesNotMatch(output, /copilot-instructions\.md.*locally modified/i);
+});
+
+// ─── Stale manifest entry, file already matches template ─────────────────────
+
+test('a file identical to the current template is never flagged as locally modified, even with a stale manifest entry', () => {
+  const fixture = makeFixture();
+  runInstall(fixture);
+
+  // Upstream template changes AND the user hand-copies the new content
+  // (equivalently: a prior run aborted after cp but before the manifest write).
+  fs.writeFileSync(
+    path.join(fixture.envoyDir, 'adapters', 'copilot', 'templates', 'copilot-instructions.md'),
+    'core v2\n'
+  );
+  fs.writeFileSync(path.join(fixture.project, '.github', 'copilot-instructions.md'), 'core v2\n');
+  const output = runInstall(fixture);
+
+  assert.doesNotMatch(output, /copilot-instructions\.md.*locally modified/i);
+  const manifest = readManifest(fixture);
+  assert.ok(manifest.files['copilot-instructions.md'], 'manifest entry must be refreshed');
+  // A later upstream change must flow through — proving the entry is current.
+  fs.writeFileSync(
+    path.join(fixture.envoyDir, 'adapters', 'copilot', 'templates', 'copilot-instructions.md'),
+    'core v3\n'
+  );
+  runInstall(fixture);
+  assert.strictEqual(readProjectFile(fixture, path.join('.github', 'copilot-instructions.md')), 'core v3\n');
+});
+
+// ─── Copy mode over a previous symlink install ───────────────────────────────
+
+test('copy-mode run leaves symlinks from a previous --symlink install alone', () => {
+  const fixture = makeFixture();
+  runInstall(fixture, ['--symlink']);
+
+  runInstall(fixture); // plain copy-mode re-run
+  const linkPath = path.join(fixture.project, '.github', 'copilot-instructions.md');
+  assert.ok(fs.lstatSync(linkPath).isSymbolicLink(), 'symlink must not be replaced by a copy');
+  const manifest = readManifest(fixture);
+  assert.strictEqual(
+    manifest.files['copilot-instructions.md'],
+    undefined,
+    'symlinked files must not be manifest-tracked'
+  );
+});
+
+// ─── Corrupt manifest ────────────────────────────────────────────────────────
+
+test('a corrupt manifest degrades to adoption: identical files re-managed, edited files preserved', () => {
+  const fixture = makeFixture();
+  runInstall(fixture);
+  fs.writeFileSync(path.join(fixture.project, MANIFEST_REL), 'not json{{{\n');
+  fs.writeFileSync(
+    path.join(fixture.project, '.github', 'prompts', 'pickup.prompt.md'),
+    'pickup v1 + my tweaks\n'
+  );
+
+  runInstall(fixture);
+  const manifest = readManifest(fixture); // must be valid JSON again
+  assert.ok(manifest.files['copilot-instructions.md'], 'identical file re-adopted');
+  assert.strictEqual(manifest.files[path.join('prompts', 'pickup.prompt.md')], undefined);
+  assert.strictEqual(
+    readProjectFile(fixture, path.join('.github', 'prompts', 'pickup.prompt.md')),
+    'pickup v1 + my tweaks\n'
+  );
+});
+
 // ─── Symlink mode ────────────────────────────────────────────────────────────
 
 test('symlink mode creates symlinks and does not manifest-track them', () => {

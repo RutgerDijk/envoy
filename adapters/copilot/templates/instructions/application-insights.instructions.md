@@ -59,18 +59,6 @@ Set `Success = false` and call `_telemetry.TrackException(ex)` in the catch path
 
 For authenticated requests, set `telemetry.Context.User.AuthenticatedUserId` (e.g. in middleware) so telemetry is attributable per user.
 
-## Frontend Correlation
-
-Enable correlation so browser telemetry links to backend operations:
-
-```typescript
-const appInsights = new ApplicationInsights({ config: {
-  connectionString: import.meta.env.VITE_APP_INSIGHTS_CONNECTION_STRING,
-  enableAutoRouteTracking: true,
-  enableCorsCorrelation: true,
-} });
-```
-
 ## Common Mistakes to Avoid
 
 - ❌ `InstrumentationKey` instead of `ConnectionString` → the key alone is deprecated

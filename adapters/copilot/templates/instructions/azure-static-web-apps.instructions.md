@@ -79,5 +79,5 @@ API URLs or keys in source.
 - ❌ Leaving all auth providers enabled → block unused `/.auth/login/*` routes with 404s
 - ❌ Wrong `outputLocation` (e.g. `build` when Vite outputs `dist`) → deploy publishes nothing
 - ❌ Hardcoded API URLs and keys → use environment variables injected at build/deploy
-- ❌ Free tier in production → custom domains with SSL require the Standard SKU
+- ❌ Free tier in production → no SLA, private endpoints, BYO backends, or password protection without the Standard SKU
 - ❌ Unprotected routes → use `allowedRoles` plus 401/404 `responseOverrides`

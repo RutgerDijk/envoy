@@ -77,6 +77,7 @@ trap 'rm -f "$OLD_MANIFEST_TSV" "$NEW_MANIFEST_TSV"' EXIT
 COUNT_INSTALLED=0
 COUNT_UPDATED=0
 COUNT_UNCHANGED=0
+COUNT_ADOPTED=0
 COUNT_SKIPPED_MODIFIED=0
 
 hash_file() {
@@ -161,30 +162,34 @@ install_file() {
   dest_hash="$(hash_file "$dest")"
   managed_hash="$(manifest_lookup "$rel_key")"
 
-  # No manifest entry (pre-manifest install or untracked file): a file
-  # identical to the current template is adopted as managed; anything else
-  # is user content and stays untouched.
-  if [[ -z "$managed_hash" ]]; then
-    if [[ "$dest_hash" == "$src_hash" ]]; then
-      manifest_record "$rel_key" "$src_hash"
-      COUNT_UNCHANGED=$((COUNT_UNCHANGED + 1))
+  # A file identical to the current template is managed by definition,
+  # whatever the manifest says (covers hand-copied updates, a run aborted
+  # between cp and the manifest write, and pre-manifest installs).
+  if [[ "$dest_hash" == "$src_hash" ]]; then
+    manifest_record "$rel_key" "$src_hash"
+    if [[ -z "$managed_hash" || "$managed_hash" != "$src_hash" ]]; then
+      COUNT_ADOPTED=$((COUNT_ADOPTED + 1))
       echo "  ➕ Adopted as managed: ${dest#"$PROJECT_DIR/"}"
     else
-      COUNT_SKIPPED_MODIFIED=$((COUNT_SKIPPED_MODIFIED + 1))
-      echo "  ⚠️  Locally modified, skipped: ${dest#"$PROJECT_DIR/"}"
+      COUNT_UNCHANGED=$((COUNT_UNCHANGED + 1))
     fi
     return
   fi
 
-  if [[ "$dest_hash" != "$managed_hash" ]]; then
+  # No manifest entry and not identical to the template: user content,
+  # stays untouched and untracked.
+  if [[ -z "$managed_hash" ]]; then
     COUNT_SKIPPED_MODIFIED=$((COUNT_SKIPPED_MODIFIED + 1))
     echo "  ⚠️  Locally modified, skipped: ${dest#"$PROJECT_DIR/"}"
     return
   fi
 
-  if [[ "$src_hash" == "$dest_hash" ]]; then
-    manifest_record "$rel_key" "$src_hash"
-    COUNT_UNCHANGED=$((COUNT_UNCHANGED + 1))
+  # Locally edited managed file: keep its manifest entry alive so that
+  # reverting the edits makes it managed again on a later run.
+  if [[ "$dest_hash" != "$managed_hash" ]]; then
+    manifest_record "$rel_key" "$managed_hash"
+    COUNT_SKIPPED_MODIFIED=$((COUNT_SKIPPED_MODIFIED + 1))
+    echo "  ⚠️  Locally modified, skipped: ${dest#"$PROJECT_DIR/"}"
     return
   fi
 
@@ -268,7 +273,7 @@ echo "────────────────────────�
 echo "✅ Envoy Copilot adapter installed"
 if [[ "$SYMLINK" != "true" ]]; then
   echo ""
-  echo "Sync summary: $COUNT_INSTALLED installed, $COUNT_UPDATED updated, $COUNT_UNCHANGED unchanged, $COUNT_SKIPPED_MODIFIED locally modified (skipped)"
+  echo "Sync summary: $COUNT_INSTALLED installed, $COUNT_UPDATED updated, $COUNT_UNCHANGED unchanged, $COUNT_ADOPTED adopted, $COUNT_SKIPPED_MODIFIED locally modified (skipped)"
 fi
 echo ""
 echo "What was installed:"
