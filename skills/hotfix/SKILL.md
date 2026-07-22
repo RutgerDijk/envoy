@@ -75,7 +75,9 @@ git worktree add ".worktrees/hotfix-$TOPIC" -b "hotfix/$ISSUE_NUMBER-$TOPIC" mai
 cd ".worktrees/hotfix-$TOPIC"
 # Only now, with the worktree existing and cwd anchored in it, record state:
 mkdir -p .envoy
-node -e "require('fs').writeFileSync('.envoy/active-skill.json', JSON.stringify({\$schemaVersion:'1',skill:'hotfix',issueNumber:Number(process.env.ISSUE_NUMBER),startedAt:new Date().toISOString()},null,2))" ISSUE_NUMBER="$ISSUE_NUMBER"
+# NOTE: the env assignment is a PREFIX before `node` — a suffix (`node -e "..." VAR=val`)
+# becomes argv, not process.env, so issueNumber would be NaN. Keep it a prefix.
+ISSUE_NUMBER="$ISSUE_NUMBER" node -e "const fs=require('fs'); const issue=Number(process.env.ISSUE_NUMBER); fs.writeFileSync('.envoy/active-skill.json', JSON.stringify({\$schemaVersion:'1',skill:'hotfix',issueNumber:issue,startedAt:new Date().toISOString()},null,2)); require('${CLAUDE_SKILL_DIR}/../../lib/ledger').appendEvent(process.cwd(), {type:'skill-started', skill:'hotfix', issue:issue});"
 ```
 
 Writing `.envoy/active-skill.json` here keeps the hotfix visible to the

@@ -199,5 +199,29 @@ test('review SKILL.md appends handoff-written after writing the finalize handoff
   );
 });
 
+section('hotfix emits skill-started (sanctioned fast-path) without the NaN env bug');
+
+test('hotfix SKILL.md emits a skill-started(hotfix) ledger event', () => {
+  const skill = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'hotfix', 'SKILL.md'), 'utf8');
+  assert.ok(
+    /appendEvent\([\s\S]*?type:\s*'skill-started'[\s\S]*?skill:\s*'hotfix'/.test(skill),
+    'expected an appendEvent skill-started(hotfix) call so compliance can flag the sanctioned fast-path'
+  );
+});
+
+test('hotfix active-skill write passes ISSUE_NUMBER as an env prefix, not a node argv suffix', () => {
+  const skill = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'hotfix', 'SKILL.md'), 'utf8');
+  // The bug (#43 family): `node -e "..." ISSUE_NUMBER="$ISSUE_NUMBER"` -> argv, so
+  // process.env.ISSUE_NUMBER is undefined -> issueNumber: NaN.
+  assert.ok(
+    !/node -e "[\s\S]*?"\s*ISSUE_NUMBER=/.test(skill),
+    'ISSUE_NUMBER must be an env prefix before node, not a suffix after it (else NaN)'
+  );
+  assert.ok(
+    /ISSUE_NUMBER="\$ISSUE_NUMBER"\s+node -e/.test(skill),
+    'expected the env-prefix form: ISSUE_NUMBER="$ISSUE_NUMBER" node -e "..."'
+  );
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
