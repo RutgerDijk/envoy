@@ -240,6 +240,7 @@ Envoy uses hooks for automation without polluting the context window:
 | Hook | Type | Purpose |
 |------|------|---------|
 | `config-protection` | PreToolUse | Blocks linter/formatter config modifications |
+| `issue-guard` | PreToolUse | Forces a manual approval prompt on `gh issue create` |
 | `post-edit-accumulator` | PostToolUse | Tracks edited files for batched processing |
 | `post-pr-poll` | PostToolUse | Triggers CodeRabbit polling after PR creation |
 | `stop-batch-lint` | Stop | Runs lint once across all session edits |
@@ -254,7 +255,7 @@ Control which hooks run via `ENVOY_HOOK_PROFILE`:
 
 | Profile | Hooks | Use Case |
 |---------|-------|----------|
-| `minimal` | config-protection, cost-tracker | Low overhead, essential protection |
+| `minimal` | config-protection, issue-guard, cost-tracker | Low overhead, essential protection |
 | `standard` | All hooks (default) | Full automation |
 | `strict` | All hooks + verification gates | Maximum safety |
 
