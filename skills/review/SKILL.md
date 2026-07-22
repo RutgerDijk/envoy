@@ -182,6 +182,8 @@ const handoff = {
 
 fs.mkdirSync('.envoy/review', { recursive: true });
 fs.writeFileSync('.envoy/review/handoff-to-finalize.json', JSON.stringify(handoff, null, 2));
+
+require('../../lib/ledger').appendEvent(process.cwd(), { type: 'handoff-written', from: 'review', to: 'finalize' });
 ```
 
 Finalize preflight requires `reviewStatus === "approved"`; any other value blocks finalize.
