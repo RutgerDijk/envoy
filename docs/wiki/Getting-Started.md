@@ -18,7 +18,7 @@
 /path/to/envoy/adapters/copilot/install.sh
 ```
 
-See [adapters/copilot/INSTALL.md](../../adapters/copilot/INSTALL.md) for details.
+Re-running the script syncs updates: unmodified files are updated in place, locally edited files are preserved (tracked via `.github/.envoy-copilot-manifest.json`). See [adapters/copilot/INSTALL.md](../../adapters/copilot/INSTALL.md) for details.
 
 ## Prerequisites
 
