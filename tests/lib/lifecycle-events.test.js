@@ -194,7 +194,7 @@ test('review SKILL.md appends handoff-written after writing the finalize handoff
   const writeIdx = skill.indexOf("handoff-to-finalize.json");
   assert.ok(writeIdx !== -1, 'expected the finalize handoff write in review SKILL.md');
   assert.ok(
-    /appendEvent\([^)]*\{\s*type:\s*'handoff-written'[^}]*from:\s*'review'[^}]*to:\s*'finalize'/.test(skill),
+    /appendEvent\([\s\S]*?type:\s*'handoff-written'[\s\S]*?from:\s*'review'[\s\S]*?to:\s*'finalize'/.test(skill),
     'expected an appendEvent handoff-written(from:review,to:finalize) call'
   );
 });

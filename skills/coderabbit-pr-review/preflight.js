@@ -13,6 +13,7 @@ const path = require('path');
 const CWD = process.cwd();
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
 const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
+const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
 
 function say(line) { process.stdout.write(`${line}\n`); }
 function banner(tier) { say(`## STATUS: ${tier}`); }
@@ -59,6 +60,7 @@ function main() {
     startedAt: nowIso(),
     pid: process.pid,
   });
+  appendEvent(CWD, { type: 'skill-started', skill: 'coderabbit-pr-review', issue: state.issueNumber });
 
   banner('ok');
   say('');

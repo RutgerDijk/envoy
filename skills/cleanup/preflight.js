@@ -16,6 +16,7 @@ const path = require('path');
 const CWD = process.cwd();
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
 const { readActiveSkill, clearActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
+const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
 
 function say(line) { process.stdout.write(`${line}\n`); }
 function banner(tier) { say(`## STATUS: ${tier}`); }
@@ -23,6 +24,7 @@ function banner(tier) { say(`## STATUS: ${tier}`); }
 function main() {
   const priorMarker = readActiveSkill(CWD);
   clearActiveSkill(CWD);
+  appendEvent(CWD, { type: 'skill-started', skill: 'cleanup', issue: priorMarker ? priorMarker.issueNumber : undefined });
 
   const statePath = path.join(CWD, '.envoy', 'finalize', 'state.json');
   banner('ok');
