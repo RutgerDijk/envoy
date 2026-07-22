@@ -13,8 +13,12 @@ Diagnose and fix CI/CD failures on the pull request for the current branch. Clas
 
 ```bash
 # Use the argument if given, otherwise detect from the current branch
-PR_NUMBER=$(gh pr view --json number -q '.number')
-BRANCH=$(git branch --show-current)
+if [ -n "$1" ]; then
+  PR_NUMBER="$1"
+else
+  PR_NUMBER=$(gh pr view --json number -q '.number')
+fi
+BRANCH=$(gh pr view $PR_NUMBER --json headRefName -q '.headRefName')
 
 gh pr checks $PR_NUMBER
 ```

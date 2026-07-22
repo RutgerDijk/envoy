@@ -37,7 +37,7 @@
         "Given the 5 Azure stacks, then each has a condensed instruction file with a correct applyTo glob"
       ],
       "files": [
-        "tests/adapters/stack-instruction-drift.test.js",
+        "tests/adapters/copilot-template-drift.test.js",
         "adapters/copilot/templates/instructions/application-insights.instructions.md",
         "adapters/copilot/templates/instructions/azure-container-apps.instructions.md",
         "adapters/copilot/templates/instructions/azure-postgresql.instructions.md",

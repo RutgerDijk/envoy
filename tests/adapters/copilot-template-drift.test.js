@@ -168,5 +168,14 @@ test('every prompt template maps to a skill or is a known variant', () => {
   assert.deepStrictEqual(orphaned, [], `prompts with no skill and no variant note: ${orphaned.join(', ')}`);
 });
 
+test('prompt-only entries and the agent name map do not go stale', () => {
+  const missingPrompt = PROMPT_ONLY.filter((p) => !promptNames.includes(p));
+  assert.deepStrictEqual(missingPrompt, [], `prompt-only entries with no such prompt: ${missingPrompt.join(', ')}`);
+  const grewSkill = PROMPT_ONLY.filter((p) => skillNames.includes(p));
+  assert.deepStrictEqual(grewSkill, [], `prompt-only entries that now have a skill: ${grewSkill.join(', ')}`);
+  const staleMapped = Object.keys(AGENT_NAME_MAP).filter((a) => !agentNames.includes(a));
+  assert.deepStrictEqual(staleMapped, [], `agent name mappings with no such agent: ${staleMapped.join(', ')}`);
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
