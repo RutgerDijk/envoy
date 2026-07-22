@@ -57,6 +57,11 @@ if [[ ! -d "$TEMPLATES_DIR" ]]; then
   exit 1
 fi
 
+if [[ "$SYMLINK" != "true" ]] && ! command -v node >/dev/null 2>&1; then
+  echo "❌ node is required for the sync manifest (or use --symlink, which needs no manifest)."
+  exit 1
+fi
+
 # ─── Helper Functions ─────────────────────────────────────────────────────────
 
 # Manifest: .github/.envoy-copilot-manifest.json records the content hash of
