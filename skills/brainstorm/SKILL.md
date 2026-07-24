@@ -43,6 +43,22 @@ This produces the implementation task list in the issue. Every referenced file p
 3. Cover: architecture, components, data flow, error handling, testing
 4. Be ready to revise based on feedback
 
+### Phase 3.5: Issue-Plan Approval (BLOCKING)
+
+Before creating ANY issue, present the proposed issue structure and wait for
+explicit approval — the number of issues is the user's decision, not yours:
+
+1. List every issue you intend to create: title + one-line scope each, and
+   the dependency order if there is more than one.
+2. Present it as lettered options (e.g. "A: one issue covering everything,
+   B: the two-issue split above") with your recommendation first.
+3. Do NOT run `gh issue create` until the user picks one.
+
+Default bias: **ONE issue**. A split needs a concrete reason — independently
+shippable parts, different reviewers, or a decision gate between parts.
+"It feels big" is not a reason; that is what the task list inside the issue
+is for.
+
 ### Phase 4: Create GitHub Issue and Task Handoff
 
 The task list has a **single authoring surface**: you draft the spec-driven
