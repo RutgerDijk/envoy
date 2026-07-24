@@ -120,6 +120,8 @@ git checkout main
 
 ## Phase 6: Create GitHub Issue
 
+**Issue-plan approval (blocking):** before creating ANY issue, list every issue you intend to create (title + one-line scope, dependency order if more than one) as lettered options with your recommendation first, and wait for the user to pick. Default bias: ONE issue — a split needs a concrete reason (independently shippable parts, different reviewers, or a decision gate between parts), not "it feels big".
+
 ```bash
 gh issue create \
   --title "<Feature Name>" \

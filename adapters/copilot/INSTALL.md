@@ -99,16 +99,21 @@ In VS Code, open Copilot Chat and select an agent from the picker:
 
 If you installed with `--symlink`, files automatically reflect updates from the envoy directory.
 
-If you installed with `--copy` (default), re-run the install script and choose to overwrite:
+If you installed by copy (default), just re-run the install script:
 
 ```bash
-# Remove existing files and re-install
-rm .github/copilot-instructions.md
-rm .github/prompts/*.prompt.md
-rm .github/instructions/*.instructions.md
-rm .github/agents/*.agent.md
 /path/to/envoy/adapters/copilot/install.sh
 ```
+
+The installer keeps a manifest (`.github/.envoy-copilot-manifest.json`) with the content hash of every file it manages. Copy mode requires `node` on your PATH for the manifest bookkeeping (symlink mode does not). On re-run, each file is handled by comparing hashes:
+
+- **Missing** → installed
+- **Unmodified since install** → updated to the current template
+- **Locally edited** → left untouched, reported as `Locally modified, skipped`
+
+To take an upstream update for a file you edited, delete your copy (or revert your edits) and re-run the installer. Installs made before the manifest existed are adopted automatically: files identical to the current templates become managed; edited files are treated as yours.
+
+Templates removed from envoy are not deleted locally — an installed file whose template disappears simply stops being managed; remove it yourself if you no longer want it.
 
 ## Directory Structure
 
