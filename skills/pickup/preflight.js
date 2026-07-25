@@ -56,11 +56,6 @@ function payloadFromIssue(issueNumber) {
 function say(line) { process.stdout.write(`${line}\n`); }
 function banner(tier) { say(`## STATUS: ${tier}`); }
 
-function strictPromote(tier) {
-  if (tier === 'degraded' && process.env.ENVOY_HOOK_PROFILE === 'strict') return 'fatal';
-  return tier;
-}
-
 function writeJson(rel, data) {
   const full = path.join(CWD, rel);
   fs.mkdirSync(path.dirname(full), { recursive: true });
@@ -145,12 +140,10 @@ function main() {
   writeActiveSkill(CWD, { skill: 'pickup', issueNumber: issueNumber ? Number(issueNumber) : undefined });
   appendEvent(CWD, { type: 'skill-started', skill: 'pickup', issue: Number(issueNumber) });
 
-  const tier = strictPromote(materialized ? 'degraded' : 'ok');
-  banner(tier);
+  banner('ok');
   say('');
   if (materialized) {
-    say('NOTE: tasks file was reconstructed from the issue\'s embedded block.');
-    say('Confirm the recovered task list before proceeding.');
+    say('Tasks materialized from the issue\'s embedded block.');
     say('');
   }
   if (driftWarning) {

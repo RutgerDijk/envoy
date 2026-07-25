@@ -68,13 +68,13 @@ test('committed file present → ok, session seeded', () => {
   assert.ok(fs.existsSync(path.join(cwd, '.envoy', 'pickup', 'session.json')), 'session seeded');
 });
 
-test('file missing + issue has block → materialized (degraded) and file written', () => {
+test('file missing + issue has block → materialized at ok, no reconstruction warning', () => {
   const cwd = makeCwd();
   const bodyFile = path.join(cwd, 'body.md');
   fs.writeFileSync(bodyFile, 'Issue text\n' + renderEmbeddedBlock(payload(78, TASKS)));
   const { status, out } = runPreflight(cwd, 78, bodyFile);
-  assert.strictEqual(status, 'degraded');
-  assert.ok(/reconstructed/i.test(out), 'notes reconstruction');
+  assert.strictEqual(status, 'ok');
+  assert.ok(!/reconstructed/i.test(out), 'materializing is the normal path, not a recovery');
   assert.ok(fs.existsSync(path.join(cwd, '.envoy-tasks', '78.json')), 'materialized file written');
 });
 
