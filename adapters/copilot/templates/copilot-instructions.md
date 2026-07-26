@@ -27,7 +27,7 @@ Use the slash commands below (`.github/prompts/`) to drive each phase.
 | `/wiki-sync` | Syncing `docs/wiki/` to the GitHub wiki |
 | `/cleanup` | Removing worktree and branch after PR merge |
 
-> Implementation plans are committed as `.envoy-tasks/<issue-number>.json` task files (emitted by brainstorm, consumed by pickup). If an issue has no task file, treat it as not pickup-ready.
+> Implementation plans travel in the issue itself as an embedded machine-readable task block (rendered by brainstorm, materialized locally by pickup as gitignored `.envoy-tasks/<issue-number>.json`). If an issue has no task block, treat it as not pickup-ready.
 
 > **Visual review** (`/visual-review`) requires the Chrome DevTools MCP server, which is only available in Claude Code. In Copilot, perform visual checks by inspecting browser screenshots or by running the app and describing what you see.
 
@@ -38,7 +38,7 @@ When the user asks you to do something, first decide which workflow applies:
 | User intent | Use |
 |-------------|-----|
 | "I have an idea / new feature" | `/brainstorm` |
-| "Pick up issue #N" or "implement this issue" | `/pickup` (requires `.envoy-tasks/<N>.json`) |
+| "Pick up issue #N" or "implement this issue" | `/pickup` (requires the issue's embedded task block) |
 | "Review my changes" | `/review` |
 | "Quick check" | `/quick-review` |
 | "Create a PR / wrap up the branch" | `/finalize` |
@@ -52,11 +52,11 @@ When the user asks you to do something, first decide which workflow applies:
 
 Envoy sessions in a project — from any agent — share state through files, not conversation memory:
 
-- **`.envoy-tasks/<issue>.json`** (committed) — the brainstorm → pickup task contract. Visible in PR diffs.
+- **`.envoy-tasks/<issue>.json`** (gitignored) — the brainstorm → pickup task contract, materialized from the machine block embedded in the GitHub issue.
 - **`.envoy/`** (gitignored, per-worktree) — runtime handoff state between workflow phases. Do not commit it; do not trust it over git history and the issue/PR state.
 - **Worktrees** live at `.worktrees/<issue-number>-<topic>/`, one per issue.
 
-If handoff state is missing, reconstruct from durable sources (git log, the committed task file, the GitHub issue/PR) rather than guessing.
+If handoff state is missing, reconstruct from durable sources (git log, the GitHub issue's task block, the PR) rather than guessing.
 
 ## Iron Law: TDD
 

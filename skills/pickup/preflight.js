@@ -8,7 +8,7 @@
  * writes .envoy/pickup/session.json (seeded from the tasks list) and
  * .envoy/active-skill.json, then prints a briefing.
  *
- * Emits `## STATUS: ok|degraded|fatal` as the first content line so the
+ * Emits `## STATUS: ok|fatal` as the first content line so the
  * eval harness (and Claude reading the inline `!` substitution) can parse
  * the outcome.
  */
@@ -20,7 +20,7 @@ const { execFileSync } = require('child_process');
 const CWD = process.cwd();
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
 const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
-const { extractEmbeddedBlock } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
+const { extractEmbeddedBlock, ensureTasksDirIgnored } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
 const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
 
@@ -56,11 +56,6 @@ function payloadFromIssue(issueNumber) {
 function say(line) { process.stdout.write(`${line}\n`); }
 function banner(tier) { say(`## STATUS: ${tier}`); }
 
-function strictPromote(tier) {
-  if (tier === 'degraded' && process.env.ENVOY_HOOK_PROFILE === 'strict') return 'fatal';
-  return tier;
-}
-
 function writeJson(rel, data) {
   const full = path.join(CWD, rel);
   fs.mkdirSync(path.dirname(full), { recursive: true });
@@ -83,11 +78,13 @@ function main() {
   let materialized = false;
 
   if (!fs.existsSync(tasksFile)) {
-    // Recover from the machine block embedded in the issue before giving up.
+    // The issue's embedded machine block is the durable task source —
+    // materialize the local file from it.
     const recovered = payloadFromIssue(issueNumber);
     if (recovered) {
       recovered.issueNumber = Number(issueNumber);
       writeJson(path.join('.envoy-tasks', `${issueNumber}.json`), recovered);
+      ensureTasksDirIgnored(CWD);
       materialized = true;
     } else {
       banner('fatal');
@@ -112,15 +109,16 @@ function main() {
 
   const tasks = JSON.parse(fs.readFileSync(tasksFile, 'utf8'));
 
-  // Non-fatal drift check: if the committed file and the issue's embedded block
-  // disagree on the task set, the issue was likely edited after filing.
+  // Non-fatal drift check: if the local file and the issue's embedded block
+  // disagree on the task set, the issue was likely edited after the file
+  // was materialized.
   let driftWarning = null;
   if (!materialized) {
     const issuePayload = payloadFromIssue(issueNumber);
     if (issuePayload) {
       const key = (p) => JSON.stringify((p.tasks || []).map((t) => [t.id, t.title]));
       if (key(issuePayload) !== key(tasks)) {
-        driftWarning = 'committed .envoy-tasks differs from the issue\'s embedded task block (issue edited after filing?)';
+        driftWarning = 'local .envoy-tasks file differs from the issue\'s embedded task block (issue edited after it was materialized?)';
       }
     }
   }
@@ -145,12 +143,10 @@ function main() {
   writeActiveSkill(CWD, { skill: 'pickup', issueNumber: issueNumber ? Number(issueNumber) : undefined });
   appendEvent(CWD, { type: 'skill-started', skill: 'pickup', issue: Number(issueNumber) });
 
-  const tier = strictPromote(materialized ? 'degraded' : 'ok');
-  banner(tier);
+  banner('ok');
   say('');
   if (materialized) {
-    say('NOTE: tasks file was reconstructed from the issue\'s embedded block.');
-    say('Confirm the recovered task list before proceeding.');
+    say('Tasks materialized from the issue\'s embedded block.');
     say('');
   }
   if (driftWarning) {

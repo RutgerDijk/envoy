@@ -98,9 +98,10 @@ anthropics/claude-code#22345.
 Rigid skills hand off to each other through validated JSON artifacts,
 not through prose conventions. Two locations:
 
-- `.envoy-tasks/<issue>.json` — **committed**. Brainstorm → pickup.
-  Conforms to `lib/schemas/tasks.json`. Visible in PR diffs so the
-  contract is reviewable.
+- `.envoy-tasks/<issue>.json` — **gitignored**. Brainstorm → pickup.
+  Conforms to `lib/schemas/tasks.json`. The durable copy is the machine
+  block embedded in the GitHub issue; pickup materializes the local file
+  from it, so task handoff makes no commits.
 - `.envoy/` — **gitignored** runtime state:
   - `.envoy/active-skill.json` (which skill currently owns the session)
   - `.envoy/pickup/session.json` (replaces the retired `.envoy-session.json`)
