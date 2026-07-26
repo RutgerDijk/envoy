@@ -24,6 +24,7 @@ const {
   enforceSpecFields,
   renderTasksSection,
   renderEmbeddedBlock,
+  ensureTasksDirIgnored,
 } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
 
 function fail(msg) {
@@ -80,6 +81,7 @@ function main() {
   fs.mkdirSync(outDir, { recursive: true });
   const outPath = path.join(outDir, `${issueNumber}.json`);
   fs.writeFileSync(outPath, JSON.stringify(payload, null, 2) + '\n');
+  ensureTasksDirIgnored(process.cwd());
 
   // stdout carries the issue-ready markdown (human section + recoverable block)
   // so brainstorm splices it into the issue body from this single source;

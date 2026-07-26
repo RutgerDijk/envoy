@@ -8,7 +8,7 @@
  * writes .envoy/pickup/session.json (seeded from the tasks list) and
  * .envoy/active-skill.json, then prints a briefing.
  *
- * Emits `## STATUS: ok|degraded|fatal` as the first content line so the
+ * Emits `## STATUS: ok|fatal` as the first content line so the
  * eval harness (and Claude reading the inline `!` substitution) can parse
  * the outcome.
  */
@@ -20,7 +20,7 @@ const { execFileSync } = require('child_process');
 const CWD = process.cwd();
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
 const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
-const { extractEmbeddedBlock } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
+const { extractEmbeddedBlock, ensureTasksDirIgnored } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
 const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
 
@@ -78,11 +78,13 @@ function main() {
   let materialized = false;
 
   if (!fs.existsSync(tasksFile)) {
-    // Recover from the machine block embedded in the issue before giving up.
+    // The issue's embedded machine block is the durable task source —
+    // materialize the local file from it.
     const recovered = payloadFromIssue(issueNumber);
     if (recovered) {
       recovered.issueNumber = Number(issueNumber);
       writeJson(path.join('.envoy-tasks', `${issueNumber}.json`), recovered);
+      ensureTasksDirIgnored(CWD);
       materialized = true;
     } else {
       banner('fatal');
@@ -107,8 +109,9 @@ function main() {
 
   const tasks = JSON.parse(fs.readFileSync(tasksFile, 'utf8'));
 
-  // Non-fatal drift check: if the committed file and the issue's embedded block
-  // disagree on the task set, the issue was likely edited after filing.
+  // Non-fatal drift check: if the local file and the issue's embedded block
+  // disagree on the task set, the issue was likely edited after the file
+  // was materialized.
   let driftWarning = null;
   if (!materialized) {
     const issuePayload = payloadFromIssue(issueNumber);

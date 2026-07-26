@@ -59,7 +59,7 @@ function runPreflight(cwd, issueNumber, bodyFile) {
   return { status, out };
 }
 
-test('committed file present → ok, session seeded', () => {
+test('local file present → ok, session seeded', () => {
   const cwd = makeCwd();
   fs.mkdirSync(path.join(cwd, '.envoy-tasks'), { recursive: true });
   fs.writeFileSync(path.join(cwd, '.envoy-tasks', '77.json'), JSON.stringify(payload(77, TASKS)));
@@ -76,6 +76,10 @@ test('file missing + issue has block → materialized at ok, no reconstruction w
   assert.strictEqual(status, 'ok');
   assert.ok(!/reconstructed/i.test(out), 'materializing is the normal path, not a recovery');
   assert.ok(fs.existsSync(path.join(cwd, '.envoy-tasks', '78.json')), 'materialized file written');
+  const ignore = fs.existsSync(path.join(cwd, '.gitignore'))
+    ? fs.readFileSync(path.join(cwd, '.gitignore'), 'utf8')
+    : '';
+  assert.ok(/^\.envoy-tasks\/$/m.test(ignore), 'materializing ensures .envoy-tasks/ is gitignored in the consumer repo');
 });
 
 test('file missing + no recoverable block → fatal', () => {
@@ -88,11 +92,12 @@ test('file missing + no recoverable block → fatal', () => {
 
 test('.envoy-tasks/ is runtime state: gitignored and never tracked', () => {
   const repoRoot = path.join(__dirname, '..', '..');
-  const gitignore = fs.readFileSync(path.join(repoRoot, '.gitignore'), 'utf8');
-  assert.ok(/^\.envoy-tasks\/$/m.test(gitignore), '.gitignore must contain .envoy-tasks/');
-  const tracked = require('child_process')
-    .execSync('git ls-files .envoy-tasks/', { cwd: repoRoot, encoding: 'utf8' })
-    .trim();
+  const { execSync, spawnSync } = require('child_process');
+  // check-ignore asserts the EFFECTIVE rule (a later negation would defeat a
+  // plain .gitignore text match); exit 0 = ignored.
+  const probe = spawnSync('git', ['check-ignore', '-q', '.envoy-tasks/probe.json'], { cwd: repoRoot });
+  assert.strictEqual(probe.status, 0, '.envoy-tasks/ must be effectively ignored');
+  const tracked = execSync('git ls-files .envoy-tasks/', { cwd: repoRoot, encoding: 'utf8' }).trim();
   assert.strictEqual(tracked, '', `tracked files remain under .envoy-tasks/: ${tracked}`);
 });
 
