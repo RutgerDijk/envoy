@@ -86,7 +86,26 @@ test('file missing + no recoverable block → fatal', () => {
   assert.strictEqual(status, 'fatal');
 });
 
-test('committed file present but issue block disagrees → warns (still ok)', () => {
+test('.envoy-tasks/ is runtime state: gitignored and never tracked', () => {
+  const repoRoot = path.join(__dirname, '..', '..');
+  const gitignore = fs.readFileSync(path.join(repoRoot, '.gitignore'), 'utf8');
+  assert.ok(/^\.envoy-tasks\/$/m.test(gitignore), '.gitignore must contain .envoy-tasks/');
+  const tracked = require('child_process')
+    .execSync('git ls-files .envoy-tasks/', { cwd: repoRoot, encoding: 'utf8' })
+    .trim();
+  assert.strictEqual(tracked, '', `tracked files remain under .envoy-tasks/: ${tracked}`);
+});
+
+test('brainstorm no longer instructs a task-handoff commit', () => {
+  const repoRoot = path.join(__dirname, '..', '..');
+  for (const rel of ['skills/brainstorm/SKILL.md', 'adapters/copilot/templates/prompts/brainstorm.prompt.md']) {
+    const content = fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    assert.ok(!/git (add|commit).*envoy-tasks/.test(content), `${rel} still stages .envoy-tasks`);
+    assert.ok(!/chore: task handoff/.test(content), `${rel} still instructs the handoff commit`);
+  }
+});
+
+test('local file present but issue block disagrees → warns (still ok)', () => {
   const cwd = makeCwd();
   fs.mkdirSync(path.join(cwd, '.envoy-tasks'), { recursive: true });
   fs.writeFileSync(path.join(cwd, '.envoy-tasks', '80.json'), JSON.stringify(payload(80, TASKS)));

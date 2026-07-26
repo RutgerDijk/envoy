@@ -63,10 +63,12 @@ is for.
 
 The task list has a **single authoring surface**: you draft the spec-driven
 payload once, `write-tasks.js` renders the human `## Tasks` section and a
-recoverable machine block from it, and the issue carries both. `pickup`
-materializes `.envoy-tasks/<n>.json` from the committed file (and can recover
-it from the issue's block if the file is ever missing). Never hand-write the
-task section — it is rendered.
+machine-readable block from it, and the issue carries both. The issue block
+is the durable contract; `pickup` materializes `.envoy-tasks/<n>.json` from
+it (the directory is gitignored runtime state — task handoff makes NO
+commits, so no CI or review bots fire for it). `write-tasks.js` also writes
+the local file as a same-session fast path. Never hand-write the task
+section — it is rendered.
 
 Each task is **spec-driven**: `intent` (why), `behavior` (testable
 given/when/then that seeds the RED tests), and `acceptance` are REQUIRED;
@@ -113,17 +115,15 @@ EOF
 )" --label "<labels>")
 ISSUE_NUMBER=$(basename "$ISSUE_URL")
 
-# 3. write-tasks.js commits .envoy-tasks/<n>.json AND prints the issue-ready
-#    markdown (human ## Tasks section + recoverable block) to stdout.
+# 3. write-tasks.js writes the local (gitignored) .envoy-tasks/<n>.json AND
+#    prints the issue-ready markdown (human ## Tasks section + machine block).
 TASKS_MD=$(node "$(dirname "$0")/write-tasks.js" "$ISSUE_NUMBER" /tmp/envoy-tasks-payload.json)
 
 # 4. Append the rendered tasks (single source) to the issue body.
+#    The issue block IS the handoff — nothing is committed.
 gh issue edit "$ISSUE_NUMBER" --body "$(gh issue view "$ISSUE_NUMBER" --json body -q .body)
 
 $TASKS_MD"
-
-git add ".envoy-tasks/$ISSUE_NUMBER.json"
-git commit -m "chore: task handoff for #$ISSUE_NUMBER"
 ```
 
 ### Phase 5: Final Handoff

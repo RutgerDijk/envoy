@@ -9,7 +9,8 @@
  *
  * Reads the JSON file at <tasksJsonPath> (the payload brainstorm drafted
  * for the issue body), validates it against lib/schemas/tasks.json, and
- * writes .envoy-tasks/<issueNumber>.json in the current repo.
+ * writes the local (gitignored) .envoy-tasks/<issueNumber>.json. The issue's
+ * embedded block is the durable copy; pickup rematerializes the file from it.
  *
  * Exits 0 on success, 1 on validation failure or I/O error.
  */
