@@ -4,10 +4,10 @@
  *
  * Run: node tests/skills/pickup-materialize.test.js
  *
- * When the committed .envoy-tasks/<n>.json is missing, preflight recovers the
- * payload from the issue's embedded block (degraded tier — reconstructed state
- * needs confirmation). When present but the issue block disagrees, it warns
- * (non-fatal). gh is stubbed via ENVOY_ISSUE_BODY_FILE.
+ * When the local .envoy-tasks/<n>.json is missing, preflight materializes the
+ * payload from the issue's embedded block — the normal path. When present but
+ * the issue block disagrees, it warns (non-fatal). gh is stubbed via
+ * ENVOY_ISSUE_BODY_FILE.
  */
 
 const assert = require('assert');

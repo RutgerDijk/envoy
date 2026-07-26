@@ -115,7 +115,7 @@ function main() {
     if (issuePayload) {
       const key = (p) => JSON.stringify((p.tasks || []).map((t) => [t.id, t.title]));
       if (key(issuePayload) !== key(tasks)) {
-        driftWarning = 'committed .envoy-tasks differs from the issue\'s embedded task block (issue edited after filing?)';
+        driftWarning = 'local .envoy-tasks file differs from the issue\'s embedded task block (issue edited after it was materialized?)';
       }
     }
   }
