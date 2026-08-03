@@ -225,7 +225,7 @@ Please review the remaining items and decide how to proceed.
 **After escalating: STOP.** Do not proceed to the next workflow step (finalize, etc.). Surface the escalation to the user and wait for explicit direction. Options to present:
 - A) Investigate the root cause and continue with a fresh approach
 - B) Accept the remaining issues with documented rationale
-- C) Create a follow-up issue for the unresolved items and proceed
+- C) Create a follow-up issue for the unresolved items — requires explicit user confirmation before creating; do NOT create it and proceed in the same step
 
 ## Verification Commands
 
