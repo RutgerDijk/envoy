@@ -11,6 +11,11 @@ Helper module: `lib/remediation-cycle.js` provides `buildCommitMessage(findings)
 (enumerates every finding with its thread URL, used in Step 5 below) and
 `shouldEscalate(cycleCount, remaining)` (the cycle-cap check used in Step 6).
 
+Helper module: `lib/coderabbit-retrigger.js` provides `shouldReTrigger(rateLimit, now, opts)`
+and `formatHandoffMessage(resetsAt)` — the SAME shared helper `envoy:babysit` uses for
+its own rate-limit re-trigger decision (Task 8). This is the ONE place the
+wait/retrigger/handoff decision lives; do not re-derive it in prose here or in babysit.
+
 ### Step 3: Collect — Poll CodeRabbit AND Diagnose CI (Combined Fix List)
 
 Announce: `Running Step 3: Collect CodeRabbit findings and diagnose CI failures...`
@@ -27,10 +32,13 @@ PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
 # threads (REST comment counts miss inline threads, #25) plus rate-limit state.
 PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
 
-# Exponential backoff in seconds — 22min (1320s) max
+# Exponential backoff in seconds — 22min (1320s) max, extendable per
+# lib/coderabbit-retrigger.js when a rate-limit reset is close (see below).
 # intervals = [120s, 120s, 240s, 360s, 480s]
 # cumulative =  2     4     8    14    22 min
 ELAPSED=0
+DEADLINE=1320
+RETRIGGER_COUNT=$(jq -r '.retriggerCount // 0' .envoy/finalize/state.json 2>/dev/null || echo 0)
 for WAIT in 120 120 240 360 480; do
   sleep $WAIT
   ELAPSED=$((ELAPSED + WAIT))
@@ -42,7 +50,7 @@ for WAIT in 120 120 240 360 480; do
   # Check before jq so jq never runs on empty input.
   if [ -z "$SNAP" ]; then
     echo "CodeRabbit status unavailable. $((ELAPSED / 60))min elapsed; retrying..."
-    if [ "$ELAPSED" -ge 1320 ]; then break; fi
+    if [ "$ELAPSED" -ge "$DEADLINE" ]; then break; fi
     continue
   fi
 
@@ -51,11 +59,56 @@ for WAIT in 120 120 240 360 480; do
   RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty')
   RESETS_AT=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.resetsAt // empty')
 
-  # A rate-limited review is NOT a clean review — keep waiting past the reset.
+  # A rate-limited review is NOT a clean review. Consult the SHARED helper
+  # (lib/coderabbit-retrigger.js — the SAME one envoy:babysit uses) for the
+  # wait / retrigger / handoff decision. Max 2 re-triggers per finalize run.
   if [ "$RATE_LIMITED" = "true" ]; then
-    echo "CodeRabbit is rate-limited (resets $RESETS_AT). $((ELAPSED / 60))min elapsed; waiting..."
-    if [ "$ELAPSED" -ge 1320 ]; then break; fi
-    continue
+    DECISION=$(node -e '
+      const { shouldReTrigger, formatHandoffMessage } = require("${CLAUDE_SKILL_DIR}/../../lib/coderabbit-retrigger.js");
+      const result = shouldReTrigger(
+        { rateLimited: true, resetsAt: process.env.RESETS_AT || null },
+        new Date(),
+        { currentDeadlineSeconds: Number(process.env.DEADLINE), retriggerCount: Number(process.env.RETRIGGER_COUNT), maxRetriggers: 2 }
+      );
+      if (result.action === "handoff") result.message = formatHandoffMessage(result.resetsAt);
+      console.log(JSON.stringify(result));
+    ' RESETS_AT="$RESETS_AT" DEADLINE="$DEADLINE" RETRIGGER_COUNT="$RETRIGGER_COUNT")
+
+    ACTION=$(echo "$DECISION" | jq -r '.action')
+
+    case "$ACTION" in
+      handoff)
+        # resetsAt is more than 10min away — do NOT block waiting. Exit
+        # finalize with the explicit babysit handoff message.
+        echo "$(echo "$DECISION" | jq -r '.message')"
+        exit 0
+        ;;
+      wait)
+        # resetsAt is <=10min away — extend the deadline (resetsAt+2min,
+        # 60min hard ceiling) and keep polling.
+        DEADLINE=$(echo "$DECISION" | jq -r '.extendedDeadlineSeconds')
+        echo "CodeRabbit is rate-limited (resets $RESETS_AT). $((ELAPSED / 60))min elapsed; waiting (deadline now ${DEADLINE}s)..."
+        if [ "$ELAPSED" -ge "$DEADLINE" ]; then break; fi
+        continue
+        ;;
+      retrigger)
+        # resetsAt has passed — re-trigger and reset the poll clock.
+        gh pr comment "$PR_NUMBER" --body "@coderabbitai review"
+        RETRIGGER_COUNT=$((RETRIGGER_COUNT + 1))
+        jq --argjson n "$RETRIGGER_COUNT" '.retriggerCount = $n' .envoy/finalize/state.json > .envoy/finalize/state.json.tmp \
+          && mv .envoy/finalize/state.json.tmp .envoy/finalize/state.json
+        ELAPSED=0
+        DEADLINE=1320
+        echo "Re-triggered CodeRabbit (retrigger $RETRIGGER_COUNT/2). Poll clock reset."
+        continue
+        ;;
+      capped)
+        # Already used the max 2 re-triggers this run — stop asking it to
+        # review again; surface and move on with whatever we have.
+        echo "CodeRabbit re-trigger cap (2/2) reached this run. Not re-triggering again."
+        break
+        ;;
+    esac
   fi
 
   # Unresolved CodeRabbit threads present — go address them.
@@ -73,9 +126,13 @@ for WAIT in 120 120 240 360 480; do
   esac
 
   echo "CodeRabbit review still pending. $((ELAPSED / 60))min elapsed."
-  if [ "$ELAPSED" -ge 1320 ]; then break; fi
+  if [ "$ELAPSED" -ge "$DEADLINE" ]; then break; fi
 done
 ```
+
+**Rate-limit re-trigger cap:** at most 2 re-triggers per finalize run, tracked via
+`retriggerCount` in `.envoy/finalize/state.json`. Once capped, finalize stops
+re-triggering and proceeds with whatever CodeRabbit state it has.
 
 **If 22 minutes pass with no comments:**
 ```
