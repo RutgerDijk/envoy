@@ -118,6 +118,7 @@ const CLAUDE_CODE_ONLY_SKILLS = [
   'coderabbit-pr-review',
   'costs',
   'dispatching-parallel-agents',
+  'doctor',
   'eval-harness',
   'pressure-test-scenarios',
   'prs',
