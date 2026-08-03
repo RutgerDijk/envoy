@@ -25,8 +25,10 @@ context: fork
 
 - [ ] Step 1: Preconditions check
 - [ ] Step 2: Push and create PR
-- [ ] Steps 3–7: CodeRabbit poll/address/reply/re-poll (`steps/coderabbit.md`)
-- [ ] Step 8: Poll CI; invoke fix-ci on failure (`steps/ci.md`)
+- [ ] Steps 3–8: One combined remediation cycle — collect CodeRabbit findings
+      + diagnose CI failures, fix everything, ONE commit, ONE push, reply/resolve,
+      re-poll both; capped at 3 cycles (`steps/coderabbit.md` orchestrates,
+      `steps/ci.md` is the CI-diagnosis helper folded into it)
 - [ ] Steps 9, 11: Final verification and ship report (`steps/verify.md`)
 - [ ] Step 10: Wiki sync if `docs/wiki/` changed (`steps/wiki.md`)
 
@@ -103,8 +105,7 @@ FILE_COUNT="$FILE_COUNT" node -e '
 |-------|------|---------|
 | 1 | This file (below) | Preconditions check |
 | 2 | This file (below) | Push and create PR |
-| 3–7 | `steps/coderabbit.md` | Poll, address, reply/resolve, re-poll CodeRabbit |
-| 8 | `steps/ci.md` | Poll CI and invoke fix-ci on failure |
+| 3–8 | `steps/coderabbit.md` (+ `steps/ci.md` as CI-diagnosis helper) | Unified remediation cycle: collect (poll CodeRabbit + diagnose CI) → fix all → ONE commit → ONE push → reply/resolve → re-poll both. Max 3 cycles; escalates to the user at the cap instead of looping or auto-finishing. |
 | 9, 11 | `steps/verify.md` | Final verification + shipment report + error handling |
 | 10 | `steps/wiki.md` | Wiki sync when `docs/wiki/` changed |
 
@@ -184,10 +185,12 @@ PR_NUMBER="$PR_NUMBER" PR_URL="$PR_URL" node -e "
 ## Integration with Envoy
 
 - Assumes `envoy:review` (layered review) has already been run
-- Invokes `envoy:fix-ci` for CI failure auto-remediation
+- Diagnoses CI failures inline (`steps/ci.md`) as part of its own remediation
+  cycle — it no longer delegates to `envoy:fix-ci`'s independent commit/push
+  loop; `envoy:fix-ci` remains available standalone for ad-hoc CI fixes outside finalize
 - Invokes `envoy:wiki-sync` when docs/wiki/ changes are detected
 - Uses `envoy:verification` principles (evidence before assertions)
-- Uses `lib/loop-safeguards.js` completion signal protocol
+- Uses `lib/loop-safeguards.js` completion signal protocol (loop name: `remediation-cycle`)
 - Follow with `/envoy:cleanup` after PR is merged
 
 **Platform constraint:** Claude Code subagents cannot spawn subagents (the `Agent` tool is silently stripped from subagent tool allowlists). This skill therefore orchestrates directly rather than delegating to an execution agent.

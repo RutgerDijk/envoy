@@ -5,6 +5,6 @@
     { "path": ".envoy/active-skill.json", "committed": false },
     { "path": ".envoy/finalize/state.json", "committed": false }
   ],
-  "loopSignals": ["coderabbit", "fix-ci"],
+  "loopSignals": ["remediation-cycle"],
   "handoffOut": ".envoy/finalize/state.json"
 }
