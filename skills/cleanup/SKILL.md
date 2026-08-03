@@ -63,6 +63,11 @@ MAIN_REPO=$(git worktree list | grep -v ".worktrees" | awk '{print $1}')
 
 ```bash
 cd "$MAIN_REPO"
+
+# Reset the terminal tab title so it doesn't keep showing a stale
+# `#N slug` for a worktree that's about to be removed. Guarded on
+# [ -t 1 ] so this never pollutes piped output or hook logs.
+[ -t 1 ] && printf '\033]0;\007'
 ```
 
 ### Step 3: Update Main Branch

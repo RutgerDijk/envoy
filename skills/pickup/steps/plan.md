@@ -113,6 +113,7 @@ Worktree for this issue already exists at: .worktrees/<N>-<topic>
 
 To continue working:
   cd .worktrees/<N>-<topic>
+  [ -t 1 ] && printf '\033]0;#%s %s\007' "<N>" "<topic>"
 
 To start fresh:
   git worktree remove .worktrees/<N>-<topic>
