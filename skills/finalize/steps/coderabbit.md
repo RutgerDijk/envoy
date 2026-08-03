@@ -212,6 +212,28 @@ Announce: `Running Step 6: Push (one push for this cycle)...`
 ```bash
 PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json 2>/dev/null || true)
 echo "PR: $PR_URL"
+```
+
+**Re-check main-drift before this push.** Drift can land mid-loop — someone
+may have merged a conflicting PR into `origin/main` while this run was
+looping through CodeRabbit/CI cycles. The Preconditions check (Step 1) only
+caught drift present at finalize's start; re-run the SAME check here, every
+cycle, right before pushing:
+
+```bash
+node -e '
+  const { computeDrift } = require("${CLAUDE_SKILL_DIR}/../../lib/main-drift.js");
+  const result = computeDrift(process.cwd());
+  console.log(result.message);
+  if (result.hasDrift) console.log("__ENVOY_MAIN_DRIFT__");
+'
+```
+
+**If `__ENVOY_MAIN_DRIFT__` printed, stop before pushing and present the
+rebase/merge/proceed options (A/B/C) to the user.** Drift with no overlapping
+files is informational only — the note prints but does not stop the push.
+
+```bash
 git push
 ```
 

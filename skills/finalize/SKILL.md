@@ -95,6 +95,23 @@ FILE_COUNT="$FILE_COUNT" node -e '
 
 **If the advisory printed (`__ENVOY_PR_SPLIT_ADVISORY__` marker present), stop and present the proposal to the user. Wait for explicit approval before proceeding to Step 2 — "proceed as one PR" or "split" (split guidance only; do NOT create branches or rebase automatically, that is out of scope). Do not treat this as a hard failure — it's an ask-only pause, not an error.**
 
+```bash
+# 5. Main-drift check: catch breaking merges into origin/main before burning
+# a full CI run. Uses git merge-base + rev-list --count + file-overlap
+# intersection (lib/main-drift.js computeDrift) — drift with NO overlapping
+# files is informational only; only overlapping-file drift stops and asks.
+node -e '
+  const { computeDrift } = require("./lib/main-drift.js");
+  const result = computeDrift(process.cwd());
+  console.log(result.message);
+  if (result.hasDrift) console.log("__ENVOY_MAIN_DRIFT__");
+'
+```
+
+**If `__ENVOY_MAIN_DRIFT__` printed, stop and present the rebase/merge/proceed options to the user (A/B/C, from the message above). Wait for explicit approval before proceeding to Step 2. Drift with no overlapping files is informational only — the note prints but does not stop this step.**
+
+**This same check re-runs immediately before Step 6's push (`steps/coderabbit.md`) on every remediation cycle — drift landing mid-loop (e.g. a conflicting PR merges to main while this run is still looping through CodeRabbit cycles) must be caught before EVERY push, not just once here at the start.**
+
 **If any other precondition fails, stop and resolve.**
 
 ---
