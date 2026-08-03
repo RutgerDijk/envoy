@@ -185,9 +185,9 @@ section('computeDrift: fetches origin before computing (avoids stale ref)');
 test('picks up commits pushed to origin AFTER the local clone, without a manual fetch', () => {
   const { dir, git } = makeScratchRepo();
   git(['checkout', '-q', '-b', 'feature']);
-  fs.writeFileSync(path.join(dir, 'feature.txt'), 'feature\n');
+  fs.writeFileSync(path.join(dir, 'base.txt'), 'feature change\n');
   git(['add', '.']);
-  git(['commit', '-q', '-m', 'feature work']);
+  git(['commit', '-q', '-m', 'feature touches base.txt']);
 
   // Get origin url, clone it separately, push a NEW commit touching base.txt
   // straight to the bare remote. The scratch repo's local origin/main
