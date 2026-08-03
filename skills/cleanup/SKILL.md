@@ -88,6 +88,13 @@ fi
 # (repos that commit .envoy/ contents, e.g. .envoy/search-decisions/*.json)
 # survive automatically.
 git -C "$WORKTREE_PATH" clean -fdx -- .envoy .envoy-session.json .envoy-scratchpad.json
+
+# Verify no residue remains. .envoy/ is gitignored, so any leftover untracked
+# file shows as "!!" (ignored-untracked) under --ignored, not "??" — match both
+# markers so this check isn't a silent no-op. Must run here, before Step 6
+# removes the worktree (after removal, `git -C "$WORKTREE_PATH" status` fails
+# since the directory no longer exists).
+git -C "$WORKTREE_PATH" status --porcelain --ignored -- .envoy .envoy-session.json .envoy-scratchpad.json | grep -qE '^(\?\?|!!)' && echo "✗ untracked .envoy residue found" || echo "✓ no untracked .envoy residue"
 ```
 
 ### Step 5: Wiki Sync
@@ -173,9 +180,9 @@ git worktree list
 git branch -a | grep "$BRANCH"
 # Should return nothing
 
-# Session state cleared (git clean only removes untracked files, so .envoy/
-# may still exist if it holds tracked files — check for untracked residue instead)
-git -C "$WORKTREE_PATH" status --porcelain --ignored -- .envoy .envoy-session.json .envoy-scratchpad.json | grep -q '^??' && echo "✗ untracked .envoy residue found" || echo "✓ no untracked .envoy residue"
+# Session state: the untracked-residue check already ran in Step 4, before
+# the worktree was removed (the directory no longer exists at this point, so
+# re-running git status against $WORKTREE_PATH here would just fail).
 
 # Issue closed
 gh issue view "$ISSUE_NUMBER" --json state --jq '.state'
