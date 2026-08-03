@@ -21,7 +21,7 @@ wait/retrigger/handoff decision lives; do not re-derive it in prose here or in b
 Announce: `Running Step 3: Collect CodeRabbit findings and diagnose CI failures...`
 
 ```bash
-PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json 2>/dev/null || true)
 echo "PR: $PR_URL"
 ```
 
@@ -166,7 +166,7 @@ failure is related to a CodeRabbit finding. They share the same commit either wa
 Announce: `Running Step 4: Apply fixes for all CodeRabbit findings and CI failures...`
 
 ```bash
-PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json 2>/dev/null || true)
 echo "PR: $PR_URL"
 ```
 
@@ -184,7 +184,7 @@ Do NOT commit per item — all fixes for this cycle land in the single commit in
 Announce: `Running Step 5: Commit all fixes (one commit for this cycle)...`
 
 ```bash
-PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json 2>/dev/null || true)
 echo "PR: $PR_URL"
 ```
 
@@ -210,7 +210,7 @@ fixed in Steps 3-4 is enumerated in this one commit's body.
 Announce: `Running Step 6: Push (one push for this cycle)...`
 
 ```bash
-PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json 2>/dev/null || true)
 echo "PR: $PR_URL"
 git push
 ```
@@ -222,7 +222,7 @@ Exactly ONE push per cycle — this triggers exactly ONE CI run, not one per fin
 Announce: `Running Step 7: Reply and resolve CodeRabbit threads...`
 
 ```bash
-PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json 2>/dev/null || true)
 echo "PR: $PR_URL"
 ```
 
@@ -261,7 +261,7 @@ Every reply for this cycle cites the same `$COMMIT` SHA — the one commit from 
 Announce: `Running Step 8: Re-poll CodeRabbit and CI...`
 
 ```bash
-PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json 2>/dev/null || true)
 echo "PR: $PR_URL"
 ```
 

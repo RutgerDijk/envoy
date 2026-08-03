@@ -5,7 +5,7 @@
 Announce: `Running Step 10: Wiki sync...`
 
 ```bash
-PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json 2>/dev/null || true)
 echo "PR: $PR_URL"
 ```
 
