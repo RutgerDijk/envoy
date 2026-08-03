@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" config-protection",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" edit-guard-combined",
             "_profiles": ["minimal", "standard", "strict"]
           }
         ]
@@ -58,21 +58,11 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" post-edit-accumulator",
-            "_profiles": ["standard", "strict"]
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" post-pr-poll",
+            "command": "[ -f .envoy/finalize/state.json ] && node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" post-pr-poll || exit 0",
             "_profiles": ["standard", "strict"]
           }
         ]
