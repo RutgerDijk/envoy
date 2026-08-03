@@ -83,10 +83,11 @@ if [ -f "$WORKTREE_PATH/.envoy/finalize/state.json" ]; then
   FINALIZE_PR=$(jq -r '.prNumber // empty' "$WORKTREE_PATH/.envoy/finalize/state.json")
 fi
 
-# Clear ephemeral envoy state before removing worktree
-rm -rf "$WORKTREE_PATH/.envoy"
-rm -f  "$WORKTREE_PATH/.envoy-session.json"      # retired path
-rm -f  "$WORKTREE_PATH/.envoy-scratchpad.json"   # retired path
+# Clear ephemeral envoy state before removing worktree.
+# git clean only removes UNTRACKED files, so any tracked files under .envoy/
+# (repos that commit .envoy/ contents, e.g. .envoy/search-decisions/*.json)
+# survive automatically.
+git -C "$WORKTREE_PATH" clean -fdx -- .envoy .envoy-session.json .envoy-scratchpad.json
 ```
 
 ### Step 5: Wiki Sync
@@ -172,10 +173,9 @@ git worktree list
 git branch -a | grep "$BRANCH"
 # Should return nothing
 
-# Session state cleared
-[ ! -d "$WORKTREE_PATH/.envoy" ] && echo "✓ .envoy/ gone" || echo "✗ .envoy/ still exists"
-[ ! -f "$WORKTREE_PATH/.envoy-session.json" ] && echo "✓ retired session file gone" || echo "✗ retired session file still exists"
-[ ! -f "$WORKTREE_PATH/.envoy-scratchpad.json" ] && echo "✓ scratchpad.json gone" || echo "✗ scratchpad.json still exists"
+# Session state cleared (git clean only removes untracked files, so .envoy/
+# may still exist if it holds tracked files — check for untracked residue instead)
+git -C "$WORKTREE_PATH" status --porcelain --ignored -- .envoy .envoy-session.json .envoy-scratchpad.json | grep -q '^??' && echo "✗ untracked .envoy residue found" || echo "✓ no untracked .envoy residue"
 
 # Issue closed
 gh issue view "$ISSUE_NUMBER" --json state --jq '.state'

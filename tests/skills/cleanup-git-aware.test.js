@@ -45,7 +45,7 @@ section('cleanup Step 4: git-aware .envoy removal');
 
 test('Step 4 uses git clean -fdx for .envoy removal (does not force-delete tracked files)', () => {
   assert.ok(
-    md.includes('git clean -fdx -- .envoy .envoy-session.json .envoy-scratchpad.json'),
+    md.includes('git -C "$WORKTREE_PATH" clean -fdx -- .envoy .envoy-session.json .envoy-scratchpad.json'),
     'expected exact git clean command replacing the unconditional rm -rf'
   );
 });
