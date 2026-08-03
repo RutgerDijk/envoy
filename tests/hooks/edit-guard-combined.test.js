@@ -1,21 +1,48 @@
 #!/usr/bin/env node
 /**
- * edit-guard-combined — merges config-protection (block linter/formatter
- * config edits) and post-edit-accumulator (record edited files for batched
- * lint) into ONE PreToolUse[Edit|Write] hook, so a single `node` process
- * spawns per edit instead of two.
+ * edit-guard-combined — PreToolUse[Edit|Write] hook that runs
+ * config-protection (block linter/formatter config edits) ONLY.
  *
- * Behavior must be identical to the two standalone hooks:
+ * Task 15 originally also folded post-edit-accumulator's file-path
+ * recording into this same Pre-hook spawn. That was found to be
+ * incorrect: PreToolUse fires before the edit is attempted, so a failed
+ * Edit (e.g. old_string not found) on a pre-existing file still queued
+ * that file for `eslint --fix` / `dotnet format` at Stop time, even
+ * though the edit never landed — a real (if latent) side effect on
+ * files the session never actually touched.
+ *
+ * Investigation: Claude Code fires PostToolUse only on tool SUCCESS —
+ * failed tool calls raise a distinct `PostToolUseFailure` event instead
+ * (see hooks distributed with the Claude Code CLI). So the original,
+ * pre-Task-15 post-edit-accumulator.js — registered on PostToolUse and
+ * never itself checking a success/error field — was already correctly
+ * gated on success, implicitly, via the event it was wired to. Moving
+ * its recording onto PreToolUse (this module) is what broke that
+ * guarantee. This is a regression Task 15 introduced, not a pre-existing
+ * bug in post-edit-accumulator.js.
+ *
+ * Fix: keep config-protection on PreToolUse (must block BEFORE the edit
+ * happens) but restore post-edit-accumulator as its own standalone
+ * PostToolUse[Edit|Write] hook (unchanged file, unchanged logic) so it
+ * only records paths for edits Claude Code confirms succeeded. This
+ * costs back one `node` spawn per edit (2 total: Pre + Post) — accepted
+ * as a narrow, documented exception to Task 15's "one spawn per
+ * Edit/Write" criterion, because Pre and Post are different lifecycle
+ * events and merging across them was never actually safe: correctness
+ * (don't lint-fix files an edit never touched) outweighs the latency
+ * win here. The single-spawn win from Task 15 elsewhere (e.g.
+ * post-pr-poll gating) is unaffected.
+ *
+ * Behavior:
  *  - BLOCKED_PATTERNS (.eslintrc, etc.) -> exit 2, same block reason shape.
  *  - WARN_PATTERNS (tsconfig.json) -> exit 0, warns to stderr.
- *  - Code-extension files -> accumulated to the per-session accumulator
- *    file, but ONLY when profile is standard/strict (post-edit-accumulator
- *    is not registered under minimal).
+ *  - This module no longer touches the accumulator file at all — that is
+ *    exclusively post-edit-accumulator.js's job now, run from PostToolUse.
  *  - Non-Edit/Write tool calls -> no-op, exit 0.
  *
- * Registration: hooks.json must wire ONE PreToolUse[Edit|Write] entry to
- * edit-guard-combined via hook-runner, and must NOT have a separate
- * PostToolUse[Edit|Write] entry for post-edit-accumulator anymore.
+ * Registration: hooks.json wires PreToolUse[Edit|Write] -> edit-guard-combined
+ * (config-protection only) AND PostToolUse[Edit|Write] -> post-edit-accumulator
+ * (standard/strict profiles, matching its original scoping).
  *
  * Run: node tests/hooks/edit-guard-combined.test.js
  */
@@ -70,7 +97,7 @@ function accumulatorPath(cwd, sessionId = 'test-session') {
   return path.join(os.tmpdir(), `envoy-edited-${sessionId}.txt`);
 }
 
-section('registration: single PreToolUse[Edit|Write] -> edit-guard-combined, no leftover PostToolUse[Edit|Write]');
+section('registration: PreToolUse[Edit|Write] -> edit-guard-combined (config-protection only) + PostToolUse[Edit|Write] -> post-edit-accumulator (success-gated)');
 
 test('hooks.json registers exactly one PreToolUse matcher "Edit|Write" wired to edit-guard-combined via hook-runner, all profiles', () => {
   const hooksConfig = JSON.parse(fs.readFileSync(HOOKS_JSON, 'utf8'));
@@ -83,17 +110,24 @@ test('hooks.json registers exactly one PreToolUse matcher "Edit|Write" wired to 
   assert.deepStrictEqual(
     [...hookDef._profiles].sort(),
     ['minimal', 'standard', 'strict'],
-    'edit-guard-combined must be registered in ALL profiles (it internally gates the accumulator half)'
+    'edit-guard-combined (config-protection) must run in ALL profiles'
   );
 });
 
-test('hooks.json no longer has a standalone PostToolUse[Edit|Write] -> post-edit-accumulator entry', () => {
+test('hooks.json restores a standalone PostToolUse[Edit|Write] -> post-edit-accumulator entry, standard/strict only', () => {
   const hooksConfig = JSON.parse(fs.readFileSync(HOOKS_JSON, 'utf8'));
   const post = hooksConfig.hooks.PostToolUse || [];
-  const stale = post.find(
+  const entries = post.filter(
     (e) => e.matcher === 'Edit|Write' && e.hooks.some((h) => /post-edit-accumulator/.test(h.command))
   );
-  assert.strictEqual(stale, undefined, 'stale PostToolUse[Edit|Write] -> post-edit-accumulator entry still present');
+  assert.strictEqual(entries.length, 1, `expected exactly one PostToolUse[Edit|Write] -> post-edit-accumulator entry, found ${entries.length}`);
+  const hookDef = entries[0].hooks.find((h) => /post-edit-accumulator/.test(h.command));
+  assert.ok(/hook-runner\.js" post-edit-accumulator/.test(hookDef.command), `not wired via hook-runner: ${hookDef.command}`);
+  assert.deepStrictEqual(
+    [...hookDef._profiles].sort(),
+    ['standard', 'strict'],
+    'post-edit-accumulator must keep its original standard/strict-only scoping'
+  );
 });
 
 section('behavior: BLOCKED_PATTERNS still block, exit 2, same reason shape as config-protection');
@@ -122,9 +156,9 @@ test('tsconfig.json edit warns but does not block', () => {
   }
 });
 
-section('behavior: accumulator half runs for code files, gated by profile like the original post-edit-accumulator');
+section('behavior: edit-guard-combined (PreToolUse) never writes the accumulator — that is post-edit-accumulator\'s job on PostToolUse now');
 
-test('standard profile: code file edit is recorded to the accumulator', () => {
+test('standard profile: code file edit through edit-guard-combined (Pre) does NOT write the accumulator', () => {
   const tmp = mkTmp();
   const sessionId = `combined-standard-${process.pid}`;
   const accPath = accumulatorPath(tmp, sessionId);
@@ -132,23 +166,29 @@ test('standard profile: code file edit is recorded to the accumulator', () => {
     if (fs.existsSync(accPath)) fs.rmSync(accPath);
     const r = runGate(tmp, editEvent('/repo/src/foo.js'), { CLAUDE_SESSION_ID: sessionId, ENVOY_HOOK_PROFILE: 'standard' });
     assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
-    assert.ok(fs.existsSync(accPath), 'expected accumulator file to be written under standard profile');
-    assert.ok(fs.readFileSync(accPath, 'utf8').includes('/repo/src/foo.js'));
+    assert.ok(!fs.existsSync(accPath), 'edit-guard-combined (PreToolUse) must not record to the accumulator — recording only happens post-success via post-edit-accumulator on PostToolUse');
   } finally {
     if (fs.existsSync(accPath)) fs.rmSync(accPath);
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
-test('minimal profile: code file edit is NOT recorded to the accumulator (matches original profile scoping)', () => {
+test('post-edit-accumulator (PostToolUse, standalone, unchanged) still records code file edits under standard profile', () => {
   const tmp = mkTmp();
-  const sessionId = `combined-minimal-${process.pid}`;
+  const sessionId = `postacc-standard-${process.pid}`;
   const accPath = accumulatorPath(tmp, sessionId);
+  const POST_EDIT_ACCUMULATOR = path.join(REPO_ROOT, 'hooks', 'post-edit-accumulator.js');
   try {
     if (fs.existsSync(accPath)) fs.rmSync(accPath);
-    const r = runGate(tmp, editEvent('/repo/src/foo.js'), { CLAUDE_SESSION_ID: sessionId, ENVOY_HOOK_PROFILE: 'minimal' });
+    const r = spawnSync('node', [POST_EDIT_ACCUMULATOR], {
+      cwd: tmp,
+      encoding: 'utf8',
+      input: JSON.stringify(editEvent('/repo/src/foo.js')),
+      env: { ...process.env, CLAUDE_SESSION_ID: sessionId },
+    });
     assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
-    assert.ok(!fs.existsSync(accPath), 'accumulator file should NOT be written under minimal profile');
+    assert.ok(fs.existsSync(accPath), 'expected accumulator file to be written by post-edit-accumulator on PostToolUse');
+    assert.ok(fs.readFileSync(accPath, 'utf8').includes('/repo/src/foo.js'));
   } finally {
     if (fs.existsSync(accPath)) fs.rmSync(accPath);
     fs.rmSync(tmp, { recursive: true, force: true });
