@@ -73,6 +73,40 @@ test('Step 10 checks for untracked .envoy residue via git status --porcelain --i
   );
 });
 
+section('cleanup residue check: correct git-status marker + ordering (Step 4 vs Step 10)');
+
+test('residue grep matches both untracked (??) and ignored-untracked (!!) markers', () => {
+  assert.ok(
+    md.includes("grep -qE '^(\\?\\?|!!)'"),
+    '.envoy/ is gitignored, so untracked residue shows as "!!" not "??" under --ignored; ' +
+    'grep must match both markers or the check is a silent no-op'
+  );
+  assert.ok(
+    !md.includes("grep -q '^??'"),
+    'the old ??-only grep can never match ignored-untracked residue and must be removed'
+  );
+});
+
+test('the residue check runs before Step 6 removes the worktree, not after', () => {
+  const step4Index = md.indexOf('### Step 4: Clear Session State');
+  const step6Index = md.indexOf('### Step 6: Remove Worktree');
+  const step10Index = md.indexOf('### Step 10: Verify Cleanup');
+  assert.ok(step4Index !== -1 && step6Index !== -1 && step10Index !== -1, 'expected Steps 4, 6, 10 to exist');
+
+  const step4Body = md.slice(step4Index, step6Index);
+  assert.ok(
+    /grep -qE '\^\(\\\?\\\?\|!!\)'/.test(step4Body),
+    'the git-status residue check must run inside Step 4, before Step 6 removes the worktree ' +
+    '(once removed, `git -C "$WORKTREE_PATH" status` fails since the directory no longer exists)'
+  );
+
+  const step10Body = md.slice(step10Index);
+  assert.ok(
+    !/status --porcelain --ignored/.test(step10Body),
+    'Step 10 must not re-run the git status residue check against a worktree that Step 6 already removed'
+  );
+});
+
 section('Summary');
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);
