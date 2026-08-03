@@ -68,26 +68,36 @@ The snapshot shape (see `lib/pr-status.js`):
 
 If `coderabbit.rateLimit.rateLimited` is true, consult the SAME shared helper
 `envoy:finalize` uses — `lib/coderabbit-retrigger.js`'s `shouldReTrigger` — rather
-than re-deriving the wait/retrigger/handoff decision here:
+than re-deriving the wait/retrigger/handoff decision here.
+
+The 2-retrigger cap must hold ACROSS `/loop` iterations, not just within a single
+pass — each babysit invocation is a fresh process, so the count is persisted to
+`.envoy/babysit/retrigger-counts.json` (gitignored, keyed by PR number) via
+`loadRetriggerCount`/`saveRetriggerCount` in the same module:
 
 ```bash
 node -e '
-  const { shouldReTrigger, formatHandoffMessage } = require("lib/coderabbit-retrigger.js");
+  const { shouldReTrigger, formatHandoffMessage, loadRetriggerCount, saveRetriggerCount } = require("lib/coderabbit-retrigger.js");
   const snap = JSON.parse(process.env.SNAP);
+  const pr = process.env.PR;
+  const priorCount = loadRetriggerCount(process.cwd(), pr);
   const result = shouldReTrigger(
     snap.coderabbit.rateLimit,
     new Date(),
-    { retriggerCount: Number(process.env.RETRIGGER_COUNT || 0), maxRetriggers: 2 }
+    { retriggerCount: priorCount, maxRetriggers: 2 }
   );
   if (result.action === "handoff") result.message = formatHandoffMessage(result.resetsAt);
+  if (result.action === "retrigger") result.nextCount = priorCount + 1;
   console.log(JSON.stringify(result));
-' SNAP="$SNAP"
+' SNAP="$SNAP" PR="$PR"
 ```
 
-- `action: "retrigger"` — `gh pr comment "$PR" --body "@coderabbitai review"`.
-- `action: "capped"` — already used the 2-re-trigger cap for THIS babysit invocation
-  (babysit runs once per invocation via `/loop`, so the cap is per single pass, not
-  across loop iterations); skip re-triggering, move to the next rule.
+- `action: "retrigger"` — `gh pr comment "$PR" --body "@coderabbitai review"`, then
+  immediately persist the increment:
+  `node -e 'require("lib/coderabbit-retrigger.js").saveRetriggerCount(process.cwd(), process.env.PR, Number(process.env.NEXT_COUNT))' PR="$PR" NEXT_COUNT="$NEXT_COUNT"`
+- `action: "capped"` — already used the 2-re-trigger cap for THIS PR, persisted
+  across every babysit pass since the count survives `/loop` iterations on disk;
+  skip re-triggering, move to the next rule.
 - `action: "wait"` or `"handoff"` — babysit does not poll or block (see "One-pass
   model" above); just report the status (and the "run /envoy:babysit after HH:MM"
   handoff message on `"handoff"`) and move to the next PR.
@@ -116,5 +126,8 @@ at HH:MM" — and remind the caller they can automate it with `/loop 15m
 - Reads `lib/pr-status.js` — the single PR-status source (shared with `envoy:prs`)
 - Uses `lib/coderabbit-retrigger.js`'s `shouldReTrigger` — the SAME rate-limit
   re-trigger decision `envoy:finalize` uses (Task 8), not a separate implementation
+- Persists the per-PR retrigger count to `.envoy/babysit/retrigger-counts.json`
+  via `lib/coderabbit-retrigger.js`'s `loadRetriggerCount`/`saveRetriggerCount`, so
+  the 2-retrigger cap holds across `/loop` iterations, not just within one pass
 - Invokes `envoy:fix-ci` for red CI
 - Invokes `envoy:coderabbit-pr-review` for unresolved review threads
