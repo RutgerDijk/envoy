@@ -78,9 +78,22 @@ if command -v npm >/dev/null 2>&1 && [[ -f package.json ]]; then
 else
   echo "Skipping npm tests: npm or package.json not present"
 fi
+
+# 4. PR-split advisory: warn (ask-only) when the diff touches >150 files
+FILE_COUNT=$(git diff --name-only origin/main...HEAD | wc -l | tr -d ' ')
+FILE_COUNT="$FILE_COUNT" node -e '
+  const { proposeSplit } = require("./lib/pr-size-check.js");
+  const advisory = proposeSplit(Number(process.env.FILE_COUNT));
+  if (advisory) {
+    console.log(advisory.message);
+    console.log("__ENVOY_PR_SPLIT_ADVISORY__");
+  }
+'
 ```
 
-**If any precondition fails, stop and resolve.**
+**If the advisory printed (`__ENVOY_PR_SPLIT_ADVISORY__` marker present), stop and present the proposal to the user. Wait for explicit approval before proceeding to Step 2 — "proceed as one PR" or "split" (split guidance only; do NOT create branches or rebase automatically, that is out of scope). Do not treat this as a hard failure — it's an ask-only pause, not an error.**
+
+**If any other precondition fails, stop and resolve.**
 
 ---
 
@@ -99,7 +112,9 @@ fi
 
 Announce: `Running Step 1: Preconditions check...`
 
-Run the preconditions above. All must pass before proceeding.
+Run the preconditions above. All must pass before proceeding. The PR-split
+advisory (precondition 4) is a pause for approval, not a pass/fail gate —
+see below.
 
 ### Step 2: Push and Create PR
 
@@ -109,8 +124,21 @@ Announce: `Running Step 2: Push and create PR...`
 git push -u origin HEAD
 ```
 
+If the precondition-4 advisory fired and the user chose to split, this PR is
+one entry in a stacked series — set `IS_FINAL_PR=false` for every PR except
+the last one in the stack. Otherwise (single PR, or the user chose "proceed
+as one PR anyway"), `IS_FINAL_PR` stays `true`.
+
 ```bash
-gh pr create --title "<title>" --body "$(cat <<'PREOF'
+ISSUE_NUMBER="<issue-number>" IS_FINAL_PR="${IS_FINAL_PR:-true}" node -e '
+  const { prLinkedIssueLine } = require("./lib/pr-size-check.js");
+  console.log(prLinkedIssueLine(Number(process.env.ISSUE_NUMBER), process.env.IS_FINAL_PR === "true"));
+' > /tmp/envoy-linked-issue-line.txt
+LINKED_ISSUE_LINE=$(cat /tmp/envoy-linked-issue-line.txt)
+```
+
+```bash
+gh pr create --title "<title>" --body "$(cat <<PREOF
 ## Summary
 
 <Brief description of changes>
@@ -126,7 +154,7 @@ gh pr create --title "<title>" --body "$(cat <<'PREOF'
 
 ## Linked Issue
 
-Closes #<issue-number>
+$LINKED_ISSUE_LINE
 
 ---
 
