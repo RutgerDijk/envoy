@@ -99,5 +99,19 @@ test('no OSC 8 hyperlink escape sequences anywhere — plain URL only', () => {
   assert.ok(!OSC8.test(wikiMd), 'wiki.md must not use OSC 8 hyperlink escapes');
 });
 
+test('all 8 prUrl reads from state.json fail open (2>/dev/null || true) — not bare jq under set -e', () => {
+  const GUARDED = /jq -r '\.prUrl \/\/ empty' \.envoy\/finalize\/state\.json 2>\/dev\/null \|\| true\)/g;
+  const guardedCount =
+    (skillMd.match(GUARDED) || []).length +
+    (coderabbitMd.match(GUARDED) || []).length +
+    (verifyMd.match(GUARDED) || []).length +
+    (wikiMd.match(GUARDED) || []).length;
+  assert.strictEqual(
+    guardedCount,
+    8,
+    `expected all 8 prUrl reads to be guarded with "2>/dev/null || true" (missing/corrupt state.json must not abort under set -e), found ${guardedCount}`
+  );
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
