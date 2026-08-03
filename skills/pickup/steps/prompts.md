@@ -2,9 +2,21 @@
 
 Three subagent prompts used during Step 13 execution.
 
+Per Step 13, the two reviewer prompts are dispatched together in the
+same message/turn (concurrent, not sequential) once the implementer
+completes. Both reviewer prompts below are read-only: no Edit/Write
+in their tool surface, no instruction to modify files — findings only.
+This is what makes running them concurrently safe.
+
+Every prompt below includes a **Sibling Tasks** section built with
+`lib/task-payload.js`'s `buildSiblingIndex(allTasks, taskId)` — a
+one-line-per-task index (id + title only) of the other tasks in the
+plan. This gives agents awareness that sibling work exists without
+ever injecting another task's full spec.
+
 ## Implementer Agent Prompt
 
-Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`
+Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`, `${SIBLING_INDEX}`
 
 ```
 Agent({
@@ -28,7 +40,12 @@ Implement Task N: <task title>
 <Brief description of where this fits in the overall plan>
 
 **Full task specification:**
-<Copy the complete task text from the plan>
+<Built with lib/task-payload.js buildTaskSlice(task) — intent, behavior,
+files, acceptance, contracts, outOfScope for THIS task only>
+
+**Sibling tasks (context only — not in scope):**
+<${SIBLING_INDEX} — one line per other task, id + title only, via
+buildSiblingIndex(allTasks, taskId). Never their full specs.>
 
 **Stack context:**
 <Detected stack profiles — common mistakes and best practices>
@@ -55,18 +72,25 @@ Implement Task N: <task title>
 
 ## Spec Compliance Reviewer Prompt
 
+Dispatched in the SAME message/turn as the Code Quality Reviewer
+(concurrent, not sequential) — safe because this prompt is read-only:
+verification and reporting only, no Edit/Write.
+
 ```
 Agent({
   subagent_type: "general-purpose",
   description: "Spec compliance review for Task N",
   prompt: `${EXECUTION_ANNOUNCE}
 
+**Read-only review.** Do not edit or write any files — report findings only.
+
 ---
 
 Review this implementation for spec compliance.
 
 **What was implemented:** <summary from implementer>
-**Original spec:** <full task specification>
+**Original spec:** <task slice via buildTaskSlice(task) — this task only>
+**Sibling tasks (context only):** <${SIBLING_INDEX} — one line per other task>
 **Changes:** git diff <base_sha>..<head_sha>
 
 ---
@@ -117,11 +141,17 @@ TDD compliance: ✅/❌
 
 ## Code Quality Reviewer Prompt
 
+Dispatched in the SAME message/turn as the Spec Compliance Reviewer
+(concurrent, not sequential) — safe because this prompt is read-only:
+verification and reporting only, no Edit/Write.
+
 ```
 Agent({
   subagent_type: "general-purpose",
   description: "Code quality review for Task N",
   prompt: `${EXECUTION_ANNOUNCE}
+
+**Read-only review.** Do not edit or write any files — report findings only.
 
 ${TDD_LAW}
 
@@ -130,6 +160,7 @@ ${TDD_LAW}
 Review this implementation for code quality.
 
 **What was implemented:** <summary>
+**Sibling tasks (context only):** <${SIBLING_INDEX} — one line per other task>
 **Changes:** git diff <base_sha>..<head_sha>
 **Stack profiles:** Load relevant from ../../stacks/
 
