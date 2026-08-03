@@ -9,9 +9,11 @@
 
 const assert = require('assert');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 const MODULE = path.join(__dirname, '..', '..', 'lib', 'coderabbit-retrigger.js');
-const { shouldReTrigger, formatHandoffMessage } = require(MODULE);
+const { shouldReTrigger, formatHandoffMessage, loadRetriggerCount, saveRetriggerCount } = require(MODULE);
 
 let passed = 0;
 let failed = 0;
@@ -133,6 +135,48 @@ test('formats HH:MM (UTC) into the babysit handoff message', () => {
 test('pads single-digit hours/minutes with zero', () => {
   const msg = formatHandoffMessage('2026-08-03T05:07:00Z');
   assert.ok(/run \/envoy:babysit after 05:07/.test(msg), msg);
+});
+
+section('loadRetriggerCount / saveRetriggerCount — cross-invocation persistence (babysit)');
+
+function mkTmpCwd() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-babysit-test-'));
+}
+
+test('loadRetriggerCount returns 0 when no state file exists', () => {
+  const cwd = mkTmpCwd();
+  assert.strictEqual(loadRetriggerCount(cwd, 42), 0);
+});
+
+test('saveRetriggerCount persists count, loadRetriggerCount reads it back', () => {
+  const cwd = mkTmpCwd();
+  saveRetriggerCount(cwd, 42, 1);
+  assert.strictEqual(loadRetriggerCount(cwd, 42), 1);
+});
+
+test('counts are tracked per-PR independently', () => {
+  const cwd = mkTmpCwd();
+  saveRetriggerCount(cwd, 42, 1);
+  saveRetriggerCount(cwd, 99, 2);
+  assert.strictEqual(loadRetriggerCount(cwd, 42), 1);
+  assert.strictEqual(loadRetriggerCount(cwd, 99), 2);
+});
+
+test('saveRetriggerCount survives across separate load calls (simulating separate loop iterations)', () => {
+  const cwd = mkTmpCwd();
+  saveRetriggerCount(cwd, 7, 1);
+  // simulate a fresh process re-reading state on the next /loop iteration
+  const countOnNextPass = loadRetriggerCount(cwd, 7);
+  saveRetriggerCount(cwd, 7, countOnNextPass + 1);
+  assert.strictEqual(loadRetriggerCount(cwd, 7), 2);
+});
+
+test('loadRetriggerCount tolerates a corrupt state file (returns 0, does not throw)', () => {
+  const cwd = mkTmpCwd();
+  const dir = path.join(cwd, '.envoy', 'babysit');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'retrigger-counts.json'), '{not valid json');
+  assert.strictEqual(loadRetriggerCount(cwd, 42), 0);
 });
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
