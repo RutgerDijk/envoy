@@ -128,6 +128,16 @@ EOF
 )" --label "<labels>")
 ISSUE_NUMBER=$(basename "$ISSUE_URL")
 
+# 2b. Record this run's issue in .envoy/brainstorm/session.json immediately after
+#     `gh issue create` succeeds. The PreToolUse[Bash] issue-create-guard reads
+#     this file to block any further `gh issue create` (or `gh api .../issues
+#     -X POST` bypass) attempted later in the same run — a second issue create
+#     is always a bug, never a valid retry.
+mkdir -p .envoy/brainstorm
+cat > .envoy/brainstorm/session.json <<EOF
+{"\$schemaVersion":"1","issueNumber":$ISSUE_NUMBER,"createdAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+EOF
+
 # 3. write-tasks.js writes the local (gitignored) .envoy-tasks/<n>.json AND
 #    prints the issue-ready markdown (human ## Tasks section + machine block).
 TASKS_MD=$(node "$(dirname "$0")/write-tasks.js" "$ISSUE_NUMBER" /tmp/envoy-tasks-payload.json)

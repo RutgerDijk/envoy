@@ -32,6 +32,16 @@
             "_profiles": ["minimal", "standard", "strict"]
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" issue-create-guard",
+            "_profiles": ["minimal", "standard", "strict"]
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
