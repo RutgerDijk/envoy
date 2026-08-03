@@ -175,5 +175,61 @@ test('drift touching a shared file sets hasDrift true with overlap listed', () =
   assert.deepStrictEqual(result.overlappingFiles, ['base.txt']);
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// computeDrift: fetches origin/main first so stale remote-tracking refs
+// don't silently under-report drift (Task 10 fix-round)
+// ═══════════════════════════════════════════════════════════════════
+
+section('computeDrift: fetches origin before computing (avoids stale ref)');
+
+test('picks up commits pushed to origin AFTER the local clone, without a manual fetch', () => {
+  const { dir, git } = makeScratchRepo();
+  git(['checkout', '-q', '-b', 'feature']);
+  fs.writeFileSync(path.join(dir, 'feature.txt'), 'feature\n');
+  git(['add', '.']);
+  git(['commit', '-q', '-m', 'feature work']);
+
+  // Get origin url, clone it separately, push a NEW commit touching base.txt
+  // straight to the bare remote. The scratch repo's local origin/main
+  // tracking ref is now stale — computeDrift must fetch before it can see this.
+  const originUrl = git(['remote', 'get-url', 'origin']).trim();
+  const otherClone = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-main-drift-clone-'));
+  execFileSync('git', ['clone', '-q', originUrl, otherClone], { stdio: 'pipe' });
+  const gitOther = (args) => execFileSync('git', args, { cwd: otherClone, stdio: 'pipe' }).toString();
+  gitOther(['config', 'user.email', 'test@example.com']);
+  gitOther(['config', 'user.name', 'Test']);
+  fs.writeFileSync(path.join(otherClone, 'base.txt'), 'main change from elsewhere\n');
+  gitOther(['add', '.']);
+  gitOther(['commit', '-q', '-m', 'main also touches base.txt, pushed from elsewhere']);
+  gitOther(['push', '-q', 'origin', 'main']);
+
+  // Local scratch repo's origin/main tracking ref has NOT been told about
+  // this push. computeDrift must fetch origin/main itself to catch it.
+  const result = mainDrift.computeDrift(dir);
+  assert.strictEqual(result.hasDrift, true);
+  assert.strictEqual(result.driftCommits, 1);
+  assert.deepStrictEqual(result.overlappingFiles, ['base.txt']);
+});
+
+test('fetch failure (unreachable origin) does not throw and marks fetchFailed', () => {
+  const { dir, git } = makeScratchRepo();
+  git(['checkout', '-q', '-b', 'feature']);
+  fs.writeFileSync(path.join(dir, 'feature.txt'), 'feature\n');
+  git(['add', '.']);
+  git(['commit', '-q', '-m', 'feature work']);
+
+  // Point origin at a URL that cannot be reached — simulates offline/no-network.
+  git(['remote', 'set-url', 'origin', '/nonexistent/path/does-not-exist.git']);
+
+  let result;
+  assert.doesNotThrow(() => {
+    result = mainDrift.computeDrift(dir);
+  });
+  assert.strictEqual(result.fetchFailed, true);
+  // Falls back to whatever local ref state exists (no drift, since branch
+  // point equals the stale origin/main here) rather than crashing.
+  assert.strictEqual(result.hasDrift, false);
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
