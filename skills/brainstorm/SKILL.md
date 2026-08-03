@@ -5,6 +5,18 @@ description: Use when starting any new feature, significant change, or when you 
 
 # Brainstorming Ideas Into Designs
 
+## Briefing
+!`node ${CLAUDE_SKILL_DIR}/preflight.js`
+
+- [ ] Preflight ok/degraded acknowledged (fatal stops here)
+- [ ] Phase 1: Understanding the Idea
+- [ ] Phase 1.5: Repo Exploration
+- [ ] Phase 2: Exploring Approaches
+- [ ] Phase 3: Presenting the Design
+- [ ] Phase 3.5: Scope Confirmation (BLOCKING)
+- [ ] Phase 4: Create GitHub Issue and Task Handoff
+- [ ] Phase 5: Final Handoff
+
 ## Overview
 
 Turn ideas into fully formed designs through collaborative dialogue. Produces ONE artifact:
@@ -43,21 +55,22 @@ This produces the implementation task list in the issue. Every referenced file p
 3. Cover: architecture, components, data flow, error handling, testing
 4. Be ready to revise based on feedback
 
-### Phase 3.5: Issue-Plan Approval (BLOCKING)
+### Phase 3.5: Scope Confirmation (BLOCKING)
 
-Before creating ANY issue, present the proposed issue structure and wait for
-explicit approval — the number of issues is the user's decision, not yours:
+Before creating THE issue, present its scope and wait for explicit
+confirmation. There is exactly one issue — this phase is not a decision
+between issue counts, it is a check that the scope you've converged on is
+correct:
 
-1. List every issue you intend to create: title + one-line scope each, and
-   the dependency order if there is more than one.
-2. Present it as lettered options (e.g. "A: one issue covering everything,
-   B: the two-issue split above") with your recommendation first.
-3. Do NOT run `gh issue create` until the user picks one.
+1. State the issue's title and a one-line scope summary covering everything
+   it will contain.
+2. Ask: "Does this scope look right, or does anything need to be added,
+   removed, or narrowed before I create the issue?"
+3. Do NOT run `gh issue create` until the user confirms or edits the scope.
 
-Default bias: **ONE issue**. A split needs a concrete reason — independently
-shippable parts, different reviewers, or a decision gate between parts.
-"It feels big" is not a reason; that is what the task list inside the issue
-is for.
+The task list inside the issue is what absorbs size — a big issue with a
+long task list is normal. Do not split into multiple issues; that is no
+longer an option this phase offers.
 
 ### Phase 4: Create GitHub Issue and Task Handoff
 
