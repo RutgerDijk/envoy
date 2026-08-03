@@ -20,6 +20,11 @@ wait/retrigger/handoff decision lives; do not re-derive it in prose here or in b
 
 Announce: `Running Step 3: Collect CodeRabbit findings and diagnose CI failures...`
 
+```bash
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+echo "PR: $PR_URL"
+```
+
 **3a. Poll CodeRabbit for unresolved threads (exponential backoff, unchanged):**
 
 GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (22-minute max).
@@ -160,6 +165,11 @@ failure is related to a CodeRabbit finding. They share the same commit either wa
 
 Announce: `Running Step 4: Apply fixes for all CodeRabbit findings and CI failures...`
 
+```bash
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+echo "PR: $PR_URL"
+```
+
 **No skipping — address everything including nitpicks.**
 
 For each item in the combined fix list (CodeRabbit finding or CI failure diagnosis):
@@ -172,6 +182,11 @@ Do NOT commit per item — all fixes for this cycle land in the single commit in
 ### Step 5: Commit — Exactly ONE Commit, Enumerating Every Finding
 
 Announce: `Running Step 5: Commit all fixes (one commit for this cycle)...`
+
+```bash
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+echo "PR: $PR_URL"
+```
 
 Build the commit message with `lib/remediation-cycle.js`'s `buildCommitMessage(findings)` —
 it enumerates every finding addressed, with its thread URL for CodeRabbit findings, so the
@@ -195,6 +210,8 @@ fixed in Steps 3-4 is enumerated in this one commit's body.
 Announce: `Running Step 6: Push (one push for this cycle)...`
 
 ```bash
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+echo "PR: $PR_URL"
 git push
 ```
 
@@ -203,6 +220,11 @@ Exactly ONE push per cycle — this triggers exactly ONE CI run, not one per fin
 ### Step 7: Reply + Resolve — Cite the Same Commit SHA
 
 Announce: `Running Step 7: Reply and resolve CodeRabbit threads...`
+
+```bash
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+echo "PR: $PR_URL"
+```
 
 ```bash
 # Reply with fix + the SAME commit hash from Step 5 for every thread addressed
@@ -237,6 +259,11 @@ Every reply for this cycle cites the same `$COMMIT` SHA — the one commit from 
 ### Step 8: Re-poll Both CodeRabbit and CI (Max 3 Cycles, with Completion Signal)
 
 Announce: `Running Step 8: Re-poll CodeRabbit and CI...`
+
+```bash
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+echo "PR: $PR_URL"
+```
 
 After pushing, CodeRabbit may open new review threads on the fixes, and the push
 triggers exactly one new CI run. Check both.

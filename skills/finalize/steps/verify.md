@@ -4,6 +4,11 @@
 
 Announce: `Running Step 9: Final verification...`
 
+```bash
+PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json)
+echo "PR: $PR_URL"
+```
+
 Run envoy:verification with evidence:
 
 ```bash
