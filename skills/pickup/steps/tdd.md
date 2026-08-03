@@ -103,6 +103,20 @@ For each task:
 4. **Merge** both reviewers' findings into ONE consolidated issue list
    (dedupe overlapping points; keep each reviewer's verdict attached to
    its findings).
+
+   **Arbitrating contradictions:** if the two reviewers genuinely
+   contradict each other on the same specific point (e.g.
+   spec-compliance says X is fine, code-quality says X is a bug), the
+   ORCHESTRATOR (this pickup session) resolves it — NEVER the
+   implementer. Resolve BEFORE dispatching the fix round; the
+   implementer must never receive two contradictory instructions and
+   be left to pick a side itself. Default heuristic (guidance, not a
+   hard rule): spec-compliance findings win on "does this match the
+   spec" questions, code-quality findings win on "is this
+   well-implemented" questions. If a genuine disagreement on the same
+   point can't be reconciled by that split, don't silently pick a
+   side — raise it to the user and wait for a decision before
+   dispatching the fix round.
 5. If the merged list has issues: dispatch ONE fix round to the
    implementer with the full merged list (not two separate
    fix-and-re-review cycles).
