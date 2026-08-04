@@ -79,5 +79,31 @@ test('additionalContext routes to skills via the Skill tool rather than inlining
   assert.ok(ctx.includes('using-envoy'), 'routing table must reference using-envoy');
 });
 
+test('routing table entries are not all near-identical truncated boilerplate', () => {
+  const parsed = JSON.parse(runHook());
+  const ctx = parsed.hookSpecificOutput.additionalContext;
+  const lines = ctx.split('\n').filter((l) => /^[a-z0-9-]+: /.test(l));
+  assert.ok(lines.length >= 5, `expected several routing-table lines, got ${lines.length}`);
+  // Strip the "name: " prefix and common generic lead-ins, then require
+  // meaningful (differentiating) content to remain — not a stub cut off
+  // mid lead-in like "Use when you...".
+  const stripLeadIn = (desc) =>
+    desc.replace(/^(ALWAYS\s+)?(invoke\s+)?(use\s+(when|before|after|this)|before|when)\b[.:]?\s*/i, '');
+  const meaningful = lines.map((l) => {
+    const desc = l.slice(l.indexOf(': ') + 2);
+    return stripLeadIn(desc).replace(/\.\.\.$/, '');
+  });
+  for (const m of meaningful) {
+    assert.ok(
+      m.trim().length >= 15,
+      `expected meaningful content (>=15 chars after stripping lead-in), got "${m}"`
+    );
+  }
+  // Entries should actually differ from each other, not collapse into the
+  // same generic stub.
+  const unique = new Set(meaningful.map((m) => m.trim().toLowerCase()));
+  assert.ok(unique.size >= Math.min(5, meaningful.length) - 1, 'routing-table entries must be differentiated, not near-identical stubs');
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
