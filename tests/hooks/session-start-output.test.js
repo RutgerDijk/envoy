@@ -64,5 +64,20 @@ test('additionalContext carries the bootstrap content', () => {
   assert.ok(ctx.includes('Envoy'), 'bootstrap must mention Envoy');
 });
 
+test('output stays lean (<=1200 bytes) when there is no active workflow', () => {
+  const raw = runHook();
+  assert.ok(
+    raw.length <= 1200,
+    `expected SessionStart output <= 1200 bytes with no active workflow, got ${raw.length}`
+  );
+});
+
+test('additionalContext routes to skills via the Skill tool rather than inlining the full using-envoy body', () => {
+  const parsed = JSON.parse(runHook());
+  const ctx = parsed.hookSpecificOutput.additionalContext;
+  assert.ok(!ctx.includes('## Red Flags'), 'full using-envoy body (Red Flags section) must not be inlined');
+  assert.ok(ctx.includes('using-envoy'), 'routing table must reference using-envoy');
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
