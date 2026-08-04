@@ -41,10 +41,22 @@ ROUTING_TABLE=$(node -e '
     const m = content.match(/^description:\s*(.+)$/m);
     if (!m) continue;
     let desc = m[1].trim();
-    // Strip generic lead-in boilerplate ("Use when...", "ALWAYS invoke
-    // when...", etc.) so truncation preserves the differentiating part
-    // of the description instead of cutting it off entirely.
-    desc = desc.replace(/^(ALWAYS\s+)?(invoke\s+)?(use\s+(when|before|after|this)|before|when)\b[.:]?\s*/i, "");
+    // Strip generic lead-in boilerplate so truncation preserves the
+    // differentiating part of the description instead of cutting it off
+    // mid boilerplate. Two shapes exist:
+    //  - rigid-skill template: "<Skill> expert. ALWAYS invoke when/before/
+    //    after ..." — the "ALWAYS invoke ..." clause is not anchored at
+    //    position 0 (it follows "<Skill> expert."), so search for it
+    //    anywhere near the start and strip through it.
+    //  - flexible-skill template: "Use when/before ..." — anchored at
+    //    position 0.
+    const rigidLeadIn = /\bALWAYS\s+invoke\s+(when|before|after)\b[.:]?\s*/i;
+    const rigidMatch = desc.slice(0, 60).match(rigidLeadIn);
+    if (rigidMatch && rigidMatch.index <= 40) {
+      desc = desc.slice(rigidMatch.index + rigidMatch[0].length);
+    } else {
+      desc = desc.replace(/^(use\s+(when|before|after|this)|before|when)\b[.:]?\s*/i, "");
+    }
     const MAX = 42;
     if (desc.length > MAX) desc = desc.slice(0, MAX - 3) + "...";
     lines.push(name + ": " + desc);
