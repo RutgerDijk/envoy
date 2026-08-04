@@ -174,25 +174,32 @@ fi
 # Compaction-resume nudge: on a resume trigger, if the most recent ledger
 # event is a pre-compact that recorded an active skill, surface an explicit
 # nudge to re-invoke it — after compaction the skill's full discipline rules
-# may have been trimmed from context.
+# may have been trimmed from context. The ledger tail alone is not enough:
+# it stays put indefinitely if the skill is never re-invoked, so we also
+# consult the active-skill marker (same TTL/branch/session staleness logic
+# pre-compact.js already uses) as the source of truth for "still relevant".
 RESUME_NUDGE=""
 if [ "$HOOK_SOURCE" = "resume" ] && [ -f ".envoy/ledger.jsonl" ]; then
     RESUME_NUDGE=$(node -e '
       try {
         const { tailLedger } = require(process.argv[1]);
+        const { readActiveSkill } = require(process.argv[2]);
         const events = tailLedger(process.cwd(), 1);
         const last = events[events.length - 1];
         if (last && last.type === "pre-compact" && last.activeSkill) {
-          const issuePart = (last.issueNumber !== undefined && last.issueNumber !== null)
-            ? " (issue #" + last.issueNumber + ")"
-            : "";
-          process.stdout.write(
-            "⚠ Resuming after compaction — re-invoke envoy:" + last.activeSkill +
-            " now to restore its full discipline rules" + issuePart + "."
-          );
+          const marker = readActiveSkill(process.cwd());
+          if (marker && marker.skill === last.activeSkill) {
+            const issuePart = (last.issueNumber !== undefined && last.issueNumber !== null)
+              ? " (issue #" + last.issueNumber + ")"
+              : "";
+            process.stdout.write(
+              "⚠ Resuming after compaction — re-invoke envoy:" + last.activeSkill +
+              " now to restore its full discipline rules" + issuePart + "."
+            );
+          }
         }
       } catch (_err) {}
-    ' "$PLUGIN_DIR/lib/ledger" 2>/dev/null)
+    ' "$PLUGIN_DIR/lib/ledger" "$PLUGIN_DIR/lib/active-skill" 2>/dev/null)
 fi
 
 if [ -n "$RESUME_NUDGE" ]; then

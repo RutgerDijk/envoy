@@ -181,11 +181,12 @@ test('pre-compact event omits activeSkill when no marker present', () => {
 
 section('session-start nudges re-invocation after a compaction on resume');
 
-test('resume trigger + pre-compact ledger event with activeSkill → nudge printed', () => {
+test('resume trigger + pre-compact ledger event with activeSkill + live marker → nudge printed', () => {
   const tmp = mkTmp();
   try {
     appendEvent(tmp, { type: 'pre-compact', activeSkill: 'pickup', issueNumber: 74 });
-    const parsed = JSON.parse(runSessionStart(tmp, 'resume'));
+    writeActiveSkill(tmp, { skill: 'pickup', issueNumber: 74 }, { branch: 'unknown', session: 'test-session-printed' });
+    const parsed = JSON.parse(runSessionStart(tmp, 'resume', 'test-session-printed'));
     const ctx = parsed.hookSpecificOutput.additionalContext;
     assert.ok(/Resuming after compaction/i.test(ctx), 'resume nudge missing');
     assert.ok(ctx.includes('envoy:pickup'), 'nudge must name the active skill');
