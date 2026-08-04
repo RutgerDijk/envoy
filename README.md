@@ -86,7 +86,6 @@ envoy/
 │   ├── implement.md            # Implementation phase constraints
 │   ├── research.md             # Research phase constraints
 │   └── iterative-retrieval.md  # Multi-cycle retrieval protocol
-├── commands/              # Entry points for /envoy:* commands
 ├── agents/                # Specialized agent definitions
 ├── skills/                # 23 workflow skills
 ├── stacks/                # 26 technology profiles
