@@ -69,8 +69,6 @@ envoy/
     skill-name/
       SKILL.md              # Main reference (required)
       supporting-file.*     # Only if needed (templates, scripts, heavy reference)
-  commands/
-    skill-name.md           # Optional: slash command shortcut
 ```
 
 **Flat namespace** — all skills in one searchable namespace.
@@ -213,17 +211,12 @@ Use skill name only, with explicit requirement markers:
 
 **Why no @ links:** `@` syntax force-loads files immediately, consuming 200k+ context before you need them.
 
-## Adding a Slash Command
+## Slash Commands Are Automatic
 
-Create `commands/skill-name.md`:
-
-```markdown
----
-description: Short description for /envoy:skill-name
----
-
-Use and follow the skill-name skill exactly as written
-```
+No separate `commands/` wrapper file is needed. Claude Code merges custom
+commands into skills — a plugin skill's `name:` frontmatter field auto-creates
+the matching `/envoy:<name>` command. Set `name: skill-name` in the skill's
+frontmatter and `/envoy:skill-name` works without any additional file.
 
 ## Flowchart Usage
 

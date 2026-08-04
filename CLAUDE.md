@@ -9,7 +9,6 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 - `skills/` — Workflow skills (SKILL.md files with YAML frontmatter)
 - `stacks/` — Technology profiles (best practices, common mistakes, review checklists)
 - `agents/` — Specialized agent definitions for code review, testing, security
-- `commands/` — Thin wrappers that route `/envoy:*` commands to skills
 - `hooks/` — Session lifecycle hooks and automation (see Hooks section)
 - `lib/` — Shared Node.js utilities (skills-core.js, stack-loader.js) — changes here affect ALL skills and hooks
 - `contexts/` — Phase-specific context fragments (review.md, implement.md, research.md)
@@ -68,8 +67,7 @@ anthropics/claude-code#22345.
 - Use selective loading: `loadStackSection()` for specific sections, `detectStacksFromDiff()` for changed-file stacks
 
 ### Commands
-- Each command in `commands/<name>.md` with YAML frontmatter (`description`)
-- Commands are thin — they just invoke the corresponding skill
+- No standalone `commands/` directory — Claude Code merges custom commands into skills. A plugin skill's `name:` frontmatter (e.g. `pickup`) auto-creates `/envoy:pickup`; no separate wrapper file is needed.
 
 ### Agents
 - Agent definitions in `agents/<name>.md`
