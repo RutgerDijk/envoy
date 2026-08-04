@@ -1,8 +1,3 @@
----
-name: dispatching-parallel-agents
-description: Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies
----
-
 # Dispatching Parallel Agents
 
 ## Overview
@@ -11,7 +6,7 @@ When you have multiple unrelated failures or independent tasks, investigating th
 
 **Core principle:** Dispatch one agent per independent problem domain. Let them work concurrently.
 
-**Announce at start:** "I'm using envoy:dispatching-parallel-agents to handle these independent tasks."
+**Announce at start:** "I'm using envoy:envoy-authoring (dispatching-parallel-agents) to handle these independent tasks."
 
 ## When to Use
 

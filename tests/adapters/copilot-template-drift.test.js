@@ -117,21 +117,16 @@ const CLAUDE_CODE_ONLY_SKILLS = [
   'babysit',
   'coderabbit-pr-review',
   'costs',
-  'dispatching-parallel-agents',
   'doctor',
   'envoy-authoring',
-  'eval-harness',
-  'pressure-test-scenarios',
   'prs',
   'receiving-code-review',
   'requesting-code-review',
-  'search-first',
   'systematic-debugging',
   'test-driven-development',
   'using-envoy',
   'using-git-worktrees',
   'verification',
-  'writing-skills',
 ];
 
 // Prompts with no standalone skill (variants of another skill's flow).

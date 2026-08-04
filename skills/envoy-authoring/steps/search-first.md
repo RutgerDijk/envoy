@@ -1,15 +1,10 @@
----
-name: search-first
-description: Use before implementing any feature to check if a solution already exists
----
-
 # Search-First
 
 ## Overview
 
 Before building anything, check if it already exists. Search the codebase, package registries, and GitHub. Decide: adopt, extend, compose, or build.
 
-**Announce at start:** "I'm using envoy:search-first to check for existing solutions."
+**Announce at start:** "I'm using envoy:envoy-authoring (search-first) to check for existing solutions."
 
 ## Arguments
 

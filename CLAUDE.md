@@ -23,7 +23,7 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 - Each skill lives in `skills/<skill-name>/SKILL.md`
 - Rigid skills follow a contract-backed pattern (see `## Rigid Skills` below). Flexible skills (planning, etc.) use the simpler legacy frontmatter — `name`, `description`, and nothing else required.
 - Rigid skills: `review`, `pickup`, `finalize`, `cleanup`, `fix-ci`, `coderabbit-pr-review`, `wiki-sync`, `verification`, `test-driven-development`, `systematic-debugging`, `receiving-code-review`, `brainstorm`. Follow exactly, no adaptation.
-- Flexible skills: `using-envoy`, `search-first`, `dispatching-parallel-agents`, `pressure-test-scenarios`, `requesting-code-review`, etc. Adapt principles to context.
+- Flexible skills: `using-envoy`, `envoy-authoring`, `requesting-code-review`, etc. Adapt principles to context.
 - Include "Announce at start" directive and "Integration with Envoy" section.
 
 ### Rigid skills (contract-backed)

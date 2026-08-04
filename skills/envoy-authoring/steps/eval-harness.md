@@ -1,15 +1,10 @@
----
-name: eval-harness
-description: Use when testing whether a skill behaves correctly across defined scenarios
----
-
 # Eval Harness for Skills
 
 ## Overview
 
 Automated skill testing. Define scenarios, run them as subagents (with and without the skill), compare results. Produces pass@1 and pass@3 metrics.
 
-**Announce at start:** "I'm using envoy:eval-harness to test skill scenarios."
+**Announce at start:** "I'm using envoy:envoy-authoring (eval-harness) to test skill scenarios."
 
 ## Arguments
 
@@ -209,6 +204,6 @@ Suggestion: Strengthen the rationalization table entry for this case
 
 ## Integration with Envoy
 
-- Run after creating or modifying a skill: `/envoy:eval-harness <skill-name>`
-- Include in `envoy:writing-skills` as a verification step
+- Run after creating or modifying a skill: `/envoy:envoy-authoring` (eval-harness step) `<skill-name>`
+- Include in the writing-skills step (`steps/writing-skills.md`) as a verification step
 - Scenarios are committed alongside skills in `tests/scenarios/`

@@ -1,8 +1,3 @@
----
-name: pressure-test-scenarios
-description: Use when testing whether skills maintain discipline under pressure scenarios
----
-
 # Pressure Test Scenarios
 
 ## Overview

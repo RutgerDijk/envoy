@@ -7,8 +7,8 @@ Libraries inspired by [lean-ctx](https://github.com/yvgude/lean-ctx) that reduce
 | Library | Purpose | Used By |
 |---------|---------|---------|
 | `lib/session-state.js` | Cross-session task continuity | pickup, finalize |
-| `lib/agent-scratchpad.js` | Multi-agent coordination | dispatching-parallel-agents, finalize |
-| `lib/context-budget.js` | LITM-aware prompt structuring | dispatching-parallel-agents, pickup |
+| `lib/agent-scratchpad.js` | Multi-agent coordination | envoy-authoring (dispatching-parallel-agents step), finalize |
+| `lib/context-budget.js` | LITM-aware prompt structuring | envoy-authoring (dispatching-parallel-agents step), pickup |
 | `lib/relevance-scorer.js` | Task-aware file scoring | pickup, review |
 | `lib/output-compressor.js` | Shell output compression | review |
 | `lib/cost-reporter.js` | Token usage analytics | costs skill |

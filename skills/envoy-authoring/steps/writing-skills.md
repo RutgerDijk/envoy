@@ -1,8 +1,3 @@
----
-name: writing-skills
-description: Use when creating new skills for Envoy, editing existing skills, or verifying skills work before deployment
----
-
 # Writing Skills for Envoy
 
 ## Overview
@@ -13,7 +8,7 @@ You write test cases (pressure scenarios with subagents), watch them fail (basel
 
 **Core principle:** If you didn't watch an agent fail without the skill, you don't know if the skill teaches the right thing.
 
-**Announce at start:** "I'm using envoy:writing-skills to create/edit this skill."
+**Announce at start:** "I'm using envoy:envoy-authoring (writing-skills) to create/edit this skill."
 
 **REQUIRED BACKGROUND:** You MUST understand envoy:test-driven-development before using this skill. That skill defines the fundamental RED-GREEN-REFACTOR cycle. This skill adapts TDD to documentation.
 
@@ -253,7 +248,7 @@ digraph when_flowchart {
 
 ## Testing and bulletproofing
 
-The full RED-GREEN-REFACTOR cycle for skills, loophole closure for discipline skills, the rationalizations table, and the deployment checklist live in `testing.md`. Read that file in full before shipping any new or edited skill — it contains the Iron Law, the red-flags list, and the final checklist gate.
+The full RED-GREEN-REFACTOR cycle for skills, loophole closure for discipline skills, the rationalizations table, and the deployment checklist live in `steps/writing-skills-testing.md`. Read that file in full before shipping any new or edited skill — it contains the Iron Law, the red-flags list, and the final checklist gate.
 
 ## Anti-Patterns
 
@@ -265,5 +260,5 @@ The full RED-GREEN-REFACTOR cycle for skills, loophole closure for discipline sk
 ## Integration with Envoy
 
 - **envoy:test-driven-development** — Same Iron Law applies; required background
-- **envoy:pressure-test-scenarios** — Use for baseline testing of discipline skills
+- **pressure-test-scenarios step** (`steps/pressure-test-scenarios.md`) — Use for baseline testing of discipline skills
 - **envoy:verification** — Verify skill works before claiming done
