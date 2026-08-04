@@ -64,11 +64,17 @@ test('additionalContext carries the bootstrap content', () => {
   assert.ok(ctx.includes('Envoy'), 'bootstrap must mention Envoy');
 });
 
-test('output stays lean (<=1200 bytes) when there is no active workflow', () => {
+test('output stays lean (<=2000 bytes) when there is no active workflow', () => {
+  // Budget raised from 1200 -> 2000 bytes: the old 12-char routing-table
+  // truncation cut descriptions down to useless boilerplate stubs (e.g.
+  // "babysit: Use when you..."), defeating the purpose of the table. The
+  // per-description cap was raised to 42 chars post-lead-in-strip so
+  // entries are actually distinguishing. This still cuts the original
+  // ~4.7KB (full using-envoy body inlined) by more than half.
   const raw = runHook();
   assert.ok(
-    raw.length <= 1200,
-    `expected SessionStart output <= 1200 bytes with no active workflow, got ${raw.length}`
+    raw.length <= 2000,
+    `expected SessionStart output <= 2000 bytes with no active workflow, got ${raw.length}`
   );
 });
 

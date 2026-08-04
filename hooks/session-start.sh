@@ -41,10 +41,12 @@ ROUTING_TABLE=$(node -e '
     const m = content.match(/^description:\s*(.+)$/m);
     if (!m) continue;
     let desc = m[1].trim();
-    // Keep just the first sentence/clause to stay compact.
-    const cut = desc.search(/[.]\s|—|-\s/);
-    if (cut > 0 && cut < 14) desc = desc.slice(0, cut);
-    if (desc.length > 14) desc = desc.slice(0, 12) + "...";
+    // Strip generic lead-in boilerplate ("Use when...", "ALWAYS invoke
+    // when...", etc.) so truncation preserves the differentiating part
+    // of the description instead of cutting it off entirely.
+    desc = desc.replace(/^(ALWAYS\s+)?(invoke\s+)?(use\s+(when|before|after|this)|before|when)\b[.:]?\s*/i, "");
+    const MAX = 42;
+    if (desc.length > MAX) desc = desc.slice(0, MAX - 3) + "...";
     lines.push(name + ": " + desc);
   }
   process.stdout.write(lines.join("\n"));
