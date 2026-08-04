@@ -20,16 +20,39 @@ escape_json() {
     echo "$content"
 }
 
-# Read the using-envoy skill
-SKILL_FILE="$PLUGIN_DIR/skills/using-envoy/SKILL.md"
-if [ -f "$SKILL_FILE" ]; then
-    SKILL_CONTENT=$(cat "$SKILL_FILE")
-else
-    SKILL_CONTENT="Error: using-envoy skill not found at $SKILL_FILE"
-fi
+# Build a compact skill-routing table (name + one-line description) instead of
+# inlining the full using-envoy skill body. The full body loads on demand via
+# the Skill tool, in line with progressive disclosure.
+ROUTING_TABLE=$(node -e '
+  const fs = require("fs");
+  const path = require("path");
+  const skillsDir = process.argv[1];
+  let names = [];
+  try {
+    names = fs.readdirSync(skillsDir).filter((n) => {
+      try { return fs.statSync(path.join(skillsDir, n)).isDirectory(); } catch (_e) { return false; }
+    }).sort();
+  } catch (_e) {}
+  const lines = [];
+  for (const name of names) {
+    const file = path.join(skillsDir, name, "SKILL.md");
+    let content;
+    try { content = fs.readFileSync(file, "utf8"); } catch (_e) { continue; }
+    const m = content.match(/^description:\s*(.+)$/m);
+    if (!m) continue;
+    let desc = m[1].trim();
+    // Keep just the first sentence/clause to stay compact.
+    const cut = desc.search(/[.]\s|—|-\s/);
+    if (cut > 0 && cut < 14) desc = desc.slice(0, cut);
+    if (desc.length > 14) desc = desc.slice(0, 12) + "...";
+    lines.push(name + ": " + desc);
+  }
+  process.stdout.write(lines.join("\n"));
+' "$PLUGIN_DIR/skills" 2>/dev/null)
 
-# Strip frontmatter from skill content (POSIX-compatible, no BSD sed warnings)
-SKILL_CONTENT=$(echo "$SKILL_CONTENT" | awk 'BEGIN{s=0} /^---$/{s++;next} s>=2{print}')
+if [ -z "$ROUTING_TABLE" ]; then
+    ROUTING_TABLE="(routing table unavailable — invoke envoy:using-envoy via the Skill tool for skill discovery)"
+fi
 
 # Detect stacks in current directory
 DETECTED_STACKS=""
@@ -172,11 +195,9 @@ fi
 
 # Build the output message
 OUTPUT_CONTENT="<EXTREMELY_IMPORTANT>
-You have Envoy superpowers.
+Envoy skills (check before responding, invoke via Skill tool; using-envoy has full guidance):
 
-**Below is the full content of your 'envoy:using-envoy' skill - your introduction to using Envoy skills. For all other skills, use the 'Skill' tool:**
-
-$SKILL_CONTENT
+$ROUTING_TABLE
 
 ---
 
