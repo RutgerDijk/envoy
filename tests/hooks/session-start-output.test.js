@@ -111,5 +111,29 @@ test('routing table entries are not all near-identical truncated boilerplate', (
   assert.ok(unique.size >= Math.min(5, meaningful.length) - 1, 'routing-table entries must be differentiated, not near-identical stubs');
 });
 
+test('routing table lines never contain raw boilerplate phrases (independent of the stripping regex)', () => {
+  // Deliberately does NOT reuse the implementation's own lead-in-stripping
+  // regex — it checks for the literal boilerplate substrings straight out
+  // of the rigid-skill description template ("<Skill> expert. ALWAYS
+  // invoke when...") and the flexible-skill template ("Use when...").
+  // This is the check that a same-regex tautology cannot catch: if the
+  // implementation's strip is incomplete (e.g. only anchored at position
+  // 0, missing the "<Skill> expert." prefix rigid skills prepend), these
+  // raw phrases leak straight into the output and this test fails.
+  const parsed = JSON.parse(runHook());
+  const ctx = parsed.hookSpecificOutput.additionalContext;
+  const lines = ctx.split('\n').filter((l) => /^[a-z0-9-]+: /.test(l));
+  assert.ok(lines.length >= 5, `expected several routing-table lines, got ${lines.length}`);
+  const rawBoilerplatePhrases = ['ALWAYS invoke when', 'ALWAYS invoke before', 'expert. ALWAYS', 'Use when'];
+  for (const line of lines) {
+    for (const phrase of rawBoilerplatePhrases) {
+      assert.ok(
+        !line.includes(phrase),
+        `routing-table line "${line}" still contains raw boilerplate phrase "${phrase}"`
+      );
+    }
+  }
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
