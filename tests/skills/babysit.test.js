@@ -29,17 +29,17 @@ function test(name, fn) {
 
 const ROOT = path.join(__dirname, '..', '..');
 const SKILL = path.join(ROOT, 'skills', 'babysit', 'SKILL.md');
-const COMMAND = path.join(ROOT, 'commands', 'babysit.md');
 
 test('skill file exists', () => {
   assert.ok(fs.existsSync(SKILL), 'skills/babysit/SKILL.md must exist');
 });
 
-test('command file registers /envoy:babysit', () => {
-  assert.ok(fs.existsSync(COMMAND), 'commands/babysit.md must exist');
-  const cmd = fs.readFileSync(COMMAND, 'utf8');
-  assert.ok(/name:\s*babysit/.test(cmd), 'command frontmatter names babysit');
-  assert.ok(/envoy:babysit/.test(cmd), 'command points at the babysit skill');
+test('skill frontmatter registers /envoy:babysit (no commands/ wrapper needed)', () => {
+  const skillContent = fs.readFileSync(SKILL, 'utf8');
+  assert.ok(
+    /^---[\s\S]*?\nname:\s*babysit\b/.test(skillContent),
+    'skill frontmatter name: babysit produces /envoy:babysit'
+  );
 });
 
 const skill = fs.existsSync(SKILL) ? fs.readFileSync(SKILL, 'utf8') : '';
