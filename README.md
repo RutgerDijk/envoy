@@ -342,14 +342,15 @@ Envoy includes 26 skills:
 
 | Skill | When to Use |
 |-------|-------------|
-| `envoy:search-first` | Before implementing, check if solution already exists |
-| `envoy:eval-harness` | Test whether a skill behaves correctly across scenarios |
+| `envoy:envoy-authoring` | Meta-skill: authoring/testing Envoy itself — routes to search-first, writing-skills, eval-harness, pressure-test-scenarios, dispatching-parallel-agents |
+| `envoy:search-first` | Before implementing, check if solution already exists (internal to envoy-authoring) |
+| `envoy:eval-harness` | Test whether a skill behaves correctly across scenarios (internal to envoy-authoring) |
 
 ### Execution & Orchestration
 
 | Skill | When to Use |
 |-------|-------------|
-| `envoy:dispatching-parallel-agents` | Multiple independent tasks |
+| `envoy:dispatching-parallel-agents` | Multiple independent tasks (internal to envoy-authoring) |
 | `envoy:systematic-debugging` | Bug, test failure, or unexpected behavior |
 | `envoy:test-driven-development` | Implementing any feature or bugfix |
 
@@ -362,8 +363,8 @@ Envoy includes 26 skills:
 | `envoy:wiki-sync` | Documentation updated |
 | `envoy:fix-ci` | CI/CD checks fail on a PR |
 | `envoy:using-envoy` | Discover available skills |
-| `envoy:writing-skills` | Create new Envoy skills |
-| `envoy:pressure-test-scenarios` | Test skill discipline under pressure |
+| `envoy:writing-skills` | Create new Envoy skills (internal to envoy-authoring) |
+| `envoy:pressure-test-scenarios` | Test skill discipline under pressure (internal to envoy-authoring) |
 | `envoy:costs` | View token usage and cost analytics |
 
 ## Stack Profiles

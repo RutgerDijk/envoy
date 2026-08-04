@@ -119,6 +119,7 @@ const CLAUDE_CODE_ONLY_SKILLS = [
   'costs',
   'dispatching-parallel-agents',
   'doctor',
+  'envoy-authoring',
   'eval-harness',
   'pressure-test-scenarios',
   'prs',

@@ -36,15 +36,16 @@ Envoy includes 26 skills organized by purpose.
 
 | Skill | Trigger |
 |-------|---------|
-| `envoy:search-first` | Before implementing, check if solution already exists |
-| `envoy:eval-harness` | Test whether a skill behaves correctly across scenarios |
-| `envoy:pressure-test-scenarios` | Testing whether skills maintain discipline under pressure |
+| `envoy:envoy-authoring` | Meta-skill entry point for authoring/testing Envoy — routes to the 4 skills below plus dispatching-parallel-agents |
+| `envoy:search-first` | Before implementing, check if solution already exists (internal to envoy-authoring) |
+| `envoy:eval-harness` | Test whether a skill behaves correctly across scenarios (internal to envoy-authoring) |
+| `envoy:pressure-test-scenarios` | Testing whether skills maintain discipline under pressure (internal to envoy-authoring) |
 
 ## Execution & Orchestration
 
 | Skill | Trigger |
 |-------|---------|
-| `envoy:dispatching-parallel-agents` | 2+ independent tasks without shared state |
+| `envoy:dispatching-parallel-agents` | 2+ independent tasks without shared state (internal to envoy-authoring) |
 | `envoy:systematic-debugging` | Bug, test failure, or unexpected behavior |
 | `envoy:test-driven-development` | Implementing any feature or bugfix |
 
@@ -57,7 +58,7 @@ Envoy includes 26 skills organized by purpose.
 | `envoy:wiki-sync` | After updating documentation in docs/wiki/ |
 | `envoy:costs` | View token usage and estimated costs for this project |
 | `envoy:using-envoy` | Starting any conversation (auto-loaded) |
-| `envoy:writing-skills` | Creating or editing Envoy skills |
+| `envoy:writing-skills` | Creating or editing Envoy skills (internal to envoy-authoring) |
 
 ## Skill Types
 
