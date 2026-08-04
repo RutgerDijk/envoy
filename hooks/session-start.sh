@@ -2,11 +2,20 @@
 # Envoy Session Start Hook
 # Injects the using-envoy skill and auto-detects stack profiles
 
-# Prevent terminal escape sequences from leaking through
+# Capture the SessionStart payload (has the trigger: startup|resume|clear|compact)
+# before redirecting stdin to /dev/null so escape sequences can't leak through.
+HOOK_INPUT=$(cat 2>/dev/null || true)
 exec < /dev/null
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
+
+HOOK_SOURCE=$(HOOK_INPUT="$HOOK_INPUT" node -e '
+  try {
+    const s = JSON.parse(process.env.HOOK_INPUT || "{}");
+    process.stdout.write(s.source || "");
+  } catch (_e) {}
+' 2>/dev/null)
 
 # Function to escape content for JSON
 escape_json() {
@@ -162,6 +171,36 @@ Load full state with: \`const session = require('./lib/session-state').load()\`
 To clear after branch is done: \`require('./lib/session-state').clear()\`"
 fi
 
+# Compaction-resume nudge: on a resume trigger, if the most recent ledger
+# event is a pre-compact that recorded an active skill, surface an explicit
+# nudge to re-invoke it — after compaction the skill's full discipline rules
+# may have been trimmed from context.
+RESUME_NUDGE=""
+if [ "$HOOK_SOURCE" = "resume" ] && [ -f ".envoy/ledger.jsonl" ]; then
+    RESUME_NUDGE=$(node -e '
+      try {
+        const { tailLedger } = require(process.argv[1]);
+        const events = tailLedger(process.cwd(), 1);
+        const last = events[events.length - 1];
+        if (last && last.type === "pre-compact" && last.activeSkill) {
+          const issuePart = (last.issueNumber !== undefined && last.issueNumber !== null)
+            ? " (issue #" + last.issueNumber + ")"
+            : "";
+          process.stdout.write(
+            "⚠ Resuming after compaction — re-invoke envoy:" + last.activeSkill +
+            " now to restore its full discipline rules" + issuePart + "."
+          );
+        }
+      } catch (_err) {}
+    ' "$PLUGIN_DIR/lib/ledger" 2>/dev/null)
+fi
+
+if [ -n "$RESUME_NUDGE" ]; then
+    RESUME_NUDGE="---
+
+**$RESUME_NUDGE**"
+fi
+
 # Recent workflow record from the durable ledger (trust the record over recollection)
 WORKFLOW_RECORD=""
 if [ -f ".envoy/ledger.jsonl" ]; then
@@ -218,6 +257,7 @@ $ROUTING_TABLE
 $STACK_INFO
 $SESSION_STATE
 $WORKFLOW_RECORD
+$RESUME_NUDGE
 </EXTREMELY_IMPORTANT>"
 
 # Escape for JSON
