@@ -66,6 +66,16 @@
             "_profiles": ["standard", "strict"]
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" post-edit-accumulator",
+            "_profiles": ["standard", "strict"]
+          }
+        ]
       }
     ],
     "PreCompact": [
