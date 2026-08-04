@@ -10,7 +10,7 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 - `stacks/` — Technology profiles (best practices, common mistakes, review checklists)
 - `agents/` — Specialized agent definitions for code review, testing, security
 - `hooks/` — Session lifecycle hooks and automation (see Hooks section)
-- `lib/` — Shared Node.js utilities (skills-core.js, stack-loader.js) — changes here affect ALL skills and hooks
+- `lib/` — Shared Node.js utilities (stack-loader.js, ledger.js, etc.) — changes here affect ALL skills and hooks
 - `contexts/` — Phase-specific context fragments (review.md, implement.md, research.md)
 - `adapters/copilot/` — GitHub Copilot integration (prompts, instructions, agents)
 - `templates/` — Example artifacts (plan docs, spec docs, issue templates)

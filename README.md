@@ -75,7 +75,6 @@ envoy/
 │   ├── coderabbit-patterns.md  # Cross-PR CodeRabbit categories
 │   └── corrections.md          # Team coding preferences
 ├── lib/                   # Shared utilities
-│   ├── skills-core.js     # Skill discovery & shadowing
 │   ├── stack-loader.js    # Stack detection, selective loading
 │   ├── coderabbit-parser.js    # Regex-first CodeRabbit comment parser
 │   ├── learning-loader.js      # Load confirmed patterns & corrections
