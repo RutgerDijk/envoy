@@ -46,6 +46,8 @@ fi
 
 ### Step 11: Report
 
+Announce: `Running Step 11: Report...`
+
 ```
 **Branch finalized**
 
