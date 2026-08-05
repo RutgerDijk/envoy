@@ -216,5 +216,70 @@ test('malformed stdin → exit 0, no crash', () => {
   }
 });
 
+section('regex scope: collection endpoint only, not existing-issue operations (PR #75 review)');
+
+test('POST to /issues/<n>/comments (existing issue) is NOT treated as issue-create, even with session.json present', () => {
+  const tmp = mkTmp();
+  try {
+    writeSession(tmp, 42);
+    const r = runGate(tmp, bashEvent('gh api repos/acme/widgets/issues/42/comments -X POST -f body="hi"'));
+    assert.strictEqual(r.status, 0, `expected exit 0 (unrelated command), got ${r.status}\n${r.stderr}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('POST to /issues/<n>/labels (existing issue) is NOT treated as issue-create', () => {
+  const tmp = mkTmp();
+  try {
+    writeSession(tmp, 7);
+    const r = runGate(tmp, bashEvent('gh api repos/acme/widgets/issues/7/labels -X POST -f labels[]=bug'));
+    assert.strictEqual(r.status, 0, `expected exit 0 (unrelated command), got ${r.status}\n${r.stderr}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('POST to the bare /issues collection endpoint is still blocked (regression guard)', () => {
+  const tmp = mkTmp();
+  try {
+    writeSession(tmp, 7);
+    const r = runGate(tmp, bashEvent('gh api repos/acme/widgets/issues -X POST -f title="dup"'));
+    assert.strictEqual(r.status, 2, `expected exit 2 (collection endpoint), got ${r.status}\n${r.stderr}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+section('corrective message robustness: malformed session.json (PR #75 review)');
+
+test('malformed session.json still blocks, but never prints literal "#undefined" in the corrective message', () => {
+  const tmp = mkTmp();
+  try {
+    const dir = path.join(tmp, '.envoy', 'brainstorm');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'session.json'), 'not valid json {{{');
+    const r = runGate(tmp, bashEvent('gh issue create --title "x" --body "y"'));
+    assert.strictEqual(r.status, 2, `expected exit 2 (still unconditional block), got ${r.status}\n${r.stderr}`);
+    assert.ok(!r.stderr.includes('#undefined'), `stderr must not leak "#undefined": ${r.stderr}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('session.json missing issueNumber field still blocks, no "#undefined" leak', () => {
+  const tmp = mkTmp();
+  try {
+    const dir = path.join(tmp, '.envoy', 'brainstorm');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify({ $schemaVersion: '1' }));
+    const r = runGate(tmp, bashEvent('gh issue create --title "x" --body "y"'));
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    assert.ok(!r.stderr.includes('#undefined'), `stderr must not leak "#undefined": ${r.stderr}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 process.stdout.write(`\n\x1b[1m${passed} passed, ${failed} failed\x1b[0m\n`);
 process.exit(failed === 0 ? 0 : 1);
