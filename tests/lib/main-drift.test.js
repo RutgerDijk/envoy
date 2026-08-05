@@ -115,6 +115,11 @@ function makeScratchRepo() {
   // Simulate a remote by using a bare clone that we push origin/main to.
   const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-main-drift-remote-'));
   execFileSync('git', ['init', '-q', '--bare', remoteDir]);
+  // A bare repo's default branch (HEAD symref) is set at init time from
+  // init.defaultBranch, independent of which refs get pushed to it later —
+  // explicit here so any test that clones this remote checks out `main`
+  // regardless of the machine/CI runner's global git config.
+  execFileSync('git', ['--git-dir', remoteDir, 'symbolic-ref', 'HEAD', 'refs/heads/main']);
   git(['remote', 'add', 'origin', remoteDir]);
   git(['push', '-q', 'origin', 'main']);
   return { dir, git };
@@ -198,6 +203,13 @@ test('picks up commits pushed to origin AFTER the local clone, without a manual 
   const gitOther = (args) => execFileSync('git', args, { cwd: otherClone, stdio: 'pipe' }).toString();
   gitOther(['config', 'user.email', 'test@example.com']);
   gitOther(['config', 'user.name', 'Test']);
+  // A fresh clone checks out whichever branch the bare remote's HEAD symref
+  // points to — that depends on the machine's init.defaultBranch config at
+  // the time the bare remote was created, NOT on which refs exist. Force
+  // onto refs/heads/main explicitly so this test is hermetic against that
+  // config (this is exactly what broke CI: passed locally where
+  // init.defaultBranch=main, failed on a runner where it doesn't).
+  gitOther(['checkout', '-B', 'main', 'origin/main']);
   fs.writeFileSync(path.join(otherClone, 'base.txt'), 'main change from elsewhere\n');
   gitOther(['add', '.']);
   gitOther(['commit', '-q', '-m', 'main also touches base.txt, pushed from elsewhere']);
