@@ -18,6 +18,7 @@ const PRE_COMPACT = path.join(REPO_ROOT, 'hooks', 'pre-compact.js');
 const HOOK_RUNNER = path.join(REPO_ROOT, 'hooks', 'hook-runner.js');
 const SESSION_START = path.join(REPO_ROOT, 'hooks', 'session-start.sh');
 const { appendEvent, readLedger } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
+const { writeActiveSkill, clearActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 
 let passed = 0;
 let failed = 0;
@@ -41,22 +42,22 @@ function mkTmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-hooks-'));
 }
 
-function runPreCompact(cwd, script) {
+function runPreCompact(cwd, script, session) {
   return spawnSync('node', [script], {
     cwd,
     encoding: 'utf8',
     input: JSON.stringify({ hook_event_name: 'PreCompact', trigger: 'auto', cwd }),
-    env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT },
+    env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT, ...(session ? { CLAUDE_SESSION_ID: session } : {}) },
   });
 }
 
-function runSessionStart(cwd) {
+function runSessionStart(cwd, source, session) {
   return execFileSync('bash', [SESSION_START], {
     cwd,
     encoding: 'utf8',
     timeout: 30000,
-    input: JSON.stringify({ hook_event_name: 'SessionStart', source: 'startup', session_id: 'test', cwd }),
-    env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT },
+    input: JSON.stringify({ hook_event_name: 'SessionStart', source: source || 'startup', session_id: 'test', cwd }),
+    env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT, ...(session ? { CLAUDE_SESSION_ID: session } : {}) },
   });
 }
 
@@ -141,6 +142,124 @@ test('no ledger → output is still valid JSON and unchanged (no framing)', () =
     const ctx = parsed.hookSpecificOutput.additionalContext;
     assert.ok(!/Recent workflow record/.test(ctx), 'framing must be absent when no ledger exists');
     assert.ok(ctx.includes('EXTREMELY_IMPORTANT'), 'bootstrap wrapper must still be present');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+section('pre-compact records the active skill from .envoy/active-skill.json');
+
+test('pre-compact event includes activeSkill + issueNumber when marker present', () => {
+  const tmp = mkTmp();
+  try {
+    writeActiveSkill(tmp, { skill: 'pickup', issueNumber: 74 }, { branch: 'unknown', session: 'test-session-74' });
+    const r = runPreCompact(tmp, PRE_COMPACT, 'test-session-74');
+    assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    const events = readLedger(tmp);
+    const evt = events.find((e) => e.type === 'pre-compact');
+    assert.ok(evt, 'no pre-compact event appended');
+    assert.strictEqual(evt.activeSkill, 'pickup', 'activeSkill not recorded');
+    assert.strictEqual(evt.issueNumber, 74, 'issueNumber not recorded');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('pre-compact event omits activeSkill when no marker present', () => {
+  const tmp = mkTmp();
+  try {
+    const r = runPreCompact(tmp, PRE_COMPACT);
+    assert.strictEqual(r.status, 0);
+    const events = readLedger(tmp);
+    const evt = events.find((e) => e.type === 'pre-compact');
+    assert.ok(evt, 'no pre-compact event appended');
+    assert.strictEqual(evt.activeSkill, undefined, 'activeSkill should be absent without a marker');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+section('session-start nudges re-invocation after a compaction on resume');
+
+test('resume trigger + pre-compact ledger event with activeSkill + live marker → nudge printed', () => {
+  const tmp = mkTmp();
+  try {
+    appendEvent(tmp, { type: 'pre-compact', activeSkill: 'pickup', issueNumber: 74 });
+    writeActiveSkill(tmp, { skill: 'pickup', issueNumber: 74 }, { branch: 'unknown', session: 'test-session-printed' });
+    const parsed = JSON.parse(runSessionStart(tmp, 'resume', 'test-session-printed'));
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    assert.ok(/Resuming after compaction/i.test(ctx), 'resume nudge missing');
+    assert.ok(ctx.includes('envoy:pickup'), 'nudge must name the active skill');
+    assert.ok(ctx.includes('74'), 'nudge must include the issue number');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('startup trigger (not resume) → no nudge even with a pre-compact event', () => {
+  const tmp = mkTmp();
+  try {
+    appendEvent(tmp, { type: 'pre-compact', activeSkill: 'pickup', issueNumber: 74 });
+    const parsed = JSON.parse(runSessionStart(tmp, 'startup'));
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    assert.ok(!/Resuming after compaction/i.test(ctx), 'nudge must not fire on plain startup');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('resume trigger but no pre-compact event → no nudge', () => {
+  const tmp = mkTmp();
+  try {
+    appendEvent(tmp, { type: 'skill-started', skill: 'pickup' });
+    const parsed = JSON.parse(runSessionStart(tmp, 'resume'));
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    assert.ok(!/Resuming after compaction/i.test(ctx), 'nudge must not fire without a pre-compact event');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('resume trigger + pre-compact event but stale/missing active-skill marker → no nudge', () => {
+  const tmp = mkTmp();
+  try {
+    // Ledger tail says a skill was active at compaction time, but no live
+    // marker exists (never re-written, or expired) — the marker, not the
+    // raw ledger tail, is the source of truth for "still relevant".
+    appendEvent(tmp, { type: 'pre-compact', activeSkill: 'pickup', issueNumber: 74 });
+    clearActiveSkill(tmp);
+    const parsed = JSON.parse(runSessionStart(tmp, 'resume', 'test-session-stale'));
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    assert.ok(!/Resuming after compaction/i.test(ctx), 'nudge must not fire when active-skill marker is stale/missing');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('resume trigger + pre-compact event + marker on a different branch → no nudge', () => {
+  const tmp = mkTmp();
+  try {
+    appendEvent(tmp, { type: 'pre-compact', activeSkill: 'pickup', issueNumber: 74 });
+    // Marker was written under a different branch than the one session-start
+    // will resolve for tmp (git repo not initialized here → 'unknown'), so
+    // stamp a mismatching branch explicitly.
+    writeActiveSkill(tmp, { skill: 'pickup', issueNumber: 74 }, { branch: 'some-other-branch', session: 'test-session-branch' });
+    const parsed = JSON.parse(runSessionStart(tmp, 'resume', 'test-session-branch'));
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    assert.ok(!/Resuming after compaction/i.test(ctx), 'nudge must not fire when marker branch does not match current branch');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('resume trigger + pre-compact event + live matching marker → nudge fires', () => {
+  const tmp = mkTmp();
+  try {
+    appendEvent(tmp, { type: 'pre-compact', activeSkill: 'pickup', issueNumber: 74 });
+    writeActiveSkill(tmp, { skill: 'pickup', issueNumber: 74 }, { branch: 'unknown', session: 'test-session-live' });
+    const parsed = JSON.parse(runSessionStart(tmp, 'resume', 'test-session-live'));
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    assert.ok(/Resuming after compaction/i.test(ctx), 'nudge must fire when marker is live and matches');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

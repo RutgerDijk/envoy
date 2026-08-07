@@ -21,7 +21,9 @@ const path = require('path');
 
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..');
 const { readActiveSkill } = require(path.join(PLUGIN_ROOT, 'lib', 'active-skill'));
-const { evaluateAgentGuard, evaluateStopAudit } = require(path.join(PLUGIN_ROOT, 'lib', 'contract-guard'));
+const { evaluateAgentGuard, evaluateStopAudit, evaluateIssueCreateGuard } = require(
+  path.join(PLUGIN_ROOT, 'lib', 'contract-guard')
+);
 
 /**
  * Append one observe record to .envoy/observe-log.jsonl under `cwd`.
@@ -98,4 +100,79 @@ function observe(gate, data) {
   }
 }
 
-module.exports = { observe, appendObserveLog };
+/**
+ * Guard `gh issue create` (and the `gh api repos/*\/issues -X POST` bypass)
+ * during a brainstorm run. Independent of the active-skill marker used by
+ * `observe()` — this gate reasons directly about `.envoy/brainstorm/`.
+ *
+ * Two behaviors:
+ *  - DUPLICATE (unconditional): a second issue create after
+ *    .envoy/brainstorm/session.json already records one — ALWAYS blocks
+ *    (exit 2), regardless of ENVOY_HOOK_PROFILE. This case is ARMED, not
+ *    observe-only.
+ *  - UNAPPROVED (toggled): issue create without
+ *    .envoy/brainstorm/issue-plan-approved.json — logs a would-block record
+ *    and exits 0 in observe (default) mode, exits 2 under
+ *    ENVOY_HOOK_PROFILE=strict (mirroring `observe()`'s strict handling,
+ *    including the ENVOY_OVERRIDE escape hatch).
+ *
+ * FAIL-OPEN: any error is swallowed and we return 0.
+ * @param {string} cwd
+ * @param {string} data raw stdin payload (the Bash PreToolUse event JSON)
+ * @returns {number} exit code: 0 to allow, 2 to block
+ */
+function guardIssueCreate(cwd, data) {
+  try {
+    let event = {};
+    try {
+      event = JSON.parse(data || '{}');
+    } catch {
+      return 0; // malformed event — fail open
+    }
+
+    const toolName = event.tool_name || event.toolName;
+    if (toolName !== 'Bash') return 0;
+
+    const toolInput = event.tool_input || event.toolInput || {};
+    const command = toolInput.command || '';
+
+    const decision = evaluateIssueCreateGuard(cwd, command);
+    if (!decision.block) return 0;
+
+    if (decision.unconditional) {
+      appendObserveLog(cwd, {
+        ts: new Date().toISOString(),
+        gate: 'issue-create-guard',
+        kind: 'duplicate',
+        reason: decision.reason,
+      });
+      process.stderr.write(`Envoy issue-create-guard blocked (duplicate issue create): ${decision.reason}\n`);
+      return 2; // ARMED — ignores ENVOY_HOOK_PROFILE entirely
+    }
+
+    const record = {
+      ts: new Date().toISOString(),
+      gate: 'issue-create-guard',
+      kind: 'unapproved',
+      reason: decision.reason,
+    };
+    appendObserveLog(cwd, record);
+
+    if (process.env.ENVOY_HOOK_PROFILE === 'strict') {
+      const ov = (process.env.ENVOY_OVERRIDE || '').trim().toLowerCase();
+      if (ov !== '' && ov !== '0' && ov !== 'false') {
+        appendObserveLog(cwd, { kind: 'override', ...record });
+        return 0;
+      }
+      process.stderr.write(
+        `Envoy issue-create-guard (strict) blocked: ${decision.reason}. To override: set ENVOY_OVERRIDE=1 and retry.\n`
+      );
+      return 2;
+    }
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
+module.exports = { observe, guardIssueCreate, appendObserveLog };

@@ -21,23 +21,55 @@ Verify UI changes using Chrome DevTools MCP integration. Takes screenshots, chec
 
 ### Step 1: Start Application
 
+Envoy is a generic plugin — it does not assume a .NET+React layout. Detect
+and manage the dev server via `lib/dev-server.js`:
+
+**1a. Check if the target URL is already responding.**
+
 ```bash
-# Start backend (in background)
-cd backend && dotnet run &
-BACKEND_PID=$!
-
-# Start frontend (in background)
-cd frontend && npm run dev &
-FRONTEND_PID=$!
-
-# Wait for startup
-echo "Waiting for services to start..."
-sleep 10
-
-# Verify services are running
-curl -s http://localhost:5000/health || echo "Backend not ready"
-curl -s http://localhost:5173 || echo "Frontend not ready"
+node -e "console.log(require('./lib/dev-server').isAlreadyRunning(process.argv[1]))" "$TARGET_URL"
 ```
+
+If `true`, do nothing further in this step — use what's already running.
+Never start a second instance, and never plan to stop it in Cleanup (we
+didn't start it).
+
+**1b. If not responding, detect how to start it and start it.**
+
+```bash
+node -e "
+const { detectStartCommand, startServer, waitForReady, writePidFile } = require('./lib/dev-server');
+(async () => {
+  const detected = detectStartCommand(process.cwd());
+  if (!detected) {
+    console.error('No dev server detected: no .envoy/visual.json override and no package.json scripts.dev/start.');
+    process.exit(1);
+  }
+  const child = startServer(detected.command, detected.cwd);
+  writePidFile(process.cwd(), child.pid);
+  const url = detected.url || process.argv[1];
+  const ready = await waitForReady(url, 90000);
+  if (!ready) {
+    console.error('Dev server did not become ready within 90s: ' + url);
+    process.exit(1);
+  }
+  console.log('Ready: ' + url);
+})();
+" "$TARGET_URL"
+```
+
+`detectStartCommand` checks `.envoy/visual.json` first (override shape:
+`{"command": "npm run custom-dev", "url": "http://localhost:3000", "cwd": "frontend"}`
+— `cwd` is relative to repo root, for monorepos where the frontend lives in
+a subdirectory), then falls back to `package.json` `scripts.dev` (preferred)
+or `scripts.start`.
+
+The PID is written to `.envoy/visual-review/server.pid` — this is the "did
+WE start this" marker read back in Cleanup, so a pre-existing server the
+user was already running is never killed.
+
+**1c. If detection fails**, ask the user for the start command instead of
+guessing.
 
 ### Step 2: Identify Pages to Verify
 
@@ -254,11 +286,22 @@ Warning: Each child in a list should have a unique "key" prop.
 
 ## Cleanup
 
-After visual review:
+After visual review, stop the server ONLY if this skill started it (checked
+via the PID file written in Step 1 — a server the user already had running
+is never touched):
 
 ```bash
-# Stop services
-kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
+node -e "
+const { readPidFile, stopServer, clearPidFile } = require('./lib/dev-server');
+const pid = readPidFile(process.cwd());
+if (pid) {
+  stopServer(pid);
+  clearPidFile(process.cwd());
+  console.log('Stopped dev server (pid ' + pid + ') started by visual-review.');
+} else {
+  console.log('No server was started by visual-review — nothing to stop.');
+}
+"
 ```
 
 ## Common Issues
@@ -267,22 +310,19 @@ kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
 
 ```
 Check:
-1. Is the frontend dev server running?
+1. Did Step 1's dev-server detection find a start command? (`.envoy/visual.json` or package.json scripts.dev/start)
 2. Is the correct URL being used?
-3. Are there build errors?
-
-Run: npm run dev (in frontend directory)
+3. Are there build errors — check the dev server's own logs?
 ```
 
 ### Network Requests Failing
 
 ```
 Check:
-1. Is the backend running?
+1. Is the backend/API server running (start it the same way, or add it to .envoy/visual.json)?
 2. Is the API URL configured correctly?
 3. Are there CORS issues?
 
-Run: dotnet run (in backend directory)
 Check: Browser DevTools Network tab
 ```
 

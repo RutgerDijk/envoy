@@ -112,6 +112,11 @@ cd .worktrees/<N>-$TOPIC
 # Guard: abort before any .envoy/ write if we're not actually inside this worktree
 # (fixes #1560 — a write from the main checkout would strand or clobber state).
 node -e "const ws=require('${CLAUDE_SKILL_DIR}/../../lib/worktree-state'),fs=require('fs'); ws.assertInWorktree(fs.readFileSync('.envoy/expected-worktree','utf8').trim())"
+
+# Identify the worktree's terminal tab: OSC 0 sets both icon name and window
+# title. Guarded on [ -t 1 ] so this never pollutes piped output or hook logs
+# (e.g. this whole pickup run invoked non-interactively as a subagent).
+[ -t 1 ] && printf '\033]0;#%s %s\007' "<N>" "$TOPIC"
 ```
 
 ### Step 6: Detect Stack Profiles

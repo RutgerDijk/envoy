@@ -30,17 +30,17 @@ function test(name, fn) {
 
 const ROOT = path.join(__dirname, '..', '..');
 const SKILL = path.join(ROOT, 'skills', 'hotfix', 'SKILL.md');
-const COMMAND = path.join(ROOT, 'commands', 'hotfix.md');
 
 test('skill file exists', () => {
   assert.ok(fs.existsSync(SKILL), 'skills/hotfix/SKILL.md must exist');
 });
 
-test('command file registers /envoy:hotfix', () => {
-  assert.ok(fs.existsSync(COMMAND), 'commands/hotfix.md must exist');
-  const cmd = fs.readFileSync(COMMAND, 'utf8');
-  assert.ok(/name:\s*hotfix/.test(cmd), 'command frontmatter names hotfix');
-  assert.ok(/envoy:hotfix/.test(cmd), 'command points at the hotfix skill');
+test('skill frontmatter registers /envoy:hotfix (no commands/ wrapper needed)', () => {
+  const skillContent = fs.readFileSync(SKILL, 'utf8');
+  assert.ok(
+    /^---[\s\S]*?\nname:\s*hotfix\b/.test(skillContent),
+    'skill frontmatter name: hotfix produces /envoy:hotfix'
+  );
 });
 
 const skill = fs.existsSync(SKILL) ? fs.readFileSync(SKILL, 'utf8') : '';

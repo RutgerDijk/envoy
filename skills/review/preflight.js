@@ -17,6 +17,7 @@ const CWD = process.cwd();
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
 const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
 const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
+const { detectStacksFromDiff, anyFrontendStack } = require(path.join(REPO_ROOT, 'lib', 'stack-loader'));
 
 function say(line) { process.stdout.write(`${line}\n`); }
 function banner(tier) { say(`## STATUS: ${tier}`); }
@@ -81,6 +82,19 @@ function main() {
     if (!gitHasSha(handoff.headSha)) warnings.push(`headSha ${handoff.headSha} not found in current repo`);
   }
 
+  // Frontend detection (Task 13): if the diff touches any frontend-stack
+  // file (react, tailwind, shadcn-radix, react-query, react-hook-form),
+  // Layer 2 (visual) is required regardless of complexity tier. Best-effort
+  // — a detection failure must never block review, so this stays fail-soft.
+  let frontendDetected = false;
+  let detectedStacks = [];
+  try {
+    detectedStacks = detectStacksFromDiff(handoff.baseSha, CWD);
+    frontendDetected = anyFrontendStack(detectedStacks);
+  } catch {
+    frontendDetected = false;
+  }
+
   writeJson('.envoy/active-skill.json', {
     $schemaVersion: '1',
     skill: 'review',
@@ -88,6 +102,8 @@ function main() {
     branch: handoff.branch,
     startedAt: nowIso(),
     pid: process.pid,
+    frontendDetected,
+    detectedStacks,
   });
   appendEvent(CWD, { type: 'skill-started', skill: 'review', issue: handoff.issueNumber });
 
@@ -110,6 +126,10 @@ function main() {
   say(`Diff range: ${handoff.baseSha}..${handoff.headSha}`);
   if (handoff.stackProfiles && handoff.stackProfiles.length) {
     say(`Stack profiles: ${handoff.stackProfiles.join(', ')}`);
+  }
+  if (frontendDetected) {
+    say('');
+    say(`Frontend stack detected in diff (${detectedStacks.filter((s) => ['react', 'shadcn-radix', 'react-query', 'react-hook-form', 'tailwind'].includes(s)).join(', ')}) — Layer 2 (visual) is REQUIRED regardless of complexity tier.`);
   }
   say('');
   say('Next: run pre-review setup from skills/review/SKILL.md, then proceed layer by layer (layers/lint.md, layers/cleanup.md, …).');

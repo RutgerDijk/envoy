@@ -123,7 +123,7 @@ Each layer is documented in its own file. Execute them in order for the tier:
 | 0: Lint | `layers/lint.md` | All tiers |
 | 0.5: Cleanup | `layers/cleanup.md` | All tiers except trivial |
 | 1: AI Review | `layers/ai-review.md` | Small+ tiers |
-| 2: Visual | `layers/visual.md` | Medium+ tiers |
+| 2: Visual | `layers/visual.md` | Medium+ tiers, **OR forced on for any tier when the diff touches a frontend stack** (see below) |
 | 3: Docs | `layers/docs.md` | Medium+ tiers |
 
 ## Complexity Tier Mapping
@@ -136,6 +136,23 @@ Each layer is documented in its own file. Execute them in order for the tier:
 | Large | 0, 0.5, 1 (deep), 2, 3 |
 
 "Deep" Layer 1 for Large tier means: increase iterative retrieval to full 3 cycles, expand to 'skim' relevance files, and follow additional import chain hops.
+
+### Layer 2 is mandatory on frontend diffs, independent of tier
+
+Preflight (`skills/review/preflight.js`) runs `detectStacksFromDiff()`
+(`lib/stack-loader.js`) against the diff and writes `frontendDetected` +
+`detectedStacks` into `.envoy/active-skill.json`. If `frontendDetected` is
+`true` — the diff touches a frontend stack (react, tailwind, shadcn-radix,
+react-query, react-hook-form) — Layer 2 (`layers/visual.md`) runs even for
+Trivial/Small tiers that wouldn't normally include it. This is additive:
+tiers that already run Layer 2 (Medium/Large) are unaffected.
+
+A Trivial/Small-tier diff that only touches a React component no longer
+skips visual review purely because of its tier.
+
+If Layer 2 still can't actually run (no Chrome MCP, no reachable dev
+server), it is not silently skipped — see "If the layer cannot run" in
+`layers/visual.md` for the loud-warning + observe-log requirement.
 
 ---
 
@@ -150,14 +167,18 @@ Each layer is documented in its own file. Execute them in order for the tier:
 | 0.5: Cleanup | ✓ / ⊘ | N items removed |
 | 0.5 re-run | ✓ / ⊘ | N items removed (after L1 fixes) |
 | 1: AI Review | ✓ / ⊘ | N findings, N fixed |
-| 2: Visual | ✓ / ⊘ | N issues found |
+| 2: Visual | ✓ / ⊘ / ⚠ | N issues found |
 | 3: Docs | ✓ / ⊘ | N APIs documented |
 
 Complexity: <tier>
 Ready for: /envoy:finalize
 ```
 
-Use ⊘ for layers that were skipped due to tier.
+Use ⊘ for layers that were skipped due to tier. Layer 2 gets ⚠ instead of ⊘
+when it was required (tier or `frontendDetected`) but could not actually run
+(no Chrome MCP / no reachable server) — see `layers/visual.md`; this must
+also print the loud `⚠ visual layer SKIPPED on frontend diff` line and log
+to `.envoy/observe-log.jsonl`.
 
 ## Write the finalize handoff
 

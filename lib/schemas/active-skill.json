@@ -11,6 +11,8 @@
     "branch": { "type": "string" },
     "session": { "type": "string" },
     "startedAt": { "type": "string" },
-    "pid": { "type": "number" }
+    "pid": { "type": "number" },
+    "frontendDetected": { "type": "boolean" },
+    "detectedStacks": { "type": "array" }
   }
 }

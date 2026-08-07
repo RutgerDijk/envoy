@@ -309,7 +309,7 @@ Can't check all boxes? **You skipped TDD. Start over.**
 - `envoy:pickup` — TDD enforced per task during implementation
 - `envoy:systematic-debugging` — Write failing test to prove bug exists
 - `envoy:verification` — Verify all tests pass before claiming done
-- `envoy:pressure-test-scenarios` — Scenarios 4, 5 test TDD discipline
+- `envoy:envoy-authoring` (pressure-test-scenarios step) — Scenarios 4, 5 test TDD discipline
 
 **Stack profiles:**
 - `../../stacks/testing-dotnet.md` — xUnit, Moq, FluentAssertions patterns

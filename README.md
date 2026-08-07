@@ -75,7 +75,6 @@ envoy/
 │   ├── coderabbit-patterns.md  # Cross-PR CodeRabbit categories
 │   └── corrections.md          # Team coding preferences
 ├── lib/                   # Shared utilities
-│   ├── skills-core.js     # Skill discovery & shadowing
 │   ├── stack-loader.js    # Stack detection, selective loading
 │   ├── coderabbit-parser.js    # Regex-first CodeRabbit comment parser
 │   ├── learning-loader.js      # Load confirmed patterns & corrections
@@ -86,7 +85,6 @@ envoy/
 │   ├── implement.md            # Implementation phase constraints
 │   ├── research.md             # Research phase constraints
 │   └── iterative-retrieval.md  # Multi-cycle retrieval protocol
-├── commands/              # Entry points for /envoy:* commands
 ├── agents/                # Specialized agent definitions
 ├── skills/                # 23 workflow skills
 ├── stacks/                # 26 technology profiles
@@ -310,7 +308,7 @@ The `pickup` skill includes rationalization counters:
 
 ## Skills
 
-Envoy includes 26 skills:
+Envoy includes 23 skills:
 
 ### Core Workflow (5 phases)
 
@@ -344,14 +342,12 @@ Envoy includes 26 skills:
 
 | Skill | When to Use |
 |-------|-------------|
-| `envoy:search-first` | Before implementing, check if solution already exists |
-| `envoy:eval-harness` | Test whether a skill behaves correctly across scenarios |
+| `envoy:envoy-authoring` | Authoring/testing Envoy itself — search-first, writing/editing skills, eval-harness, pressure-test-scenarios, dispatching-parallel-agents (all steps of this one skill) |
 
 ### Execution & Orchestration
 
 | Skill | When to Use |
 |-------|-------------|
-| `envoy:dispatching-parallel-agents` | Multiple independent tasks |
 | `envoy:systematic-debugging` | Bug, test failure, or unexpected behavior |
 | `envoy:test-driven-development` | Implementing any feature or bugfix |
 
@@ -364,8 +360,6 @@ Envoy includes 26 skills:
 | `envoy:wiki-sync` | Documentation updated |
 | `envoy:fix-ci` | CI/CD checks fail on a PR |
 | `envoy:using-envoy` | Discover available skills |
-| `envoy:writing-skills` | Create new Envoy skills |
-| `envoy:pressure-test-scenarios` | Test skill discipline under pressure |
 | `envoy:costs` | View token usage and cost analytics |
 
 ## Stack Profiles
