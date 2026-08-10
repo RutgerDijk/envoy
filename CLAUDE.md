@@ -100,9 +100,13 @@ not through prose conventions. Two locations:
   Conforms to `lib/schemas/tasks.json`. The durable copy is the machine
   block embedded in the GitHub issue; pickup materializes the local file
   from it, so task handoff makes no commits.
+- `.envoy-session.json` — **gitignored**, repo-root. The live, continuously-updated
+  session state (`lib/session-state.js`: task status, decisions, chosen worker
+  model, next steps). Written throughout a pickup/review run and read by
+  `hooks/session-start.sh` to restore context on resume.
 - `.envoy/` — **gitignored** runtime state:
   - `.envoy/active-skill.json` (which skill currently owns the session)
-  - `.envoy/pickup/session.json` (replaces the retired `.envoy-session.json`)
+  - `.envoy/pickup/session.json` (preflight-seeded snapshot of the task list at pickup start — write-once, not updated afterward)
   - `.envoy/pickup/handoff-to-review.json`
   - `.envoy/review/handoff-to-finalize.json`
   - `.envoy/finalize/state.json` (replaces the retired `/tmp/envoy-active-pr.txt`)
