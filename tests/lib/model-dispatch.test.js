@@ -22,6 +22,7 @@ const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { execFileSync } = require('child_process');
 
 let passed = 0;
 let failed = 0;
@@ -50,7 +51,11 @@ const {
   KIMI_MODEL_ID,
   KIMI_BASE_URL,
   KIMI_API_KEY_ENV,
+  DEFAULT_ALLOWED_TOOLS,
+  SETTINGS_FILE_MODE,
+  sanitizeTaskId,
   dispatch,
+  isKimiConfigured,
   checkKimi,
   installKimi,
 } = require(path.join(LIB, 'model-dispatch'));
@@ -141,7 +146,7 @@ test('command sets ANTHROPIC_BASE_URL to the Moonshot Anthropic-compatible endpo
 test('command sets ANTHROPIC_MODEL to kimi-k2.5', () => {
   const cwd = makeTmpDir();
   const result = dispatch({ model: 'kimi', prompt: 'p', taskId: 'task-11' }, { cwd });
-  assert.ok(result.command.includes(`ANTHROPIC_MODEL="${KIMI_MODEL_ID}"`) || result.command.includes(`ANTHROPIC_MODEL=${KIMI_MODEL_ID}`));
+  assert.ok(new RegExp(`ANTHROPIC_MODEL=["']?${KIMI_MODEL_ID}["']?`).test(result.command));
   assert.strictEqual(KIMI_MODEL_ID, 'kimi-k2.5');
 });
 
@@ -349,6 +354,148 @@ testAsync('throws when apiKey is missing or empty', async () => {
   const dir = makeTmpDir();
   const settingsPath = path.join(dir, 'settings.json');
   await assert.rejects(() => installKimi('', { settingsPath, probe: async () => ({ ok: true }) }));
+});
+
+testAsync('leaves settings.json readable only by its owner (it now holds an API key)', async () => {
+  const dir = makeTmpDir();
+  const settingsPath = path.join(dir, 'settings.json');
+  fs.writeFileSync(settingsPath, JSON.stringify({ env: {} }), { mode: 0o644 });
+
+  await installKimi('sk-secret-key', { settingsPath, probe: async () => ({ ok: true }) });
+
+  const mode = fs.statSync(settingsPath).mode & 0o777;
+  assert.strictEqual(mode, SETTINGS_FILE_MODE);
+  assert.strictEqual(mode & 0o077, 0, 'group/other must have no access to a file holding a key');
+});
+
+testAsync('refuses to clobber a settings.json that is not valid JSON', async () => {
+  const dir = makeTmpDir();
+  const settingsPath = path.join(dir, 'settings.json');
+  const corrupt = '{ "env": { "SOME_OTHER_VAR": "keep-me" ';
+  fs.writeFileSync(settingsPath, corrupt);
+
+  await assert.rejects(
+    () => installKimi('sk-key', { settingsPath, probe: async () => ({ ok: true }) }),
+    /not valid JSON/,
+  );
+  assert.strictEqual(fs.readFileSync(settingsPath, 'utf8'), corrupt, 'the unparseable file must be left untouched');
+});
+
+testAsync('refuses to clobber a settings.json whose top level is not an object', async () => {
+  const dir = makeTmpDir();
+  const settingsPath = path.join(dir, 'settings.json');
+  fs.writeFileSync(settingsPath, '[1, 2, 3]');
+
+  await assert.rejects(
+    () => installKimi('sk-key', { settingsPath, probe: async () => ({ ok: true }) }),
+    /does not contain a JSON object/,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Tool scoping — the kimi worker runs unsupervised, so its tool surface is
+// bounded by the command, not just by prompt text.
+// ---------------------------------------------------------------------------
+
+section('tool scoping');
+
+test('kimi command passes --allowed-tools so the headless worker is mechanically bounded', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch(
+    { model: 'kimi', prompt: 'p', taskId: 'task-21', allowedTools: ['Read', 'Grep', 'Glob'] },
+    { cwd },
+  );
+  assert.ok(result.command.includes('--allowed-tools'));
+  assert.ok(result.command.includes('Read,Grep,Glob'));
+  assert.strictEqual(result.allowedTools, 'Read,Grep,Glob');
+});
+
+test('omitting allowedTools fails CLOSED — the worker is read-only, not unrestricted', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch({ model: 'kimi', prompt: 'p', taskId: 'task-22' }, { cwd });
+  assert.strictEqual(result.allowedTools, DEFAULT_ALLOWED_TOOLS.join(','));
+  for (const writable of ['Edit', 'Write', 'Bash']) {
+    assert.ok(!result.allowedTools.split(',').includes(writable), `${writable} must not be granted by default`);
+  }
+});
+
+test('a write-capable worker must ask for it explicitly', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch(
+    { model: 'kimi', prompt: 'p', taskId: 'task-23', allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob'] },
+    { cwd },
+  );
+  assert.ok(result.command.includes('Read,Edit,Write,Bash,Grep,Glob'));
+});
+
+test('the Agent path carries the same tool surface for the caller to apply', () => {
+  const result = dispatch({ model: 'sonnet', prompt: 'p', taskId: 'task-24', allowedTools: ['Read', 'Grep', 'Glob'] });
+  assert.strictEqual(result.kind, 'agent');
+  assert.strictEqual(result.allowedTools, 'Read,Grep,Glob');
+});
+
+test('a malformed tool spec is rejected rather than injected into the command', () => {
+  const cwd = makeTmpDir();
+  assert.throws(
+    () => dispatch({ model: 'kimi', prompt: 'p', taskId: 'task-25', allowedTools: ['Read; rm -rf /'] }, { cwd }),
+    /invalid tool spec/,
+  );
+  assert.throws(
+    () => dispatch({ model: 'kimi', prompt: 'p', taskId: 'task-26', allowedTools: [] }, { cwd }),
+    /at least one tool/,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Shell-quoting and task-id collisions
+// ---------------------------------------------------------------------------
+
+section('command construction hardening');
+
+test('a cwd containing shell metacharacters cannot break out of the command', () => {
+  const parent = makeTmpDir();
+  const canary = path.join(parent, 'pwned');
+  const cwd = path.join(parent, `weird $(touch ${canary}) 'dir'`);
+  fs.mkdirSync(cwd, { recursive: true });
+
+  const result = dispatch({ model: 'kimi', prompt: 'hello', taskId: 'task-27' }, { cwd });
+
+  // Run the command through a real shell with `claude` shadowed by a stub
+  // that copies stdin to stdout — if quoting were broken, the directory
+  // name's command substitution would execute and drop the canary file.
+  const binDir = path.join(parent, 'bin');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(path.join(binDir, 'claude'), '#!/bin/sh\ncat\n', { mode: 0o755 });
+  execFileSync('/bin/sh', ['-c', result.command], {
+    env: { ...process.env, PATH: `${binDir}:${process.env.PATH}`, MOONSHOT_API_KEY: 'sk-test' },
+  });
+
+  assert.ok(!fs.existsSync(canary), 'command substitution in a path must never execute');
+  assert.strictEqual(fs.readFileSync(result.outputFile, 'utf8').trim(), 'hello');
+});
+
+test('task ids that sanitize to the same string do not collide on disk', () => {
+  assert.strictEqual(sanitizeTaskId('task-1'), 'task-1', 'already-safe ids stay verbatim');
+  assert.notStrictEqual(sanitizeTaskId('task/1'), sanitizeTaskId('task-1'));
+  assert.notStrictEqual(sanitizeTaskId('a b'), sanitizeTaskId('a-b'));
+});
+
+// ---------------------------------------------------------------------------
+// isKimiConfigured() — offline label check, no Moonshot traffic
+// ---------------------------------------------------------------------------
+
+section('isKimiConfigured()');
+
+test('reports configured/unconfigured from the env alone, with no network call', () => {
+  assert.strictEqual(isKimiConfigured({ env: {} }), false);
+  assert.strictEqual(isKimiConfigured({ env: { MOONSHOT_API_KEY: '   ' } }), false);
+  assert.strictEqual(isKimiConfigured({ env: { MOONSHOT_API_KEY: 'sk-key' } }), true);
+});
+
+test('is synchronous — a menu label can never await a Moonshot round-trip', () => {
+  const result = isKimiConfigured({ env: { MOONSHOT_API_KEY: 'sk-key' } });
+  assert.strictEqual(typeof result, 'boolean');
+  assert.ok(!(result instanceof Promise));
 });
 
 async function main() {

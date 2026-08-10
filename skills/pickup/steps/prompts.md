@@ -42,7 +42,17 @@ ${TASK_GRANULARITY}
 Implement Task N: <task title>
 ...`; // full template below
 
-const descriptor = dispatch({ model: state.workerModel, prompt: implementerPrompt, taskId: task.id });
+// An implementer writes code, runs tests and commits, so it needs a
+// write-capable surface. State it explicitly: dispatch() fails CLOSED
+// (read-only) for callers that name no tools, and on the kimi path this
+// becomes a real `--allowed-tools` restriction on an unsupervised
+// background process rather than prompt text the worker may ignore.
+const descriptor = dispatch({
+  model: state.workerModel,
+  prompt: implementerPrompt,
+  taskId: task.id,
+  allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob'],
+});
 
 if (descriptor.kind === 'agent') {
   // fable/opus/sonnet/haiku — Agent tool can name the model directly.
@@ -57,12 +67,17 @@ if (descriptor.kind === 'agent') {
   // prompt to descriptor.promptFile; the command reads it via stdin
   // redirection, so no prompt text is interpolated into the command
   // string. Never build this command by hand.
-  Bash({
+  const { shell_id } = Bash({
     command: descriptor.command,
     run_in_background: true,
     description: descriptor.description,
   });
-  // Once the background process exits, read descriptor.outputFile
+  // WAIT for exit before reading. descriptor.outputFile is written
+  // incrementally, so reading it early yields a truncated report — and
+  // for a parallel wave, every task's shell must have exited before the
+  // wave's reports are merged. Poll BashOutput(shell_id) until it
+  // reports the shell has exited (or use Monitor to block on that
+  // condition), THEN read descriptor.outputFile
   // (.envoy/agent-output/<task-id>.md) as the implementer's report.
 }
 ```

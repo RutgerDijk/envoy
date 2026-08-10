@@ -140,11 +140,13 @@ if (state.workerModel) {
 
 **Ask once, kimi is opt-in, applies to both Layer 0.5 and Layer 1:**
 
-Only when `state.workerModel` is unset, call `checkKimi()` from
-`lib/model-dispatch.js` to compute the kimi menu label. `checkKimi()`
-short-circuits with no network call whenever `MOONSHOT_API_KEY` is unset
-— so a review run that never touches kimi generates zero Moonshot
-traffic, matching today's default behavior exactly.
+Only when `state.workerModel` is unset, call `isKimiConfigured()` from
+`lib/model-dispatch.js` to compute the kimi menu label. It answers from
+the environment alone — **no network call, ever** — so merely opening the
+menu produces zero Moonshot traffic whether or not a key is present. The
+real auth probe (`checkKimi()`) runs only if the user actually picks
+kimi. A review run that never selects kimi therefore behaves exactly as
+it does today.
 
 Use `AskUserQuestion` with:
 
@@ -154,11 +156,19 @@ Use `AskUserQuestion` with:
 | `opus` | Opus |
 | `sonnet` | Sonnet |
 | `haiku` | Haiku |
-| `kimi` | Kimi — plain label when `checkKimi()` returns `ok: true`; **"Kimi (needs setup)"** when it returns `ok: false` |
+| `kimi` | Kimi — plain label when `isKimiConfigured()` returns `true`; **"Kimi (needs setup)"** when it returns `false` |
 
-**If the user picks kimi and it is NOT yet configured ("needs setup"):**
+**If the user picks kimi:**
 
-1. Prompt for the Moonshot API key: "Get a key at https://platform.moonshot.ai — paste it here, or type `skip` to pick a different model."
+1. Call `checkKimi()` — this is the point where the key is validated
+   against Moonshot, and it re-validates on every selection, so a revoked
+   or expired key surfaces here rather than deep inside a dispatch.
+2. `ok: true` → kimi is the chosen worker model; continue.
+3. `ok: false` → run the setup flow below.
+
+**Setup flow (kimi selected but `checkKimi()` returned `ok: false`):**
+
+1. Prompt for the Moonshot API key: "Get a key at https://platform.moonshot.ai — paste it here, or type `skip` to pick a different model. (Prefer not to paste a secret into this session? `skip`, then `export MOONSHOT_API_KEY=...` in your shell — anything typed here is stored in the plaintext session transcript.)"
 2. `skip` → return to the `AskUserQuestion` model menu above. Do not fall through to dispatch with no model chosen.
 3. A key provided → call `installKimi(key)` from `lib/model-dispatch.js`.
    - `probe.ok === false` → report `probe.reason` and return to the model menu (do not silently substitute a different model).
@@ -178,6 +188,13 @@ Layers 0.5 (`layers/cleanup.md`) and 1 (`layers/ai-review.md`) both read
 `state.workerModel` — neither re-derives nor re-asks; see those files for
 how `dispatch()` turns the choice into an Agent-tool call (Anthropic
 tiers) or a headless background `claude -p` process (kimi).
+
+Each layer passes its own `allowedTools` to `dispatch()` — read-only for
+Layer 1, write-capable for Layer 0.5. On the kimi path that list becomes
+a real `--allowed-tools` restriction on a process running outside this
+session's supervision, so never omit it (a caller that names no tools
+gets a read-only worker, which will fail the cleanup layer loudly rather
+than granting it silent write access).
 
 ---
 

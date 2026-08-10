@@ -41,9 +41,13 @@ The menu, via `AskUserQuestion`:
 
 Picking an Anthropic tier changes nothing about how dispatch works today
 — the Agent tool is called with an explicit `model` override, same as
-before. Kimi is opt-in: `checkKimi()` (see below) short-circuits with no
-network call whenever `MOONSHOT_API_KEY` is unset, so a run that never
-touches Kimi produces zero Moonshot traffic.
+before.
+
+Kimi is opt-in, and "opt-in" is enforced at the menu too: the label is
+computed by `isKimiConfigured()`, which reads the environment and
+**never makes a network call**, whether or not a key is present. The
+auth probe (`checkKimi()`, below) runs only once you actually select
+Kimi. A run that never selects Kimi produces zero Moonshot traffic.
 
 ## Setting up Kimi
 
@@ -58,23 +62,35 @@ Kimi needs exactly one thing: a Moonshot API key.
 3. **Paste the key.** This calls `installKimi(key)`
    (`lib/model-dispatch.js`), which:
    - writes it as `MOONSHOT_API_KEY` into the `env` block of
-     `~/.claude/settings.json` (creating the file/block if needed), and
+     `~/.claude/settings.json` (creating the file/block if needed),
+   - sets that file's permissions to `0600` — it now holds a credential,
+     so it must not be left world-readable by your umask, and
    - re-runs the auth probe to confirm the key actually works before
      handing control back.
    - If the probe fails (`probe.ok === false`), you see `probe.reason`
      and land back on the model menu — Envoy never silently substitutes
      a different model for you.
+   - If `settings.json` exists but isn't parseable JSON, `installKimi()`
+     refuses to write and tells you to fix it by hand — it will not
+     replace a file it can't read with one that has only the Kimi key in
+     it.
 
-You can also export `MOONSHOT_API_KEY` as a plain shell environment
-variable instead of writing it to `settings.json` — `checkKimi()` reads
-whichever one is present in the process environment; it doesn't care
-which route put it there.
+**Prefer the shell if you'd rather not paste a secret into a session.**
+You can export `MOONSHOT_API_KEY` as a plain shell environment variable
+instead — `checkKimi()` reads whichever one is present in the process
+environment; it doesn't care which route put it there. This is the
+better route for shared or recorded sessions: **anything you type at the
+key prompt is stored verbatim in Claude Code's plaintext session
+transcript** under `~/.claude/projects/**`, which Envoy's own
+`lib/cost-reporter.js` (among other tools) reads. The prompt offers
+`skip` for exactly this reason.
 
 **Validated on every selection, not just at install time.** Every time
-you (or a resumed session) select Kimi, `checkKimi()` re-probes the key
+you (or a resumed session) select Kimi, `checkKimi()` probes the key
 against Moonshot's endpoint before trusting it — a revoked or expired
-key surfaces as "needs setup" again rather than failing deep inside a
-worker dispatch.
+key surfaces immediately rather than failing deep inside a worker
+dispatch. Note the split: the *menu label* is offline
+(`isKimiConfigured()`), the *selection* is what probes.
 
 ## How dispatch works
 
@@ -94,10 +110,17 @@ itself never contains the task prompt — only fixed,
 orchestrator-controlled tokens (paths, env var names, the model id).
 This is a deliberate command-injection guard: task prompts can contain
 arbitrary text (quotes, `$vars`, shell metacharacters), and none of it
-is ever interpolated into a shell command that gets executed. Once the
-background process exits, its report is read back from
-`descriptor.outputFile` (`.envoy/agent-output/<task-id>.md`) in place of
-an `Agent`-tool return value.
+is ever interpolated into a shell command that gets executed. Every path
+that *does* appear in the command is single-quoted, so a repository
+checked out under a directory name containing `$(...)` or a quote is
+inert too.
+
+The caller must **wait for the background process to exit** before
+reading `descriptor.outputFile` (`.envoy/agent-output/<task-id>.md`) —
+poll the background shell (`BashOutput`, or `Monitor` to block on the
+condition) until it reports exit. The file is written incrementally, so
+an early read returns a truncated report. Only then is it used in place
+of an `Agent`-tool return value.
 
 The kimi command sets three environment variables, scoped to that one
 child process only:
@@ -107,6 +130,42 @@ child process only:
 | `ANTHROPIC_BASE_URL` | `https://api.moonshot.ai/anthropic` |
 | `ANTHROPIC_MODEL` | `kimi-k2.5` |
 | `ANTHROPIC_AUTH_TOKEN` | `$MOONSHOT_API_KEY` (read from the environment at run time, never a literal secret baked into the command string) |
+
+## Tool scoping: a Kimi worker is bounded by the command, not by prose
+
+An Anthropic-tier worker runs as an `Agent` inside your supervised
+session. A Kimi worker does not — it is an independent `claude -p`
+process driven end to end by a third-party model. "Tools allowed: Read,
+Grep, Glob" in a prompt is an instruction the model may or may not
+honour; it is not a restriction.
+
+So `dispatch()` takes an `allowedTools` list and turns it into a real
+`claude -p --allowed-tools ...` argument:
+
+| Caller | Tool surface |
+|--------|--------------|
+| review Layer 1 (AI review) | `Read, Grep, Glob` — read-only |
+| review Layer 0.5 (cleanup) | `Read, Edit, Write, Bash, Grep, Glob` |
+| pickup implementers | `Read, Edit, Write, Bash, Grep, Glob` |
+
+**It fails closed.** A caller that names no tools gets
+`DEFAULT_ALLOWED_TOOLS` (`Read, Grep, Glob`), so a forgotten
+`allowedTools` produces a worker that can't write — a loud failure —
+rather than an unsupervised worker with a full tool surface. Malformed
+tool specs are rejected by `dispatch()` instead of reaching the shell.
+
+This matters because a worker reviewing or implementing code reads
+attacker-influenceable text (a diff, an issue body). Prompt injection in
+that text reaches a model whose tool discipline this project cannot
+vouch for, so the bound has to be mechanical.
+
+**Contract enforcement does not cover the Kimi path.** Envoy's
+`PreToolUse[Agent]` gate (`hooks/observe-gate.js`, driven by each rigid
+skill's `contract.json` `agentInvariants`) only fires for `Agent` tool
+calls. A Kimi dispatch goes out through `Bash`, so those invariants —
+including review's "the AI-review prompt must not grant Edit/Write" —
+are not evaluated for it. `--allowed-tools` is what enforces the tool
+surface on that path.
 
 ## Security boundary: Moonshot never touches your main session
 
@@ -126,8 +185,9 @@ This boundary is enforced by `installKimi()`, not just documented:
 ## Reference
 
 - [`lib/model-dispatch.js`](../lib/model-dispatch.js) — `dispatch()`,
-  `checkKimi()`, `installKimi()`, and the `ANTHROPIC_TIERS` / `KIMI_TIER`
-  / `KIMI_MODEL_ID` / `KIMI_BASE_URL` / `KIMI_API_KEY_ENV` constants.
+  `isKimiConfigured()`, `checkKimi()`, `installKimi()`, and the
+  `ANTHROPIC_TIERS` / `KIMI_TIER` / `KIMI_MODEL_ID` / `KIMI_BASE_URL` /
+  `KIMI_API_KEY_ENV` / `DEFAULT_ALLOWED_TOOLS` constants.
 - [`lib/session-state.js`](../lib/session-state.js) — the `workerModel`
   field and `setWorkerModel()`.
 - `skills/pickup/steps/tdd.md` — Step 12.5 (pickup's selection step) and

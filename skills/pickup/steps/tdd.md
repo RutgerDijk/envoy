@@ -105,11 +105,13 @@ if (state.workerModel) {
 
 **Ask once, kimi is opt-in:**
 
-Only when `state.workerModel` is unset, call `checkKimi()` from
-`lib/model-dispatch.js` to compute the kimi menu label. `checkKimi()`
-short-circuits with no network call whenever `MOONSHOT_API_KEY` is unset
-— so a pickup run that never touches kimi generates zero Moonshot
-traffic, matching today's default behavior exactly.
+Only when `state.workerModel` is unset, call `isKimiConfigured()` from
+`lib/model-dispatch.js` to compute the kimi menu label. It answers from
+the environment alone — **no network call, ever** — so merely opening
+the menu produces zero Moonshot traffic whether or not a key is present.
+The real auth probe (`checkKimi()`) runs only if the user actually picks
+kimi. A pickup run that never selects kimi therefore behaves exactly as
+it does today.
 
 Use `AskUserQuestion` with:
 
@@ -119,11 +121,19 @@ Use `AskUserQuestion` with:
 | `opus` | Opus |
 | `sonnet` | Sonnet |
 | `haiku` | Haiku |
-| `kimi` | Kimi — plain label when `checkKimi()` returns `ok: true`; **"Kimi (needs setup)"** when it returns `ok: false` |
+| `kimi` | Kimi — plain label when `isKimiConfigured()` returns `true`; **"Kimi (needs setup)"** when it returns `false` |
 
-**If the user picks kimi and it is NOT yet configured ("needs setup"):**
+**If the user picks kimi:**
 
-1. Prompt for the Moonshot API key: "Get a key at https://platform.moonshot.ai — paste it here, or type `skip` to pick a different model."
+1. Call `checkKimi()` — this is the point where the key is validated
+   against Moonshot, and it re-validates on every selection, so a revoked
+   or expired key surfaces here rather than deep inside a dispatch.
+2. `ok: true` → kimi is the chosen worker model; continue.
+3. `ok: false` → run the setup flow below.
+
+**Setup flow (kimi selected but `checkKimi()` returned `ok: false`):**
+
+1. Prompt for the Moonshot API key: "Get a key at https://platform.moonshot.ai — paste it here, or type `skip` to pick a different model. (Prefer not to paste a secret into this session? `skip`, then `export MOONSHOT_API_KEY=...` in your shell — anything typed here is stored in the plaintext session transcript.)"
 2. `skip` → return to the `AskUserQuestion` model menu above. Do not fall through to dispatch with no model chosen.
 3. A key provided → call `installKimi(key)` from `lib/model-dispatch.js`.
    - `probe.ok === false` → report `probe.reason` and return to the model menu (do not silently substitute a different model).
@@ -153,9 +163,14 @@ For each task:
    spec injected — only id + title. The prompt template itself is
    identical regardless of which model runs it — see `prompts.md`.
 3. Dispatch the implementer through `lib/model-dispatch.js`'s
-   `dispatch({ model: state.workerModel, prompt, taskId: task.id })`:
+   `dispatch({ model: state.workerModel, prompt, taskId: task.id, allowedTools: [...] })`.
+   Always name `allowedTools` — an implementer needs
+   `['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob']`. `dispatch()` fails
+   CLOSED (read-only) for callers that name none, and on the kimi path the
+   list becomes a real `--allowed-tools` restriction rather than prompt
+   text an unsupervised worker may ignore.
    - **Anthropic tiers** (fable/opus/sonnet/haiku) — `descriptor.kind === 'agent'`. Call the `Agent` tool with `model: descriptor.model` and `prompt: descriptor.prompt`. This is the same Agent-tool call pickup has always made, with one addition: an explicit `model` override instead of the implicit default.
-   - **kimi** — `descriptor.kind === 'bash'`. Run `descriptor.command` via `Bash` with `run_in_background: true` (per the descriptor — `dispatch()` already wrote the prompt to `descriptor.promptFile` and points the command at it via stdin redirection). Never re-embed task prompt text into a shell command yourself — that is a command-injection risk `dispatch()` exists specifically to avoid. Once the background process exits, read `descriptor.outputFile` (`.envoy/agent-output/<task-id>.md`) as the implementer's report, in place of an Agent-tool return value.
+   - **kimi** — `descriptor.kind === 'bash'`. Run `descriptor.command` via `Bash` with `run_in_background: true` (per the descriptor — `dispatch()` already wrote the prompt to `descriptor.promptFile` and points the command at it via stdin redirection). Never re-embed task prompt text into a shell command yourself — that is a command-injection risk `dispatch()` exists specifically to avoid. **Wait for the process to exit before reading anything:** poll `BashOutput(shell_id)` until it reports the shell has exited (or use `Monitor` to block on that condition); `descriptor.outputFile` is written incrementally, so an early read yields a truncated report. Only then read `descriptor.outputFile` (`.envoy/agent-output/<task-id>.md`) as the implementer's report, in place of an Agent-tool return value. In a parallel wave, every task's shell must have exited before the wave's reports are merged.
 4. Once the implementer completes, dispatch BOTH reviewers — spec
    compliance and code quality — **in the same message/turn**, so they
    run concurrently. Both are read-only (review-only prompts, no

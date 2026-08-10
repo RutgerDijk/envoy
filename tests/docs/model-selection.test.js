@@ -112,6 +112,54 @@ test('describes the injection scope: kimi child-process command only', () => {
   assert.ok(/child process|background process|kimi worker/i.test(content), 'expected doc to describe the scoped injection point');
 });
 
+test('documents that the menu label itself never hits the network', () => {
+  const content = readDoc();
+  assert.ok(/isKimiConfigured/.test(content), 'expected doc to name isKimiConfigured(), the offline label check');
+  assert.ok(
+    /never makes a network call|no network call/i.test(content),
+    'expected doc to state that computing the menu label makes no network call'
+  );
+});
+
+test('documents that settings.json is locked down once it holds the key', () => {
+  const content = readDoc();
+  assert.ok(/0600/.test(content), 'expected doc to state the 0600 permissions installKimi() applies');
+});
+
+test('warns that a pasted key lands in the session transcript', () => {
+  const content = readDoc();
+  assert.ok(/transcript/i.test(content), 'expected doc to warn that a pasted key is stored in the session transcript');
+  assert.ok(/export MOONSHOT_API_KEY|shell/i.test(content), 'expected doc to offer the shell env var as the lower-exposure route');
+});
+
+section('tool scoping: the headless kimi worker is mechanically bounded');
+test('documents allowedTools and the --allowed-tools enforcement', () => {
+  const content = readDoc();
+  assert.ok(/allowedTools/.test(content), 'expected doc to name the allowedTools option');
+  assert.ok(/--allowed-tools/.test(content), 'expected doc to name the claude CLI flag it becomes');
+});
+
+test('documents the fail-closed default', () => {
+  const content = readDoc();
+  assert.ok(/DEFAULT_ALLOWED_TOOLS/.test(content), 'expected doc to name DEFAULT_ALLOWED_TOOLS');
+  assert.ok(/fails closed|fail closed/i.test(content), 'expected doc to state that omitting allowedTools fails closed (read-only)');
+});
+
+test('documents that contract.json agentInvariants do not cover the Bash-dispatched kimi path', () => {
+  const content = readDoc();
+  assert.ok(
+    /agentInvariants|PreToolUse\[Agent\]|contract\.json/.test(content),
+    'expected doc to note that the Agent-tool contract gate does not fire for kimi dispatches'
+  );
+});
+
+section('the caller must wait for the background process to exit');
+test('names a concrete completion signal, not just "once it exits"', () => {
+  const content = readDoc();
+  assert.ok(/BashOutput|Monitor/.test(content), 'expected doc to name a concrete way to detect the background process finished');
+  assert.ok(/truncat/i.test(content), 'expected doc to explain that an early read returns truncated output');
+});
+
 section('command-injection guard is documented (dispatch() mechanics)');
 test('describes prompt-to-file + stdin redirection, not inline interpolation', () => {
   const content = readDoc();

@@ -60,7 +60,15 @@ Output format:
 - Issue: <file>:<line> — <description>
 `;
 
-const descriptor = dispatch({ model: state.workerModel, prompt: reviewPrompt, taskId: 'ai-review' });
+// This layer is read-only. Declare that as a tool surface, not just as
+// prompt text — on the kimi path dispatch() turns it into an actual
+// `--allowed-tools` restriction on an unsupervised background process.
+const descriptor = dispatch({
+  model: state.workerModel,
+  prompt: reviewPrompt,
+  taskId: 'ai-review',
+  allowedTools: ['Read', 'Grep', 'Glob'],
+});
 
 if (descriptor.kind === 'agent') {
   // fable/opus/sonnet/haiku — Agent tool can name the model directly.
@@ -75,14 +83,17 @@ if (descriptor.kind === 'agent') {
   // prompt to descriptor.promptFile; the command reads it via stdin
   // redirection, so no prompt text is interpolated into the command
   // string. Never build this command by hand.
-  Bash({
+  const { shell_id } = Bash({
     command: descriptor.command,
     run_in_background: true,
     description: descriptor.description,
   });
-  // Once the background process exits, read descriptor.outputFile
-  // (.envoy/agent-output/ai-review.md) as the reviewer's findings, in
-  // place of an Agent-tool return value.
+  // WAIT for exit before reading. descriptor.outputFile is written
+  // incrementally, so reading it early yields a truncated review.
+  // Poll BashOutput(shell_id) until it reports the shell has exited
+  // (or use Monitor to block on that condition), THEN read
+  // descriptor.outputFile (.envoy/agent-output/ai-review.md) as the
+  // reviewer's findings, in place of an Agent-tool return value.
 }
 ```
 

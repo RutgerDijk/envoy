@@ -139,6 +139,43 @@ test('neither layer builds the kimi shell command by hand (no run_in_background 
 });
 
 // ═══════════════════════════════════════════════════════════════════
+section('Kimi workers are tool-scoped by the command, not just by prompt text');
+// ═══════════════════════════════════════════════════════════════════
+
+test('ai-review.md declares a read-only allowedTools surface', () => {
+  const match = aiReviewMd.match(/allowedTools:\s*\[([^\]]*)\]/);
+  assert.ok(match, 'ai-review.md must pass allowedTools to dispatch() — omitting it silently downgrades the kimi worker to a prompt-only restriction');
+  const tools = match[1].split(',').map((t) => t.trim().replace(/['"]/g, '')).filter(Boolean);
+  assert.deepStrictEqual(tools, ['Read', 'Grep', 'Glob'], 'Layer 1 is a read-only review');
+});
+
+test('cleanup.md declares a write-capable allowedTools surface', () => {
+  const match = cleanupMd.match(/allowedTools:\s*\[([^\]]*)\]/);
+  assert.ok(match, 'cleanup.md must pass allowedTools to dispatch()');
+  const tools = match[1].split(',').map((t) => t.trim().replace(/['"]/g, '')).filter(Boolean);
+  for (const needed of ['Read', 'Edit', 'Write', 'Bash']) {
+    assert.ok(tools.includes(needed), `cleanup edits and commits, so it needs ${needed}`);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+section('The headless path waits for process exit before reading output');
+// ═══════════════════════════════════════════════════════════════════
+
+test('both layers tell the orchestrator how to detect the background process finished', () => {
+  for (const [name, md] of [['ai-review.md', aiReviewMd], ['cleanup.md', cleanupMd]]) {
+    assert.ok(
+      /BashOutput|Monitor/.test(md),
+      `${name}: the kimi path must name a concrete completion signal (BashOutput/Monitor), not just "once the process exits" — the output file is written incrementally`
+    );
+    assert.ok(
+      /truncat/i.test(md),
+      `${name}: must state why an early read is wrong (truncated output)`
+    );
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
 section('SKILL.md adds the "ask once, applies to both layers" worker-model step');
 // ═══════════════════════════════════════════════════════════════════
 
@@ -175,14 +212,30 @@ test('SKILL.md does not re-ask when state.workerModel is already set (resume che
   );
 });
 
-test('SKILL.md offers kimi via checkKimi() with "needs setup" fallback label', () => {
+test('SKILL.md offers kimi with a "needs setup" fallback label', () => {
+  assert.ok(
+    /isKimiConfigured\(/.test(skillMd),
+    'SKILL.md must label the kimi option from isKimiConfigured() — the offline check — so merely opening the menu never reaches Moonshot'
+  );
   assert.ok(
     /checkKimi\(/.test(skillMd),
-    'SKILL.md must call checkKimi() from lib/model-dispatch.js to compute the kimi menu label'
+    'SKILL.md must still probe with checkKimi() when kimi is actually selected'
   );
   assert.ok(
     /needs setup/.test(skillMd),
     'SKILL.md must offer the "Kimi (needs setup)" label when kimi is not yet configured'
+  );
+});
+
+test('SKILL.md keeps the network probe out of the menu-label path', () => {
+  const menuSection = skillMd.slice(
+    skillMd.indexOf('Ask once, kimi is opt-in'),
+    skillMd.indexOf('Persist the choice'),
+  );
+  assert.ok(menuSection.length > 0, 'expected the worker-model menu section in SKILL.md');
+  assert.ok(
+    /no network call/i.test(menuSection),
+    'SKILL.md must state that computing the menu label makes no network call — the acceptance criterion is zero Moonshot traffic for runs that never select kimi'
   );
 });
 
