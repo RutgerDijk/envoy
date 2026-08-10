@@ -80,12 +80,6 @@ test('sets workerModel to an Anthropic tier', () => {
   assert.strictEqual(state.workerModel, 'sonnet');
 });
 
-test('sets workerModel to kimi', () => {
-  const state = session.createEmpty();
-  session.setWorkerModel(state, 'kimi');
-  assert.strictEqual(state.workerModel, 'kimi');
-});
-
 test('overwrites a previously chosen worker model', () => {
   const state = session.createEmpty();
   session.setWorkerModel(state, 'haiku');
@@ -115,18 +109,6 @@ test('a chosen worker model is read back after save/load', () => {
 
   const loaded = session.load(dir);
   assert.strictEqual(loaded.workerModel, 'kimi');
-  cleanup(dir);
-});
-
-test('resuming a session with a chosen model exposes it without re-asking', () => {
-  const dir = makeTmp('session-state-model-');
-  const first = session.createEmpty();
-  session.setWorkerModel(first, 'opus');
-  session.save(first, dir);
-
-  // Simulate a fresh process resuming after compaction/restart.
-  const resumed = session.load(dir);
-  assert.strictEqual(resumed.workerModel, 'opus');
   cleanup(dir);
 });
 

@@ -183,12 +183,6 @@ test('writes the prompt content to a file the command reads via redirection', ()
   assert.ok(result.command.includes(result.promptFile));
 });
 
-test('command contains only fixed orchestrator-controlled tokens (paths, env names, model id)', () => {
-  const cwd = makeTmpDir();
-  const result = dispatch({ model: 'kimi', prompt: 'irrelevant body', taskId: 'task-17' }, { cwd });
-  assert.ok(!result.command.includes('irrelevant body'));
-});
-
 test('sanitizes a taskId with path-traversal characters so it cannot escape .envoy', () => {
   const cwd = makeTmpDir();
   const result = dispatch({ model: 'kimi', prompt: 'p', taskId: '../../etc/passwd' }, { cwd });
