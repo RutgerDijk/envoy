@@ -185,6 +185,76 @@ test('tdd.md offers every model option including kimi', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+section('AskUserQuestion respects the 4-option cap (two-step menu)');
+// ═══════════════════════════════════════════════════════════════════
+
+function extractSection(md, startMarker, endMarker) {
+  const start = md.indexOf(startMarker);
+  assert.ok(start !== -1, `expected to find "${startMarker}"`);
+  const end = md.indexOf(endMarker, start);
+  assert.ok(end !== -1, `expected to find "${endMarker}" after "${startMarker}"`);
+  return md.slice(start, end);
+}
+
+function extractOptionTables(md) {
+  const lines = md.split('\n');
+  const tables = [];
+  for (let i = 0; i < lines.length - 1; i++) {
+    const isHeaderLike = /^\s*\|.+\|\s*$/.test(lines[i]);
+    const isSeparator = /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1]) && /-/.test(lines[i + 1]);
+    if (isHeaderLike && isSeparator && /option/i.test(lines[i])) {
+      let j = i + 2;
+      const rows = [];
+      while (j < lines.length && /^\s*\|.+\|\s*$/.test(lines[j])) {
+        rows.push(lines[j]);
+        j++;
+      }
+      tables.push({ header: lines[i], rows });
+    }
+  }
+  return tables;
+}
+
+test('tdd.md never lists more than 4 rows in a single AskUserQuestion option table', () => {
+  const section = extractSection(tddMd, '### Step 12.5: Worker Model Selection', '### Step 13: Execute Tasks');
+  const tables = extractOptionTables(section);
+  assert.ok(tables.length > 0, 'expected at least one Option/Label table in the Worker Model Selection step');
+  for (const t of tables) {
+    assert.ok(
+      t.rows.length <= 4,
+      `AskUserQuestion's options array caps at maxItems: 4 (min 2) — found a table with ${t.rows.length} option rows: ${t.header}`
+    );
+  }
+});
+
+test('tdd.md structures selection as two AskUserQuestion calls: Anthropic-tier-vs-Kimi, then a 4-option tier pick', () => {
+  const section = extractSection(tddMd, '### Step 12.5: Worker Model Selection', '### Step 13: Execute Tasks');
+  const tables = extractOptionTables(section);
+
+  const decisionTable = tables.find(
+    (t) => t.rows.length === 2 && /kimi/i.test(t.rows.join('\n')) && /anthropic/i.test(t.rows.join('\n'))
+  );
+  assert.ok(
+    decisionTable,
+    'expected a 2-option AskUserQuestion table deciding between an Anthropic tier and Kimi (Step 1)'
+  );
+
+  const tierTable = tables.find(
+    (t) =>
+      t.rows.length === 4 &&
+      ['fable', 'opus', 'sonnet', 'haiku'].every((tier) => new RegExp('`' + tier + '`').test(t.rows.join('\n')))
+  );
+  assert.ok(
+    tierTable,
+    'expected a 4-option AskUserQuestion table listing fable/opus/sonnet/haiku, with kimi promoted out of it (Step 2)'
+  );
+  assert.ok(
+    !/kimi/i.test(tierTable.rows.join('\n')),
+    'the 4-option tier table must not also include kimi — that would be back to 5 options'
+  );
+});
+
+// ═══════════════════════════════════════════════════════════════════
 section('Opening the menu produces no Moonshot traffic');
 // ═══════════════════════════════════════════════════════════════════
 
