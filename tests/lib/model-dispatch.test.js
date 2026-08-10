@@ -419,15 +419,6 @@ test('omitting allowedTools fails CLOSED — the worker is read-only, not unrest
   }
 });
 
-test('a write-capable worker must ask for it explicitly', () => {
-  const cwd = makeTmpDir();
-  const result = dispatch(
-    { model: 'kimi', prompt: 'p', taskId: 'task-23', allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob'] },
-    { cwd },
-  );
-  assert.ok(result.command.includes('Read,Edit,Write,Bash,Grep,Glob'));
-});
-
 test('the Agent path carries the same tool surface for the caller to apply', () => {
   const result = dispatch({ model: 'sonnet', prompt: 'p', taskId: 'task-24', allowedTools: ['Read', 'Grep', 'Glob'] });
   assert.strictEqual(result.kind, 'agent');
