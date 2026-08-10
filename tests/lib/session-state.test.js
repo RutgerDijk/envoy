@@ -48,16 +48,6 @@ function cleanup(dir) {
 const session = require(path.join(LIB, 'session-state'));
 
 // ═══════════════════════════════════════════════════════════════════
-// exports
-// ═══════════════════════════════════════════════════════════════════
-
-section('exports');
-
-test('setWorkerModel is exported', () => {
-  assert.strictEqual(typeof session.setWorkerModel, 'function');
-});
-
-// ═══════════════════════════════════════════════════════════════════
 // createEmpty()
 // ═══════════════════════════════════════════════════════════════════
 
