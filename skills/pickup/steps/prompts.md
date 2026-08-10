@@ -18,11 +18,60 @@ ever injecting another task's full spec.
 
 Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`, `${SIBLING_INDEX}`
 
+The prompt text below is **identical regardless of which worker model
+runs it** — Step 12.5 chooses the model once for the whole pickup run
+(`state.workerModel`), and `lib/model-dispatch.js`'s `dispatch()` is
+what changes based on that choice, not the prompt. Build the prompt
+string first, then dispatch it:
+
+```javascript
+const { dispatch } = require('../../lib/model-dispatch');
+
+const implementerPrompt = `${EXECUTION_ANNOUNCE}
+
+${SCOPE_LAW}
+
+${TDD_LAW}
+
+${BLOCKER_PROTOCOL}
+
+${TASK_GRANULARITY}
+
+---
+
+Implement Task N: <task title>
+...`; // full template below
+
+const descriptor = dispatch({ model: state.workerModel, prompt: implementerPrompt, taskId: task.id });
+
+if (descriptor.kind === 'agent') {
+  // fable/opus/sonnet/haiku — Agent tool can name the model directly.
+  Agent({
+    subagent_type: "general-purpose",
+    description: "Implement Task N",
+    model: descriptor.model,
+    prompt: descriptor.prompt,
+  });
+} else {
+  // kimi — descriptor.kind === 'bash'. dispatch() already wrote the
+  // prompt to descriptor.promptFile; the command reads it via stdin
+  // redirection, so no prompt text is interpolated into the command
+  // string. Never build this command by hand.
+  Bash({
+    command: descriptor.command,
+    run_in_background: true,
+    description: descriptor.description,
+  });
+  // Once the background process exits, read descriptor.outputFile
+  // (.envoy/agent-output/<task-id>.md) as the implementer's report.
+}
 ```
-Agent({
-  subagent_type: "general-purpose",
-  description: "Implement Task N",
-  prompt: `${EXECUTION_ANNOUNCE}
+
+Full implementer prompt template (`implementerPrompt` above — identical
+text whether `dispatch()` routes it to the `Agent` tool or to kimi):
+
+```
+${EXECUTION_ANNOUNCE}
 
 ${SCOPE_LAW}
 
@@ -64,8 +113,6 @@ buildSiblingIndex(allTasks, taskId). Never their full specs.>
 - Git log showing test commit preceded implementation commit
 - Any questions or concerns (do not reduce scope — surface blockers via Blocker Protocol)
 - List of files changed
-`
-})
 ```
 
 ---
