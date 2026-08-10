@@ -25,34 +25,22 @@ const os = require('os');
 
 let passed = 0;
 let failed = 0;
-const asyncTests = [];
+// Sync test(), async testAsync(), and section() headers are all queued in
+// file order and drained together in main() — otherwise section() (which
+// used to print immediately) would print ahead of any testAsync() results
+// declared under it, since those only run once main() awaits them.
+const queue = [];
 
 function test(name, fn) {
-  try {
-    fn();
-    passed++;
-    process.stdout.write(`  \x1b[32m✓\x1b[0m ${name}\n`);
-  } catch (err) {
-    failed++;
-    process.stdout.write(`  \x1b[31m✗\x1b[0m ${name}\n    ${err.message}\n`);
-  }
+  queue.push({ type: 'test', name, fn: async () => fn() });
 }
 
 function testAsync(name, fn) {
-  asyncTests.push(async () => {
-    try {
-      await fn();
-      passed++;
-      process.stdout.write(`  \x1b[32m✓\x1b[0m ${name}\n`);
-    } catch (err) {
-      failed++;
-      process.stdout.write(`  \x1b[31m✗\x1b[0m ${name}\n    ${err.message}\n`);
-    }
-  });
+  queue.push({ type: 'test', name, fn });
 }
 
 function section(name) {
-  process.stdout.write(`\n${name}\n`);
+  queue.push({ type: 'section', name });
 }
 
 const LIB = path.join(__dirname, '..', '..', 'lib');
@@ -370,7 +358,20 @@ testAsync('throws when apiKey is missing or empty', async () => {
 });
 
 async function main() {
-  for (const t of asyncTests) await t();
+  for (const item of queue) {
+    if (item.type === 'section') {
+      process.stdout.write(`\n${item.name}\n`);
+      continue;
+    }
+    try {
+      await item.fn();
+      passed++;
+      process.stdout.write(`  \x1b[32m✓\x1b[0m ${item.name}\n`);
+    } catch (err) {
+      failed++;
+      process.stdout.write(`  \x1b[31m✗\x1b[0m ${item.name}\n    ${err.message}\n`);
+    }
+  }
 
   for (const d of tmpRoots) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
 
