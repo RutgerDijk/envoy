@@ -4,36 +4,65 @@ Announce: `Running Layer 0.5: Cleanup Pass...`
 
 **YOU MUST spawn an Agent tool call here. Inline cleanup without spawning an agent is wrong. Do not skip this.**
 
-Spawn a fresh cleanup agent that ONLY sees the diff — no implementation context, no conversation history. This is a focused mandate to remove AI-generated slop.
+Spawn a fresh cleanup agent — on the model chosen in Pre-Review Setup
+step 6 (`state.workerModel`) — that ONLY sees the diff: no implementation
+context, no conversation history. This is a focused mandate to remove
+AI-generated slop.
 
 **Key principle:** Never add "don't do X" instructions to the implementing agent — let it implement freely, then run this focused cleanup.
 
-```
-Agent({
-  model: "sonnet",
-  description: "Cleanup pass",
-  prompt: `${EXECUTION_ANNOUNCE}
+Build the prompt string first, then route it through
+`lib/model-dispatch.js`'s `dispatch()` so the model choice (including
+kimi's headless path) determines how it's dispatched, not the prompt text:
 
-  You are a code cleanup agent. Your job is to remove slop from a recent implementation.
+```javascript
+const { dispatch } = require('../../lib/model-dispatch');
 
-  Read the diff:
-  git diff main...HEAD
+const cleanupPrompt = `${EXECUTION_ANNOUNCE}
 
-  Then read each changed file in full to understand context.
+You are a code cleanup agent. Your job is to remove slop from a recent implementation.
 
-  Remove the categories below IN ORDER. Edit files directly.
-  Run tests after each category. Commit after each category.
+Read the diff:
+git diff main...HEAD
 
-  IMPORTANT:
-  - Only remove things that are genuinely unnecessary
-  - If in doubt, leave it
-  - Never change functionality — only remove noise
-  - Never touch test assertions that verify real behavior
-  - Intentional defensive code with explanatory comments is NOT slop
+Then read each changed file in full to understand context.
 
-  Tools: Read, Edit, Write, Bash, Grep, Glob
-  `
-})
+Remove the categories below IN ORDER. Edit files directly.
+Run tests after each category. Commit after each category.
+
+IMPORTANT:
+- Only remove things that are genuinely unnecessary
+- If in doubt, leave it
+- Never change functionality — only remove noise
+- Never touch test assertions that verify real behavior
+- Intentional defensive code with explanatory comments is NOT slop
+
+Tools: Read, Edit, Write, Bash, Grep, Glob
+`;
+
+const descriptor = dispatch({ model: state.workerModel, prompt: cleanupPrompt, taskId: 'cleanup' });
+
+if (descriptor.kind === 'agent') {
+  // fable/opus/sonnet/haiku — Agent tool can name the model directly.
+  Agent({
+    model: descriptor.model,
+    description: "Cleanup pass",
+    prompt: descriptor.prompt,
+  });
+} else {
+  // kimi — descriptor.kind === 'bash'. dispatch() already wrote the
+  // prompt to descriptor.promptFile; the command reads it via stdin
+  // redirection, so no prompt text is interpolated into the command
+  // string. Never build this command by hand.
+  Bash({
+    command: descriptor.command,
+    run_in_background: true,
+    description: descriptor.description,
+  });
+  // Once the background process exits, read descriptor.outputFile
+  // (.envoy/agent-output/cleanup.md) as the cleanup agent's report, in
+  // place of an Agent-tool return value.
+}
 ```
 
 ## Category 1: Unnecessary Defensive Checks

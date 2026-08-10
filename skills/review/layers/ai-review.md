@@ -6,57 +6,84 @@ Announce: `Running Layer 1: AI Code Review...`
 
 **If you do not spawn an Agent tool call, STOP — do not proceed to Layer 2.**
 
-Spawn a fresh **Sonnet** agent with NO implementation context. The agent uses **iterative retrieval** to understand codebase context:
+Spawn a fresh agent — on the model chosen in Pre-Review Setup step 6
+(`state.workerModel`) — with NO implementation context. The agent uses
+**iterative retrieval** to understand codebase context. Build the prompt
+string first, then route it through `lib/model-dispatch.js`'s
+`dispatch()` so the model choice (including kimi's headless path)
+determines how it's dispatched, not the prompt text:
 
-```
-Agent({
-  subagent_type: "envoy:code-reviewer",
-  model: "sonnet",
-  description: "AI code review",
-  prompt: `You are reviewing code changes. Context provided via files, not inline.
+```javascript
+const { dispatch } = require('../../lib/model-dispatch');
 
-  FIRST: Read contexts/iterative-retrieval.md for the retrieval protocol.
+const reviewPrompt = `You are reviewing code changes. Context provided via files, not inline.
 
-  **Pre-scored file relevance (from dependency analysis):**
-  ${relevanceBriefing}
+FIRST: Read contexts/iterative-retrieval.md for the retrieval protocol.
 
-  Use these scores to guide your retrieval — start with 'full' and 'focused'
-  files, then expand if needed:
-  1. Read git diff main...HEAD
-  2. Read 'full' relevance files first, then 'focused' files
-  3. If <3 files scored >=0.7 after reading pre-scored files, follow one more hop
-  4. Stop when 3+ files have relevance >=0.7 or 3 cycles done
+**Pre-scored file relevance (from dependency analysis):**
+${relevanceBriefing}
 
-  Report your retrieval context before reviewing.
+Use these scores to guide your retrieval — start with 'full' and 'focused'
+files, then expand if needed:
+1. Read git diff main...HEAD
+2. Read 'full' relevance files first, then 'focused' files
+3. If <3 files scored >=0.7 after reading pre-scored files, follow one more hop
+4. Stop when 3+ files have relevance >=0.7 or 3 cycles done
 
-  Also read:
-  - <spec-path> (acceptance criteria)
-  - <stack-common-mistakes> (patterns to check)
+Report your retrieval context before reviewing.
 
-  Focus areas:
-  1. Spec/acceptance criteria compliance
-  2. TDD verification: git log shows test commits before implementation?
-  3. Codebase pattern consistency (informed by retrieved context)
-  4. Stack profile common mistakes
+Also read:
+- <spec-path> (acceptance criteria)
+- <stack-common-mistakes> (patterns to check)
 
-  DO NOT check (GitHub CodeRabbit handles these on the PR):
-  - Style, naming, formatting
-  - Security basics
-  - Common language mistakes
-  - Performance anti-patterns
+Focus areas:
+1. Spec/acceptance criteria compliance
+2. TDD verification: git log shows test commits before implementation?
+3. Codebase pattern consistency (informed by retrieved context)
+4. Stack profile common mistakes
 
-  Tools allowed: Read, Grep, Glob ONLY (read-only review)
+DO NOT check (GitHub CodeRabbit handles these on the PR):
+- Style, naming, formatting
+- Security basics
+- Common language mistakes
+- Performance anti-patterns
 
-  Output format:
-  **Retrieval context:**
-  - <file> (<score>) — <reason>
+Tools allowed: Read, Grep, Glob ONLY (read-only review)
 
-  **Review findings:**
-  - Pass: <description>
-  - Concern: <file>:<line> — <description>
-  - Issue: <file>:<line> — <description>
-  `
-})
+Output format:
+**Retrieval context:**
+- <file> (<score>) — <reason>
+
+**Review findings:**
+- Pass: <description>
+- Concern: <file>:<line> — <description>
+- Issue: <file>:<line> — <description>
+`;
+
+const descriptor = dispatch({ model: state.workerModel, prompt: reviewPrompt, taskId: 'ai-review' });
+
+if (descriptor.kind === 'agent') {
+  // fable/opus/sonnet/haiku — Agent tool can name the model directly.
+  Agent({
+    subagent_type: "envoy:code-reviewer",
+    model: descriptor.model,
+    description: "AI code review",
+    prompt: descriptor.prompt,
+  });
+} else {
+  // kimi — descriptor.kind === 'bash'. dispatch() already wrote the
+  // prompt to descriptor.promptFile; the command reads it via stdin
+  // redirection, so no prompt text is interpolated into the command
+  // string. Never build this command by hand.
+  Bash({
+    command: descriptor.command,
+    run_in_background: true,
+    description: descriptor.description,
+  });
+  // Once the background process exits, read descriptor.outputFile
+  // (.envoy/agent-output/ai-review.md) as the reviewer's findings, in
+  // place of an Agent-tool return value.
+}
 ```
 
 ## Apply Fixes from Layer 1

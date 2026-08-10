@@ -112,6 +112,73 @@ Load shared discipline content once; reuse in subagent prompts:
 EXECUTION_ANNOUNCE=$(cat contexts/execution-announce.md)
 ```
 
+### 6. Worker Model Selection
+
+Before Layer 0.5 (cleanup) or Layer 1 (AI review) dispatch any agent, pick
+ONE model that both AI layers in this review run will use. This mirrors
+pickup's Step 12.5 (`skills/pickup/steps/tdd.md`) and reuses the exact
+same session-state field and mechanism — `state.workerModel` via
+`lib/session-state.js`'s `setWorkerModel()` — rather than inventing a
+second one. If pickup already chose a model earlier in this branch's
+session, review inherits it from the same `.envoy-session.json` and is
+not asked again.
+
+**Resume check — session state wins over asking again:**
+
+```javascript
+const session = require('../../lib/session-state');
+const state = session.exists() ? session.load() : session.createEmpty();
+
+if (state.workerModel) {
+  // Already chosen earlier this run (by review or inherited from pickup),
+  // or restored after compaction/restart — reuse it. Do NOT ask again.
+  workerModel = state.workerModel;
+} else {
+  // ... AskUserQuestion flow below ...
+}
+```
+
+**Ask once, kimi is opt-in, applies to both Layer 0.5 and Layer 1:**
+
+Only when `state.workerModel` is unset, call `checkKimi()` from
+`lib/model-dispatch.js` to compute the kimi menu label. `checkKimi()`
+short-circuits with no network call whenever `MOONSHOT_API_KEY` is unset
+— so a review run that never touches kimi generates zero Moonshot
+traffic, matching today's default behavior exactly.
+
+Use `AskUserQuestion` with:
+
+| Option | Label |
+|--------|-------|
+| `fable` | Fable |
+| `opus` | Opus |
+| `sonnet` | Sonnet |
+| `haiku` | Haiku |
+| `kimi` | Kimi — plain label when `checkKimi()` returns `ok: true`; **"Kimi (needs setup)"** when it returns `ok: false` |
+
+**If the user picks kimi and it is NOT yet configured ("needs setup"):**
+
+1. Prompt for the Moonshot API key: "Get a key at https://platform.moonshot.ai — paste it here, or type `skip` to pick a different model."
+2. `skip` → return to the `AskUserQuestion` model menu above. Do not fall through to dispatch with no model chosen.
+3. A key provided → call `installKimi(key)` from `lib/model-dispatch.js`.
+   - `probe.ok === false` → report `probe.reason` and return to the model menu (do not silently substitute a different model).
+   - `probe.ok === true` → kimi is now configured and is the chosen worker model.
+
+**Declining kimi** (skip, or simply picking an Anthropic tier) leaves review
+working exactly as today, on whichever tier was chosen.
+
+**Persist the choice before Layer 0.5 dispatches anything:**
+
+```javascript
+session.setWorkerModel(state, workerModel);
+session.save(state);
+```
+
+Layers 0.5 (`layers/cleanup.md`) and 1 (`layers/ai-review.md`) both read
+`state.workerModel` — neither re-derives nor re-asks; see those files for
+how `dispatch()` turns the choice into an Agent-tool call (Anthropic
+tiers) or a headless background `claude -p` process (kimi).
+
 ---
 
 ## Layers
