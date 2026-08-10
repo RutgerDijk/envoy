@@ -148,7 +148,18 @@ real auth probe (`checkKimi()`) runs only if the user actually picks
 kimi. A review run that never selects kimi therefore behaves exactly as
 it does today.
 
-Use `AskUserQuestion` with:
+`AskUserQuestion`'s `options` array caps at 4 per question (`maxItems:
+4`), and fable/opus/sonnet/haiku/kimi is 5 — so this is two
+`AskUserQuestion` calls, not one table:
+
+**Step 1 — "Which worker model?" (2 options):**
+
+| Option | Label |
+|--------|-------|
+| `anthropic` | Anthropic tier — choose fable/opus/sonnet/haiku next |
+| `kimi` | Kimi — plain label when `isKimiConfigured()` returns `true`; **"Kimi (needs setup)"** when it returns `false` |
+
+**Step 2 — "Which tier?", only asked when "Anthropic tier" was picked (4 options, exactly at the cap):**
 
 | Option | Label |
 |--------|-------|
@@ -156,9 +167,10 @@ Use `AskUserQuestion` with:
 | `opus` | Opus |
 | `sonnet` | Sonnet |
 | `haiku` | Haiku |
-| `kimi` | Kimi — plain label when `isKimiConfigured()` returns `true`; **"Kimi (needs setup)"** when it returns `false` |
 
-**If the user picks kimi:**
+The chosen tier becomes `workerModel`. Done — skip the kimi flow below.
+
+**If "Kimi" was picked in Step 1:**
 
 1. Call `checkKimi()` — this is the point where the key is validated
    against Moonshot, and it re-validates on every selection, so a revoked
