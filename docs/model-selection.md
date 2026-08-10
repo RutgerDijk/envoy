@@ -159,6 +159,13 @@ attacker-influenceable text (a diff, an issue body). Prompt injection in
 that text reaches a model whose tool discipline this project cannot
 vouch for, so the bound has to be mechanical.
 
+**On the Agent path the list is descriptive, not enforcing.** The `Agent`
+tool exposes no per-call tool allowlist, so an Anthropic-tier worker is
+bounded by its `subagent_type`'s own tool surface and the
+`PreToolUse[Agent]` contract gate — unchanged by this feature.
+`dispatch()` still returns the normalized list on that path so both
+branches document the same intent.
+
 **Contract enforcement does not cover the Kimi path.** Envoy's
 `PreToolUse[Agent]` gate (`hooks/observe-gate.js`, driven by each rigid
 skill's `contract.json` `agentInvariants`) only fires for `Agent` tool
@@ -181,6 +188,36 @@ This boundary is enforced by `installKimi()`, not just documented:
   into the environment of the one background `claude -p` process a kimi
   dispatch starts (see the table above) — never the parent session, and
   never written to disk anywhere.
+- The dispatched command itself refuses to run when `MOONSHOT_API_KEY` is
+  unset or empty. Without that guard, an empty `ANTHROPIC_AUTH_TOKEN`
+  combined with an already-redirected `ANTHROPIC_BASE_URL` could let the
+  CLI fall back on the machine's own Anthropic credential and send it to
+  Moonshot.
+
+### Residual risk: the Kimi worker holds a live Moonshot credential
+
+Accept this knowingly before enabling Kimi for a write-capable role.
+
+The `claude -p` child process gets your real `MOONSHOT_API_KEY` in its own
+environment, and for the pickup-implementer and review-cleanup roles that
+same process is granted `Bash`. A Kimi worker can therefore read its own
+credential (`env`, `echo $ANTHROPIC_AUTH_TOKEN`) and, with network access,
+send it anywhere — or simply repeat it into its report at
+`.envoy/agent-output/<task-id>.md`, which the orchestrator later reads and
+may quote onward into commits or PR text. The worker is driven by a
+third-party model reading attacker-influenceable text (issue bodies,
+diffs), so prompt injection is the realistic trigger, not operator error.
+
+`--allowed-tools` bounds *which* tools the worker has; it does not isolate
+the credential from the tools it does have. Practical mitigations:
+
+- Use a **dedicated, rate-limited Moonshot key** for Envoy — never a key
+  shared with other systems — so revocation is cheap and blast radius is
+  bounded.
+- Prefer Kimi for the **read-only** role (review Layer 1) over the
+  write-and-`Bash` roles when the diff or issue text is untrusted.
+- Rotate the key if a worker's output ever contains something resembling
+  it.
 
 ## Reference
 

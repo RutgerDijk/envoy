@@ -299,5 +299,18 @@ test('the TDD and scope laws are still injected into the implementer prompt', ()
   }
 });
 
+// Step 12.5 calls AskUserQuestion, and allowed-tools pins the skill's tool
+// surface — so the tool the step depends on has to be named there.
+section('frontmatter pins the tool the selection step uses');
+
+test('pickup SKILL.md lists AskUserQuestion in allowed-tools', () => {
+  const skillMd = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'pickup', 'SKILL.md'), 'utf8');
+  const frontmatter = skillMd.split(/^---$/m)[1] || '';
+  assert.ok(
+    /^\s*-\s*AskUserQuestion\s*$/m.test(frontmatter),
+    'Step 12.5 calls AskUserQuestion, so allowed-tools must name it'
+  );
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

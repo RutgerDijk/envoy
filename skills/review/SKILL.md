@@ -15,9 +15,9 @@ allowed-tools:
   - Glob
   - Skill
   - Agent
+  - AskUserQuestion
   - WebFetch
 model: opus
-context: fork
 ---
 
 ## Briefing

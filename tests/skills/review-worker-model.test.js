@@ -316,5 +316,26 @@ test('SKILL.md structures selection as two AskUserQuestion calls: Anthropic-tier
   );
 });
 
+// The worker-model step makes review pause for the user, so its frontmatter
+// has to match that shape: AskUserQuestion pinned in allowed-tools, and no
+// `context: fork` (CLAUDE.md reserves fork for skills with no approval pause).
+section('frontmatter matches the newly interactive shape');
+
+test('SKILL.md pins AskUserQuestion in allowed-tools', () => {
+  const frontmatter = skillMd.split(/^---$/m)[1] || '';
+  assert.ok(
+    /^\s*-\s*AskUserQuestion\s*$/m.test(frontmatter),
+    'the worker-model menu calls AskUserQuestion, so allowed-tools must name it'
+  );
+});
+
+test('SKILL.md does not declare context: fork', () => {
+  const frontmatter = skillMd.split(/^---$/m)[1] || '';
+  assert.ok(
+    !/^\s*context:\s*fork\s*$/m.test(frontmatter),
+    'review pauses for the worker-model choice, so it must not fork the conversation'
+  );
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

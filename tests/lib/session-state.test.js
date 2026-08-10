@@ -124,5 +124,25 @@ test('a session file predating workerModel loads without throwing (backward comp
   cleanup(dir);
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// formatForPrompt(): the restored-state summary must surface the choice
+// ═══════════════════════════════════════════════════════════════════
+
+section('formatForPrompt(): surfaces the chosen worker model on resume');
+
+test('a chosen worker model appears in the restored-state summary', () => {
+  const state = session.createEmpty('feature/x');
+  session.setWorkerModel(state, 'kimi');
+  const text = session.formatForPrompt(state);
+  assert.ok(/kimi/.test(text), 'resume summary must name the chosen model');
+  assert.ok(/do not re-ask/i.test(text), 'resume summary must say the choice is settled');
+});
+
+test('no worker-model line is emitted before a choice is made', () => {
+  const state = session.createEmpty('feature/x');
+  const text = session.formatForPrompt(state);
+  assert.ok(!/Worker model/i.test(text));
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

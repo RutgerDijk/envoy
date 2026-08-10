@@ -465,6 +465,53 @@ test('a cwd containing shell metacharacters cannot break out of the command', ()
   assert.strictEqual(fs.readFileSync(result.outputFile, 'utf8').trim(), 'hello');
 });
 
+test('the dispatched command refuses to run when MOONSHOT_API_KEY is unset (fails closed)', () => {
+  const parent = makeTmpDir();
+  const cwd = path.join(parent, 'repo');
+  fs.mkdirSync(cwd, { recursive: true });
+  const canary = path.join(parent, 'claude-ran');
+
+  const result = dispatch({ model: 'kimi', prompt: 'hello', taskId: 'task-28' }, { cwd });
+
+  // Stub `claude` so we can prove it is never reached: without the guard,
+  // an empty MOONSHOT_API_KEY would still start the CLI with
+  // ANTHROPIC_BASE_URL already pointed at Moonshot.
+  const binDir = path.join(parent, 'bin');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(path.join(binDir, 'claude'), `#!/bin/sh\ntouch ${canary}\ncat\n`, { mode: 0o755 });
+
+  const env = { ...process.env, PATH: `${binDir}:${process.env.PATH}` };
+  delete env.MOONSHOT_API_KEY;
+
+  let status = 0;
+  try {
+    execFileSync('/bin/sh', ['-c', result.command], { env, stdio: 'pipe' });
+  } catch (err) {
+    status = err.status;
+  }
+
+  assert.strictEqual(status, 1, 'a kimi dispatch with no key must exit non-zero');
+  assert.ok(!fs.existsSync(canary), '`claude` must never be reached without a key');
+});
+
+test('the dispatched command still runs when MOONSHOT_API_KEY is present', () => {
+  const parent = makeTmpDir();
+  const cwd = path.join(parent, 'repo');
+  fs.mkdirSync(cwd, { recursive: true });
+
+  const result = dispatch({ model: 'kimi', prompt: 'hello', taskId: 'task-29' }, { cwd });
+
+  const binDir = path.join(parent, 'bin');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(path.join(binDir, 'claude'), '#!/bin/sh\ncat\n', { mode: 0o755 });
+
+  execFileSync('/bin/sh', ['-c', result.command], {
+    env: { ...process.env, PATH: `${binDir}:${process.env.PATH}`, MOONSHOT_API_KEY: 'sk-test' },
+  });
+
+  assert.strictEqual(fs.readFileSync(result.outputFile, 'utf8').trim(), 'hello');
+});
+
 test('task ids that sanitize to the same string do not collide on disk', () => {
   assert.strictEqual(sanitizeTaskId('task-1'), 'task-1', 'already-safe ids stay verbatim');
   assert.notStrictEqual(sanitizeTaskId('task/1'), sanitizeTaskId('task-1'));

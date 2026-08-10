@@ -153,6 +153,31 @@ test('documents that contract.json agentInvariants do not cover the Bash-dispatc
   );
 });
 
+section('residual risk: the kimi worker holds a live credential');
+test('documents that a Bash-capable kimi worker can read and leak its own key', () => {
+  const content = readDoc();
+  assert.ok(
+    /residual risk/i.test(content),
+    'expected doc to name the residual risk explicitly, not only the parent/child env boundary'
+  );
+  assert.ok(
+    /ANTHROPIC_AUTH_TOKEN/.test(content) && /agent-output/.test(content),
+    'expected doc to explain that the worker can read its own credential and echo it into its report'
+  );
+  assert.ok(
+    /rotate|dedicated|rate-limited/i.test(content),
+    'expected doc to give at least one concrete mitigation'
+  );
+});
+
+test('documents that the dispatched command fails closed on a missing key', () => {
+  const content = readDoc();
+  assert.ok(
+    /refuses to run when `?MOONSHOT_API_KEY`? is\s+unset|refuses to run/i.test(content),
+    'expected doc to state that a kimi dispatch with no key refuses to run'
+  );
+});
+
 section('the caller must wait for the background process to exit');
 test('names a concrete completion signal, not just "once it exits"', () => {
   const content = readDoc();

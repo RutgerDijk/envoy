@@ -14,6 +14,7 @@ allowed-tools:
   - Glob
   - Skill
   - Agent
+  - AskUserQuestion
 ---
 
 ## Briefing

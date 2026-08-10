@@ -46,7 +46,7 @@ skills/<name>/
 - `allowed-tools:` — pins the skill's tool surface
 - `paths:` — glob for path-scoped activation (`docs/wiki/**`, etc.)
 - `model:` / `effort:` — optional per-skill tuning
-- `context: fork` — forks the conversation for pure task-shaped skills (review, finalize). Skip for skills with user-approval pauses (pickup).
+- `context: fork` — forks the conversation for pure task-shaped skills (finalize). Skip for skills with user-approval pauses (pickup, and review since it gained the worker-model prompt).
 
 (No `hooks:` frontmatter — enforcement is registered once at the plugin level; see **Enforcement** above.)
 
