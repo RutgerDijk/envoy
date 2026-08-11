@@ -29,7 +29,18 @@ Both read and write the same `workerModel` field in
 - A session resumed after context compaction or a restart is **not
   re-asked** — it reads the stored choice back instead.
 
-The menu, via `AskUserQuestion`:
+`AskUserQuestion`'s `options` array caps at 4 per question, and
+fable/opus/sonnet/haiku/kimi is 5 — so the menu is two
+`AskUserQuestion` calls, not one table:
+
+**Step 1 — "Which worker model?" (2 options):**
+
+| Option | Label |
+|--------|-------|
+| `anthropic` | Anthropic tier — choose fable/opus/sonnet/haiku next |
+| `kimi` | Kimi — or **"Kimi (needs setup)"** if `MOONSHOT_API_KEY` isn't configured yet |
+
+**Step 2 — "Which tier?", only asked when "Anthropic tier" was picked (4 options, exactly at the cap):**
 
 | Option | Label |
 |--------|-------|
@@ -37,7 +48,6 @@ The menu, via `AskUserQuestion`:
 | `opus` | Opus |
 | `sonnet` | Sonnet |
 | `haiku` | Haiku |
-| `kimi` | Kimi — or **"Kimi (needs setup)"** if `MOONSHOT_API_KEY` isn't configured yet |
 
 Picking an Anthropic tier changes nothing about how dispatch works today
 — the Agent tool is called with an explicit `model` override, same as
