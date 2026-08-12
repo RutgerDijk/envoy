@@ -6,12 +6,12 @@
   },
   "metadata": {
     "description": "Claude Code marketplace entry for the Envoy professional development workflow plugin.",
-    "version": "4.0.0"
+    "version": "4.1.0"
   },
   "plugins": [
     {
       "name": "envoy",
-      "version": "4.0.0",
+      "version": "4.1.0",
       "description": "Expose the full Envoy professional development workflow plugin through a single marketplace entry.",
       "author": {
         "name": "Rutger Dijkstra",
