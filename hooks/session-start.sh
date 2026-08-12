@@ -84,12 +84,17 @@ detect_stack() {
     local pattern=$2
     local search_type=${3:-"file"}
 
+    # Exclusions bound the scan to the project's own files (#78): without
+    # them detection walks node_modules/.worktrees (minutes on large repos)
+    # and matches third-party dependencies. Flags are written individually —
+    # never as --exclude-dir={a,b}: brace expansion does not happen under
+    # /bin/sh, which would silently disable the exclusions.
     if [ "$search_type" = "file" ]; then
-        if find . -maxdepth 3 -name "$pattern" 2>/dev/null | grep -q .; then
+        if find . -maxdepth 3 \( -name node_modules -o -name .git -o -name bin -o -name obj -o -name .worktrees \) -prune -o -name "$pattern" -print 2>/dev/null | grep -q .; then
             DETECTED_STACKS="$DETECTED_STACKS $name"
         fi
     elif [ "$search_type" = "content" ]; then
-        if grep -r -l "$pattern" --include="*.csproj" --include="package.json" --include="*.bicep" . 2>/dev/null | head -1 | grep -q .; then
+        if grep -r -l "$pattern" --include="*.csproj" --include="package.json" --include="*.bicep" --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=bin --exclude-dir=obj --exclude-dir=.worktrees . 2>/dev/null | head -1 | grep -q .; then
             DETECTED_STACKS="$DETECTED_STACKS $name"
         fi
     fi
@@ -114,7 +119,7 @@ detect_stack "react-query" "@tanstack/react-query" "content"
 detect_stack "react-hook-form" "react-hook-form" "content"
 detect_stack "tailwind" "tailwindcss" "content"
 detect_stack "orval" '"orval"' "content"
-detect_stack "application-insights" "ApplicationInsights" "content"
+detect_stack "application-insights" "[Aa]pplication[Ii]nsights" "content"
 detect_stack "health-checks" "AddHealthChecks\|HealthChecks" "content"
 detect_stack "openapi" "Swashbuckle\|AddSwaggerGen" "content"
 
