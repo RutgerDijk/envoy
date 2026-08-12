@@ -55,7 +55,13 @@ function writeFixtureFile(rel, content) {
 
 writeFixtureFile('package.json', JSON.stringify({
   name: 'fixture-app',
-  dependencies: { '@microsoft/applicationinsights-web': '^3.3.11' },
+  dependencies: {
+    '@microsoft/applicationinsights-web': '^3.3.11',
+    // Second alternative of the shadcn-radix pattern
+    // (@radix-ui|class-variance-authority): alternation only works when
+    // grep runs in ERE mode, so this guards the -E flag on the JS path.
+    'class-variance-authority': '^0.7.0',
+  },
 }, null, 2));
 writeFixtureFile('docker-compose.yml', 'services: {}\n');
 
@@ -130,6 +136,7 @@ const MUST_NOT_DETECT = [
 const MUST_DETECT = [
   ['application-insights', 'lowercase @microsoft/applicationinsights-web in the project manifest'],
   ['docker-compose', 'root docker-compose.yml (exclusions must not over-prune)'],
+  ['shadcn-radix', 'class-variance-authority via | alternation (requires ERE grep)'],
 ];
 
 for (const [impl, detected] of Object.entries(results)) {
