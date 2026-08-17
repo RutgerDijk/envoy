@@ -337,5 +337,16 @@ test('SKILL.md does not declare context: fork', () => {
   );
 });
 
+test('every tool the kimi layers tell the orchestrator to use is in allowed-tools', () => {
+  const frontmatter = skillMd.split(/^---$/m)[1] || '';
+  for (const tool of ['BashOutput', 'Monitor']) {
+    if (!new RegExp(`\\b${tool}\\b`).test(aiReviewMd) && !new RegExp(`\\b${tool}\\b`).test(cleanupMd)) continue;
+    assert.ok(
+      new RegExp(`^\\s*-\\s*${tool}\\s*$`, 'm').test(frontmatter),
+      `the kimi layers instruct using ${tool}, so allowed-tools must name it — without it the kimi wait loop cannot run`
+    );
+  }
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

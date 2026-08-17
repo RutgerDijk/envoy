@@ -312,5 +312,18 @@ test('pickup SKILL.md lists AskUserQuestion in allowed-tools', () => {
   );
 });
 
+test('every tool the kimi steps tell the orchestrator to use is in allowed-tools', () => {
+  const skillMd = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'pickup', 'SKILL.md'), 'utf8');
+  const frontmatter = skillMd.split(/^---$/m)[1] || '';
+  const tddMd = fs.readFileSync(TDD, 'utf8');
+  for (const tool of ['BashOutput', 'Monitor']) {
+    if (!new RegExp(`\\b${tool}\\b`).test(tddMd)) continue;
+    assert.ok(
+      new RegExp(`^\\s*-\\s*${tool}\\s*$`, 'm').test(frontmatter),
+      `steps/tdd.md instructs using ${tool}, so allowed-tools must name it — without it the kimi wait loop cannot run`
+    );
+  }
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
