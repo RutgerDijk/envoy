@@ -73,7 +73,16 @@ test('key source: platform.moonshot.ai', () => {
   assert.ok(/platform\.moonshot\.ai/.test(content), 'expected doc to point to platform.moonshot.ai for the key');
 });
 
-test('storage location: env block of ~/.claude/settings.json', () => {
+test('storage location: the dedicated key file, never the settings env block', () => {
+  const content = readDoc();
+  assert.ok(/moonshot-api-key/.test(content), 'expected doc to name the ~/.claude/moonshot-api-key key file');
+  assert.ok(
+    /env block[^.\n]*(every|all)\s+subprocess|(every|all)\s+subprocess[^.\n]*env block/i.test(content),
+    'expected doc to explain WHY the env block is not the destination (it exports to every subprocess)'
+  );
+});
+
+test('names ~/.claude/settings.json (the file installKimi migrates stale keys out of)', () => {
   const content = readDoc();
   assert.ok(/~\/\.claude\/settings\.json/.test(content), 'expected doc to name ~/.claude/settings.json');
   assert.ok(/env/.test(content), 'expected doc to mention the env block');
@@ -151,6 +160,53 @@ test('documents that contract.json agentInvariants do not cover the Bash-dispatc
     /agentInvariants|PreToolUse\[Agent\]|contract\.json/.test(content),
     'expected doc to note that the Agent-tool contract gate does not fire for kimi dispatches'
   );
+});
+
+section('kimi child hardening is documented');
+
+test('documents the env -i allowlist and that ANTHROPIC_API_KEY cannot reach the child', () => {
+  const content = readDoc();
+  assert.ok(/env -i/.test(content), 'expected doc to name the env -i allowlist construction');
+  assert.ok(/ANTHROPIC_API_KEY/.test(content), 'expected doc to state the parent ANTHROPIC_API_KEY never reaches the child');
+});
+
+test('documents the hard tool bound and MCP stripping', () => {
+  const content = readDoc();
+  assert.ok(/--tools/.test(content), 'expected doc to name the --tools availability bound');
+  assert.ok(/--strict-mcp-config/.test(content), 'expected doc to name --strict-mcp-config');
+});
+
+test('documents the budget cap and wall-clock watchdog with their defaults', () => {
+  const content = readDoc();
+  assert.ok(/--max-budget-usd/.test(content), 'expected doc to name --max-budget-usd');
+  assert.ok(/1800|30 min/i.test(content), 'expected doc to state the default wall-clock bound');
+  assert.ok(/watchdog|wall.?clock|timeoutSeconds/i.test(content), 'expected doc to describe the wall-clock kill');
+});
+
+test('documents the dispatch-enforced contract gate on the kimi path', () => {
+  const content = readDoc();
+  assert.ok(/evaluateWorkerPrompt/.test(content), 'expected doc to name evaluateWorkerPrompt()');
+  assert.ok(/throws|refus/i.test(content), 'expected doc to state that a violating prompt refuses to dispatch');
+});
+
+test('shows allowedTools in the dispatch() signature', () => {
+  const content = readDoc();
+  assert.ok(
+    /dispatch\(\{ model, prompt, taskId, allowedTools/.test(content),
+    'expected the shown dispatch() signature to include allowedTools'
+  );
+});
+
+test('documents run-unique output files read from the descriptor', () => {
+  const content = readDoc();
+  assert.ok(/run-unique|descriptor\.outputFile/.test(content),
+    'expected doc to state output paths are run-unique and read from the descriptor');
+});
+
+test('documents how to change the worker model mid-run', () => {
+  const content = readDoc();
+  assert.ok(/mid-run|change (the )?worker model|switch (the )?worker model/i.test(content),
+    'expected doc to document changing the worker model after it was chosen');
 });
 
 section('residual risk: the kimi worker holds a live credential');
