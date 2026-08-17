@@ -11,6 +11,8 @@ allowed-tools:
   - Write
   - Edit
   - Bash
+  - BashOutput
+  - Monitor
   - Grep
   - Glob
   - Skill
