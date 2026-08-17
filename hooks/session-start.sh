@@ -121,54 +121,28 @@ detect_stack "openapi" "Swashbuckle\|AddSwaggerGen" "content"
 # Trim leading space
 DETECTED_STACKS=$(echo "$DETECTED_STACKS" | xargs)
 
-# Detect session state (cross-session continuity)
+# Detect session state (cross-session continuity). Rendered by
+# lib/session-state's formatForPrompt — the single restore surface — so a
+# field added there (e.g. workerModel) reaches this hook automatically
+# instead of drifting out of a hand-built duplicate.
 SESSION_STATE=""
 if [ -f ".envoy-session.json" ]; then
-    # Extract all fields in a single Node process
-    eval "$(node -e "
-      const s=JSON.parse(require('fs').readFileSync('.envoy-session.json','utf8'));
-      const esc=v=>(v||'').replace(/'/g,\"'\\\\''\");
-      console.log('SESSION_BRANCH=\'' + esc(s.branch||'unknown') + '\'');
-      console.log('SESSION_PLAN=\'' + esc(s.plan||'') + '\'');
-      const d=(s.tasks||[]).filter(t=>t.status==='done').length;
-      console.log('SESSION_TASKS=\'' + d+'/'+(s.tasks||[]).length + '\'');
-      console.log('SESSION_UPDATED=\'' + esc(s.updatedAt||'') + '\'');
-      const ns=(s.nextSteps||[]).slice(0,3).map(n=>'- '+n).join('\n');
-      console.log('SESSION_NEXTSTEPS=\'' + esc(ns) + '\'');
-      const dc=(s.decisions||[]).slice(-3).map(d=>'- '+d.text).join('\n');
-      console.log('SESSION_DECISIONS=\'' + esc(dc) + '\'');
-    " 2>/dev/null)"
+    SESSION_RESTORED=$(node -e '
+      try {
+        const session = require(process.argv[1]);
+        const state = session.load(process.cwd());
+        process.stdout.write(session.formatForPrompt(state));
+      } catch (_e) {}
+    ' "$PLUGIN_DIR/lib/session-state" 2>/dev/null)
 
-    SESSION_STATE="---
+    if [ -n "$SESSION_RESTORED" ]; then
+        SESSION_STATE="---
 
-**Session state detected** (from \`.envoy-session.json\`, last updated: $SESSION_UPDATED)
-
-**Branch:** $SESSION_BRANCH"
-
-    if [ -n "$SESSION_PLAN" ]; then
-        SESSION_STATE="$SESSION_STATE
-**Plan:** $SESSION_PLAN"
-    fi
-
-    SESSION_STATE="$SESSION_STATE
-**Progress:** $SESSION_TASKS tasks complete"
-
-    if [ -n "$SESSION_DECISIONS" ]; then
-        SESSION_STATE="$SESSION_STATE
-**Recent decisions:**
-$SESSION_DECISIONS"
-    fi
-
-    if [ -n "$SESSION_NEXTSTEPS" ]; then
-        SESSION_STATE="$SESSION_STATE
-**Next steps:**
-$SESSION_NEXTSTEPS"
-    fi
-
-    SESSION_STATE="$SESSION_STATE
+$SESSION_RESTORED
 
 Load full state with: \`const session = require('./lib/session-state').load()\`
 To clear after branch is done: \`require('./lib/session-state').clear()\`"
+    fi
 fi
 
 # Compaction-resume nudge: on a resume trigger, if the most recent ledger
