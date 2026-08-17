@@ -163,11 +163,12 @@ test('command invokes `claude -p`', () => {
   assert.ok(/\bclaude -p\b/.test(result.command));
 });
 
-test('output is written to .envoy/agent-output/<task-id>.md', () => {
+test('output is written to a run-unique .md under .envoy/agent-output, named after the task id', () => {
   const cwd = makeTmpDir();
   const result = dispatch({ model: 'kimi', prompt: 'p', taskId: 'task-14' }, { cwd });
-  const expected = path.join('.envoy', 'agent-output', 'task-14.md');
-  assert.ok(result.outputFile.endsWith(expected));
+  assert.strictEqual(path.dirname(result.outputFile), path.join(cwd, '.envoy', 'agent-output'));
+  assert.ok(path.basename(result.outputFile).startsWith('task-14-'));
+  assert.ok(result.outputFile.endsWith('.md'));
   assert.ok(result.command.includes(result.outputFile));
 });
 
@@ -516,6 +517,145 @@ test('task ids that sanitize to the same string do not collide on disk', () => {
   assert.strictEqual(sanitizeTaskId('task-1'), 'task-1', 'already-safe ids stay verbatim');
   assert.notStrictEqual(sanitizeTaskId('task/1'), sanitizeTaskId('task-1'));
   assert.notStrictEqual(sanitizeTaskId('a b'), sanitizeTaskId('a-b'));
+});
+
+// ---------------------------------------------------------------------------
+// Kimi child hardening — the worker env is an allowlist, its tool set is a
+// hard bound, and a runaway worker is stopped by budget and wall clock.
+// ---------------------------------------------------------------------------
+
+section('kimi child hardening');
+
+function stubClaude(parent, script) {
+  const binDir = path.join(parent, 'bin');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(path.join(binDir, 'claude'), script, { mode: 0o755 });
+  return binDir;
+}
+
+test('the child env is built with env -i — an allowlist, not inherited-minus-blocklist', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch({ model: 'kimi', prompt: 'p', taskId: 'task-30' }, { cwd });
+  assert.ok(/\benv -i\b/.test(result.command), 'command must start the child via env -i');
+});
+
+test('the child never sees parent credentials — only allowlisted vars survive', () => {
+  const parent = makeTmpDir();
+  const cwd = path.join(parent, 'repo');
+  fs.mkdirSync(cwd, { recursive: true });
+  const result = dispatch({ model: 'kimi', prompt: 'hello', taskId: 'task-31' }, { cwd });
+
+  const binDir = stubClaude(parent, '#!/bin/sh\nenv\ncat > /dev/null\n');
+  execFileSync('/bin/sh', ['-c', result.command], {
+    env: {
+      ...process.env,
+      PATH: `${binDir}:${process.env.PATH}`,
+      MOONSHOT_API_KEY: 'sk-moon',
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CLAUDE_CODE_USE_BEDROCK: '1',
+      CLAUDE_CODE_USE_VERTEX: '1',
+      SECRET_CANARY: 'must-not-leak',
+      HTTPS_PROXY: 'http://proxy.example:8080',
+    },
+  });
+
+  const childEnv = fs.readFileSync(result.outputFile, 'utf8');
+  assert.ok(!childEnv.includes('sk-ant-real-key'), 'ANTHROPIC_API_KEY must not reach the child');
+  assert.ok(!childEnv.includes('CLAUDE_CODE_USE_BEDROCK'), 'Bedrock routing must not reach the child');
+  assert.ok(!childEnv.includes('CLAUDE_CODE_USE_VERTEX'), 'Vertex routing must not reach the child');
+  assert.ok(!childEnv.includes('must-not-leak'), 'arbitrary parent vars must not reach the child');
+  assert.ok(childEnv.includes(`ANTHROPIC_AUTH_TOKEN=sk-moon`), 'the Moonshot key must reach the child as ANTHROPIC_AUTH_TOKEN');
+  assert.ok(childEnv.includes(`ANTHROPIC_BASE_URL=${KIMI_BASE_URL}`));
+  assert.ok(/^PATH=/m.test(childEnv), 'PATH must survive');
+  assert.ok(/^HOME=/m.test(childEnv), 'HOME must survive');
+  assert.ok(childEnv.includes('HTTPS_PROXY=http://proxy.example:8080'), 'proxy config must pass through');
+});
+
+test('the child tool set is hard-bounded with --tools, not just pre-approved with --allowed-tools', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch(
+    { model: 'kimi', prompt: 'p', taskId: 'task-32', allowedTools: ['Read', 'Grep'] },
+    { cwd },
+  );
+  assert.ok(result.command.includes('--tools'), 'command must pass --tools');
+  assert.ok(/--tools\s+'Read,Grep'/.test(result.command), '--tools must carry the same list as --allowed-tools');
+});
+
+test('the child gets no MCP servers (--strict-mcp-config with no --mcp-config)', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch({ model: 'kimi', prompt: 'p', taskId: 'task-33' }, { cwd });
+  assert.ok(result.command.includes('--strict-mcp-config'));
+  assert.ok(!result.command.includes('--mcp-config '), 'no MCP config may be supplied');
+});
+
+test('the worker is capped by --max-budget-usd with a sensible default', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch({ model: 'kimi', prompt: 'p', taskId: 'task-34' }, { cwd });
+  assert.ok(result.command.includes('--max-budget-usd'), 'command must pass --max-budget-usd');
+});
+
+test('a caller can override the budget cap', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch(
+    { model: 'kimi', prompt: 'p', taskId: 'task-35', maxBudgetUsd: 2 },
+    { cwd },
+  );
+  assert.ok(/--max-budget-usd\s+'2'/.test(result.command));
+});
+
+test('a hung worker is killed by the wall-clock watchdog', () => {
+  const parent = makeTmpDir();
+  const cwd = path.join(parent, 'repo');
+  fs.mkdirSync(cwd, { recursive: true });
+  const result = dispatch(
+    { model: 'kimi', prompt: 'p', taskId: 'task-36', timeoutSeconds: 1 },
+    { cwd },
+  );
+
+  const binDir = stubClaude(parent, '#!/bin/sh\nsleep 30\n');
+  const started = Date.now();
+  let status = 0;
+  try {
+    execFileSync('/bin/sh', ['-c', result.command], {
+      env: { ...process.env, PATH: `${binDir}:${process.env.PATH}`, MOONSHOT_API_KEY: 'sk-test' },
+      stdio: 'pipe',
+      timeout: 15000,
+    });
+  } catch (err) {
+    status = err.status;
+  }
+  const elapsed = Date.now() - started;
+  assert.notStrictEqual(status, 0, 'a timed-out worker must exit non-zero');
+  assert.ok(elapsed < 10000, `watchdog must fire near the timeout, took ${elapsed}ms`);
+});
+
+test('the watchdog default appears in the command without a caller override', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch({ model: 'kimi', prompt: 'p', taskId: 'task-37' }, { cwd });
+  assert.ok(/sleep\s+'?1800'?/.test(result.command), 'default wall-clock bound must be 1800s');
+});
+
+test('the prompt file is not group/other readable (it carries issue and diff text)', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch({ model: 'kimi', prompt: 'secret spec', taskId: 'task-38' }, { cwd });
+  assert.strictEqual(fs.statSync(result.promptFile).mode & 0o077, 0);
+});
+
+test('the output file is precreated without group/other access', () => {
+  const cwd = makeTmpDir();
+  const result = dispatch({ model: 'kimi', prompt: 'p', taskId: 'task-39' }, { cwd });
+  assert.ok(fs.existsSync(result.outputFile), 'output file must be precreated to pin its mode');
+  assert.strictEqual(fs.statSync(result.outputFile).mode & 0o077, 0);
+});
+
+test('two dispatches of the same taskId never share prompt/output files (concurrent runs)', () => {
+  const cwd = makeTmpDir();
+  const a = dispatch({ model: 'kimi', prompt: 'run A', taskId: 'ai-review' }, { cwd });
+  const b = dispatch({ model: 'kimi', prompt: 'run B', taskId: 'ai-review' }, { cwd });
+  assert.notStrictEqual(a.promptFile, b.promptFile);
+  assert.notStrictEqual(a.outputFile, b.outputFile);
+  assert.strictEqual(fs.readFileSync(a.promptFile, 'utf8'), 'run A');
+  assert.strictEqual(fs.readFileSync(b.promptFile, 'utf8'), 'run B');
 });
 
 // ---------------------------------------------------------------------------
