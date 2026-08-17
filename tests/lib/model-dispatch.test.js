@@ -55,6 +55,7 @@ const {
   SETTINGS_FILE_MODE,
   sanitizeTaskId,
   dispatch,
+  defaultProbe,
   isKimiConfigured,
   checkKimi,
   installKimi,
@@ -656,6 +657,65 @@ test('two dispatches of the same taskId never share prompt/output files (concurr
   assert.notStrictEqual(a.outputFile, b.outputFile);
   assert.strictEqual(fs.readFileSync(a.promptFile, 'utf8'), 'run A');
   assert.strictEqual(fs.readFileSync(b.promptFile, 'utf8'), 'run B');
+});
+
+// ---------------------------------------------------------------------------
+// defaultProbe() — must exercise the same transport the dispatched child
+// uses, so a passing probe actually predicts a working dispatch.
+// ---------------------------------------------------------------------------
+
+section('defaultProbe()');
+
+async function withFetchStub(stub, fn) {
+  const saved = global.fetch;
+  global.fetch = stub;
+  try {
+    return await fn();
+  } finally {
+    global.fetch = saved;
+  }
+}
+
+testAsync('authenticates like the child: Authorization Bearer, never x-api-key', async () => {
+  let seen = null;
+  await withFetchStub(async (url, init) => {
+    seen = { url, headers: init.headers };
+    return { ok: true, status: 200 };
+  }, () => defaultProbe('sk-probe-key'));
+
+  assert.ok(seen, 'probe must call fetch');
+  assert.strictEqual(seen.headers.authorization, 'Bearer sk-probe-key');
+  assert.strictEqual(seen.headers['x-api-key'], undefined,
+    'x-api-key is not the transport the dispatched child uses');
+});
+
+testAsync('probes with the exact model id the dispatch will use', async () => {
+  let body = null;
+  await withFetchStub(async (url, init) => {
+    body = JSON.parse(init.body);
+    return { ok: true, status: 200 };
+  }, () => defaultProbe('sk-probe-key'));
+
+  assert.strictEqual(body.model, KIMI_MODEL_ID);
+});
+
+testAsync('surfaces an unknown model id by name instead of a bare HTTP status', async () => {
+  const result = await withFetchStub(async () => ({
+    ok: false,
+    status: 404,
+    json: async () => ({ error: { type: 'not_found_error', message: 'model not found' } }),
+  }), () => defaultProbe('sk-probe-key'));
+
+  assert.strictEqual(result.ok, false);
+  assert.ok(result.reason.includes(KIMI_MODEL_ID),
+    `a model-id failure must name the id, got: ${result.reason}`);
+});
+
+testAsync('still reports auth rejection distinctly', async () => {
+  const result = await withFetchStub(async () => ({ ok: false, status: 401 }),
+    () => defaultProbe('sk-bad'));
+  assert.strictEqual(result.ok, false);
+  assert.ok(/auth rejected/.test(result.reason));
 });
 
 // ---------------------------------------------------------------------------
