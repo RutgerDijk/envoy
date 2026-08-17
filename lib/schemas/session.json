@@ -1,7 +1,7 @@
 {
   "$schemaVersion": "1",
   "$id": "envoy/session",
-  "description": "Pickup session state — replaces .envoy-session.json; lives at .envoy/pickup/session.json.",
+  "description": "Pickup task-list snapshot — preflight-seeded, write-once; lives at .envoy/pickup/session.json. Distinct from the live repo-root .envoy-session.json that lib/session-state.js reads and writes throughout a run (task status, decisions, chosen worker model).",
   "type": "object",
   "required": ["$schemaVersion", "branch", "tasks"],
   "properties": {
