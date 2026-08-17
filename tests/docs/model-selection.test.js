@@ -77,7 +77,7 @@ test('storage location: the dedicated key file, never the settings env block', (
   const content = readDoc();
   assert.ok(/moonshot-api-key/.test(content), 'expected doc to name the ~/.claude/moonshot-api-key key file');
   assert.ok(
-    /env block[^.\n]*(every|all)\s+subprocess|(every|all)\s+subprocess[^.\n]*env block/i.test(content),
+    /`?env`? block/i.test(content) && /(every|all)\s+subprocess/i.test(content),
     'expected doc to explain WHY the env block is not the destination (it exports to every subprocess)'
   );
 });

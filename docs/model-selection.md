@@ -71,10 +71,13 @@ Kimi needs exactly one thing: a Moonshot API key.
      nothing chosen.
 3. **Paste the key.** This calls `installKimi(key)`
    (`lib/model-dispatch.js`), which:
-   - writes it as `MOONSHOT_API_KEY` into the `env` block of
-     `~/.claude/settings.json` (creating the file/block if needed),
-   - sets that file's permissions to `0600` — it now holds a credential,
-     so it must not be left world-readable by your umask, and
+   - writes it to the dedicated key file `~/.claude/moonshot-api-key`
+     with `0600` permissions — never into the `env` block of
+     `~/.claude/settings.json`, because that block is exported into
+     **every subprocess** the session starts, which would hand the
+     credential to processes that have nothing to do with kimi,
+   - migrates a `MOONSHOT_API_KEY` left in that `env` block by an
+     earlier install out of it, and
    - re-runs the auth probe to confirm the key actually works before
      handing control back.
    - If the probe fails (`probe.ok === false`), you see `probe.reason`
@@ -104,17 +107,17 @@ dispatch. Note the split: the *menu label* is offline
 
 ## How dispatch works
 
-`dispatch({ model, prompt, taskId })` turns the chosen model into one of
-two descriptors:
+`dispatch({ model, prompt, taskId, allowedTools, timeoutSeconds, maxBudgetUsd })`
+turns the chosen model into one of two descriptors:
 
 | Model | `descriptor.kind` | What happens |
 |-------|--------------------|---------------|
 | `fable` / `opus` / `sonnet` / `haiku` | `agent` | Caller calls the `Agent` tool directly with `model: descriptor.model` and the unmodified prompt. |
 | `kimi` | `bash` | Caller runs `descriptor.command` via `Bash` with `run_in_background: true`. |
 
-For `kimi`, `dispatch()` writes the prompt to a scratch file
-(`.envoy/agent-prompts/<task-id>.md`) *before* building the command, and
-the command reads it back via **stdin redirection**
+For `kimi`, `dispatch()` writes the prompt to a scratch file under
+`.envoy/agent-prompts/` *before* building the command, and the command
+reads it back via **stdin redirection**
 (`claude -p < "<promptFile>" > "<outputFile>" 2>&1`). The command string
 itself never contains the task prompt — only fixed,
 orchestrator-controlled tokens (paths, env var names, the model id).
@@ -123,23 +126,46 @@ arbitrary text (quotes, `$vars`, shell metacharacters), and none of it
 is ever interpolated into a shell command that gets executed. Every path
 that *does* appear in the command is single-quoted, so a repository
 checked out under a directory name containing `$(...)` or a quote is
-inert too.
+inert too. Both scratch files are named after the task id **plus a
+run-unique suffix** (two concurrent runs dispatching the same task id —
+say `ai-review` — must never share files) and are created `0600`, since
+they carry issue, diff and worker text; always take the paths from
+`descriptor.promptFile` / `descriptor.outputFile`, never reconstruct
+them.
 
 The caller must **wait for the background process to exit** before
-reading `descriptor.outputFile` (`.envoy/agent-output/<task-id>.md`) —
-poll the background shell (`BashOutput`, or `Monitor` to block on the
+reading `descriptor.outputFile` (under `.envoy/agent-output/`) — poll
+the background shell (`BashOutput`, or `Monitor` to block on the
 condition) until it reports exit. The file is written incrementally, so
 an early read returns a truncated report. Only then is it used in place
 of an `Agent`-tool return value.
 
-The kimi command sets three environment variables, scoped to that one
-child process only:
+### The child environment is an allowlist
+
+The child is started with **`env -i`**, so it inherits *nothing* from
+the parent environment except an explicit allowlist: `PATH`/`HOME` (the
+CLI and its tools), terminal/locale basics, proxy configuration
+(`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`, `NODE_EXTRA_CA_CERTS`), and the
+three Moonshot values below. A credential the list does not name —
+**`ANTHROPIC_API_KEY` above all**, Bedrock/Vertex routing flags, cloud
+SDK keys — cannot reach a process whose base URL points at a third
+party, no matter what is set on the machine.
 
 | Var | Value |
 |-----|-------|
 | `ANTHROPIC_BASE_URL` | `https://api.moonshot.ai/anthropic` |
 | `ANTHROPIC_MODEL` | `kimi-k2.5` |
-| `ANTHROPIC_AUTH_TOKEN` | `$MOONSHOT_API_KEY` (read from the environment at run time, never a literal secret baked into the command string) |
+| `ANTHROPIC_AUTH_TOKEN` | `$MOONSHOT_API_KEY` (resolved at run time from the environment, falling back to the `~/.claude/moonshot-api-key` key file — never a literal secret baked into the command string) |
+
+### A runaway worker is bounded
+
+The worker runs unsupervised and billed, so the command carries two hard
+stops with caller-overridable defaults:
+
+- **`--max-budget-usd`** (default 5 USD, `maxBudgetUsd`) caps API spend.
+- A **wall-clock watchdog** (default 1800 s, `timeoutSeconds`) kills the
+  process if it hangs on something the budget cap cannot see — a network
+  stall, an idle loop.
 
 ## Tool scoping: a Kimi worker is bounded by the command, not by prose
 
@@ -149,8 +175,20 @@ process driven end to end by a third-party model. "Tools allowed: Read,
 Grep, Glob" in a prompt is an instruction the model may or may not
 honour; it is not a restriction.
 
-So `dispatch()` takes an `allowedTools` list and turns it into a real
-`claude -p --allowed-tools ...` argument:
+So `dispatch()` takes an `allowedTools` list and turns it into a real,
+three-part mechanical bound on the command line:
+
+- **`--tools`** — the hard bound: built-in tools not on the list do not
+  *exist* in the child. This is what makes the user's own
+  `permissions.allow` irrelevant — a broad allow rule cannot approve a
+  tool that is not available.
+- **`--allowed-tools`** — pre-approves that same list, so headless mode
+  runs without stalling on permission prompts.
+- **`--strict-mcp-config`** (with no `--mcp-config`) — the child gets
+  **no MCP servers**, regardless of what user or project settings
+  configure.
+
+The per-role lists:
 
 | Caller | Tool surface |
 |--------|--------------|
@@ -197,21 +235,27 @@ never launch.
 
 **`ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` must never be set globally** — not in the `env` block of `~/.claude/settings.json`, not in your shell profile. Setting either one globally would redirect your own Claude Code session's traffic to Moonshot instead of Anthropic.
 
-This boundary is enforced by `installKimi()`, not just documented:
+This boundary is enforced by code, not just documented:
 
-- It writes **only** `MOONSHOT_API_KEY` into `settings.json`.
-- If `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN` are already present
-  in `settings.json` (e.g. left over from manual experimentation), it
+- `installKimi()` writes the key **only** to the `0600` key file
+  `~/.claude/moonshot-api-key` — never into `settings.json`'s `env`
+  block (exported to every subprocess), and it migrates a key an earlier
+  install left there out of it.
+- If `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN` are present in
+  `settings.json` (e.g. left over from manual experimentation), it
   deletes them on every install.
 - `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` are only ever injected
   into the environment of the one background `claude -p` process a kimi
   dispatch starts (see the table above) — never the parent session, and
-  never written to disk anywhere.
-- The dispatched command itself refuses to run when `MOONSHOT_API_KEY` is
-  unset or empty. Without that guard, an empty `ANTHROPIC_AUTH_TOKEN`
-  combined with an already-redirected `ANTHROPIC_BASE_URL` could let the
-  CLI fall back on the machine's own Anthropic credential and send it to
-  Moonshot.
+  the token itself is never written into a command string.
+- That child environment is built with `env -i` (see above), so the
+  machine's own `ANTHROPIC_API_KEY` — or any other credential — can
+  never ride along to Moonshot.
+- The dispatched command itself refuses to run when no key is available
+  from either the `MOONSHOT_API_KEY` env var or the key file. Without
+  that guard, an empty `ANTHROPIC_AUTH_TOKEN` combined with an
+  already-redirected `ANTHROPIC_BASE_URL` could let the CLI fall back on
+  the machine's own Anthropic credential and send it to Moonshot.
 
 ### Residual risk: the Kimi worker holds a live Moonshot credential
 
@@ -237,6 +281,21 @@ the credential from the tools it does have. Practical mitigations:
   write-and-`Bash` roles when the diff or issue text is untrusted.
 - Rotate the key if a worker's output ever contains something resembling
   it.
+
+## Changing the worker model mid-run
+
+The choice is stored once, in `.envoy-session.json`'s `workerModel`
+field — nothing else caches it. To switch models (or be re-asked) after
+it was chosen, clear that field from the repo root and the next
+selection step re-runs the menu:
+
+```bash
+node -e "const s=require('<plugin>/lib/session-state'); const st=s.load(); st.workerModel=null; s.save(st);"
+```
+
+(or set it directly to a tier name with `setWorkerModel()` instead of
+`null`). Workers already dispatched keep running on the old model; the
+change applies from the next dispatch.
 
 ## Reference
 
