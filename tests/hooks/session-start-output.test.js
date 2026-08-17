@@ -28,9 +28,10 @@ function test(name, fn) {
   }
 }
 
-function runHook() {
+function runHook(prepare) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'session-start-'));
   try {
+    if (prepare) prepare(cwd);
     return execFileSync('bash', [HOOK], {
       cwd,
       encoding: 'utf8',
@@ -134,6 +135,36 @@ test('routing table lines never contain raw boilerplate phrases (independent of 
       );
     }
   }
+});
+
+test('session restore is rendered by formatForPrompt, so it carries the chosen worker model', () => {
+  // The hook used to hand-pick fields out of .envoy-session.json with its
+  // own inline extraction, which silently drifted from lib/session-state's
+  // formatForPrompt() (the restore surface pickup/review rely on) when
+  // workerModel was added. Rendering through formatForPrompt makes the two
+  // restore surfaces one.
+  const raw = runHook((cwd) => {
+    fs.writeFileSync(path.join(cwd, '.envoy-session.json'), JSON.stringify({
+      version: 1,
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+      branch: 'feature/x',
+      plan: 'issue #42',
+      tasks: [{ id: 'task-1', status: 'done', summary: null, updatedAt: '2026-08-01T00:00:00.000Z' }],
+      decisions: [{ text: 'chose kimi for workers', at: '2026-08-01T00:00:00.000Z' }],
+      filesModified: [],
+      testResults: null,
+      nextSteps: ['finish task-2'],
+      workerModel: 'kimi',
+    }, null, 2));
+  });
+  const ctx = JSON.parse(raw).hookSpecificOutput.additionalContext;
+  assert.ok(ctx.includes('## Session State (restored)'),
+    'the restore block must be formatForPrompt output, not a hand-built variant');
+  assert.ok(/Worker model:.*kimi/.test(ctx),
+    'the restored context must surface the chosen worker model so a resumed run does not re-ask');
+  assert.ok(ctx.includes('feature/x'), 'branch must survive the restore render');
+  assert.ok(ctx.includes('finish task-2'), 'next steps must survive the restore render');
 });
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
