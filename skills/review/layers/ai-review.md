@@ -92,7 +92,7 @@ if (descriptor.kind === 'agent') {
   // incrementally, so reading it early yields a truncated review.
   // Poll BashOutput(shell_id) until it reports the shell has exited
   // (or use Monitor to block on that condition), THEN read
-  // descriptor.outputFile (.envoy/agent-output/ai-review.md) as the
+  // descriptor.outputFile (run-unique, under .envoy/agent-output/) as the
   // reviewer's findings, in place of an Agent-tool return value.
 }
 ```

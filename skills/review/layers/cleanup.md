@@ -72,7 +72,7 @@ if (descriptor.kind === 'agent') {
   // incrementally, so reading it early yields a truncated report.
   // Poll BashOutput(shell_id) until it reports the shell has exited
   // (or use Monitor to block on that condition), THEN read
-  // descriptor.outputFile (.envoy/agent-output/cleanup.md) as the
+  // descriptor.outputFile (run-unique, under .envoy/agent-output/) as the
   // cleanup agent's report, in place of an Agent-tool return value.
 }
 ```
