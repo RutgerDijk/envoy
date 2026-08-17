@@ -230,9 +230,13 @@ test('kimi dispatch never mutates the parent process env', () => {
 
 section('checkKimi()');
 
-testAsync('short-circuits with ok:false when MOONSHOT_API_KEY is absent, no probe call', async () => {
+testAsync('short-circuits with ok:false when no key is configured anywhere, no probe call', async () => {
   let probeCalled = false;
-  const result = await checkKimi({ env: {}, probe: async () => { probeCalled = true; return { ok: true }; } });
+  const result = await checkKimi({
+    env: {},
+    keyFile: path.join(makeTmpDir(), 'no-key-file'),
+    probe: async () => { probeCalled = true; return { ok: true }; },
+  });
   assert.strictEqual(result.ok, false);
   assert.strictEqual(typeof result.reason, 'string');
   assert.strictEqual(probeCalled, false);
@@ -240,9 +244,43 @@ testAsync('short-circuits with ok:false when MOONSHOT_API_KEY is absent, no prob
 
 testAsync('short-circuits with ok:false when MOONSHOT_API_KEY is an empty string', async () => {
   let probeCalled = false;
-  const result = await checkKimi({ env: { MOONSHOT_API_KEY: '' }, probe: async () => { probeCalled = true; return { ok: true }; } });
+  const result = await checkKimi({
+    env: { MOONSHOT_API_KEY: '' },
+    keyFile: path.join(makeTmpDir(), 'no-key-file'),
+    probe: async () => { probeCalled = true; return { ok: true }; },
+  });
   assert.strictEqual(result.ok, false);
   assert.strictEqual(probeCalled, false);
+});
+
+testAsync('falls back to the key file and probes with its contents', async () => {
+  const dir = makeTmpDir();
+  const keyFile = path.join(dir, 'moonshot-api-key');
+  fs.writeFileSync(keyFile, 'sk-from-file\n');
+  const result = await checkKimi({
+    env: {},
+    keyFile,
+    probe: async (key) => {
+      assert.strictEqual(key, 'sk-from-file');
+      return { ok: true };
+    },
+  });
+  assert.strictEqual(result.ok, true);
+});
+
+testAsync('the env var wins over the key file when both are present', async () => {
+  const dir = makeTmpDir();
+  const keyFile = path.join(dir, 'moonshot-api-key');
+  fs.writeFileSync(keyFile, 'sk-from-file');
+  const result = await checkKimi({
+    env: { MOONSHOT_API_KEY: 'sk-from-env' },
+    keyFile,
+    probe: async (key) => {
+      assert.strictEqual(key, 'sk-from-env');
+      return { ok: true };
+    },
+  });
+  assert.strictEqual(result.ok, true);
 });
 
 testAsync('returns ok:true when the key is set and the probe succeeds', async () => {
@@ -280,18 +318,36 @@ testAsync('does not throw when the probe throws/rejects', async () => {
 
 section('installKimi()');
 
-testAsync('writes MOONSHOT_API_KEY into the env block of settings.json', async () => {
+testAsync('writes the key to a 0600 key file, never into the settings env block', async () => {
   const dir = makeTmpDir();
   const settingsPath = path.join(dir, 'settings.json');
+  const keyFile = path.join(dir, 'moonshot-api-key');
   fs.writeFileSync(settingsPath, JSON.stringify({ env: { SOME_OTHER_VAR: 'keep-me' } }));
 
   await installKimi('sk-new-key', {
     settingsPath,
+    keyFile,
     probe: async () => ({ ok: true }),
   });
 
+  assert.strictEqual(fs.readFileSync(keyFile, 'utf8').trim(), 'sk-new-key');
+  assert.strictEqual(fs.statSync(keyFile).mode & 0o077, 0, 'the key file must be owner-only');
   const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-  assert.strictEqual(written.env.MOONSHOT_API_KEY, 'sk-new-key');
+  assert.strictEqual(written.env.MOONSHOT_API_KEY, undefined,
+    'the settings env block exports to EVERY subprocess — the key must not live there');
+  assert.strictEqual(written.env.SOME_OTHER_VAR, 'keep-me');
+});
+
+testAsync('migrates a key out of the settings env block on install', async () => {
+  const dir = makeTmpDir();
+  const settingsPath = path.join(dir, 'settings.json');
+  const keyFile = path.join(dir, 'moonshot-api-key');
+  fs.writeFileSync(settingsPath, JSON.stringify({ env: { MOONSHOT_API_KEY: 'sk-old', SOME_OTHER_VAR: 'keep-me' } }));
+
+  await installKimi('sk-new-key', { settingsPath, keyFile, probe: async () => ({ ok: true }) });
+
+  const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  assert.strictEqual(written.env.MOONSHOT_API_KEY, undefined);
   assert.strictEqual(written.env.SOME_OTHER_VAR, 'keep-me');
 });
 
@@ -304,6 +360,7 @@ testAsync('never writes ANTHROPIC_BASE_URL or ANTHROPIC_AUTH_TOKEN into settings
 
   await installKimi('sk-new-key', {
     settingsPath,
+    keyFile: path.join(dir, 'moonshot-api-key'),
     probe: async () => ({ ok: true }),
   });
 
@@ -312,17 +369,19 @@ testAsync('never writes ANTHROPIC_BASE_URL or ANTHROPIC_AUTH_TOKEN into settings
   assert.strictEqual(written.env.ANTHROPIC_AUTH_TOKEN, undefined);
 });
 
-testAsync('creates settings.json (and its env block) when the file does not exist yet', async () => {
+testAsync('does not create settings.json when it is absent — the key file is the only write', async () => {
   const dir = makeTmpDir();
   const settingsPath = path.join(dir, 'nested', 'settings.json');
+  const keyFile = path.join(dir, 'nested', 'moonshot-api-key');
 
   await installKimi('sk-fresh-key', {
     settingsPath,
+    keyFile,
     probe: async () => ({ ok: true }),
   });
 
-  const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-  assert.strictEqual(written.env.MOONSHOT_API_KEY, 'sk-fresh-key');
+  assert.strictEqual(fs.existsSync(settingsPath), false);
+  assert.strictEqual(fs.readFileSync(keyFile, 'utf8').trim(), 'sk-fresh-key');
 });
 
 testAsync('re-runs the probe after writing to confirm auth', async () => {
@@ -332,6 +391,7 @@ testAsync('re-runs the probe after writing to confirm auth', async () => {
 
   const result = await installKimi('sk-confirm-key', {
     settingsPath,
+    keyFile: path.join(dir, 'moonshot-api-key'),
     probe: async (key) => { probeCalledWithKey = key; return { ok: true }; },
   });
 
@@ -345,6 +405,7 @@ testAsync('surfaces probe failure after install without throwing', async () => {
 
   const result = await installKimi('sk-bad-key', {
     settingsPath,
+    keyFile: path.join(dir, 'moonshot-api-key'),
     probe: async () => ({ ok: false, reason: 'auth rejected (HTTP 401)' }),
   });
 
@@ -355,19 +416,27 @@ testAsync('surfaces probe failure after install without throwing', async () => {
 testAsync('throws when apiKey is missing or empty', async () => {
   const dir = makeTmpDir();
   const settingsPath = path.join(dir, 'settings.json');
-  await assert.rejects(() => installKimi('', { settingsPath, probe: async () => ({ ok: true }) }));
+  await assert.rejects(() => installKimi('', {
+    settingsPath,
+    keyFile: path.join(dir, 'moonshot-api-key'),
+    probe: async () => ({ ok: true }),
+  }));
 });
 
-testAsync('leaves settings.json readable only by its owner (it now holds an API key)', async () => {
+testAsync('leaves a rewritten settings.json readable only by its owner', async () => {
   const dir = makeTmpDir();
   const settingsPath = path.join(dir, 'settings.json');
-  fs.writeFileSync(settingsPath, JSON.stringify({ env: {} }), { mode: 0o644 });
+  fs.writeFileSync(settingsPath, JSON.stringify({ env: { MOONSHOT_API_KEY: 'sk-old' } }), { mode: 0o644 });
 
-  await installKimi('sk-secret-key', { settingsPath, probe: async () => ({ ok: true }) });
+  await installKimi('sk-secret-key', {
+    settingsPath,
+    keyFile: path.join(dir, 'moonshot-api-key'),
+    probe: async () => ({ ok: true }),
+  });
 
   const mode = fs.statSync(settingsPath).mode & 0o777;
   assert.strictEqual(mode, SETTINGS_FILE_MODE);
-  assert.strictEqual(mode & 0o077, 0, 'group/other must have no access to a file holding a key');
+  assert.strictEqual(mode & 0o077, 0, 'group/other must have no access to the settings file');
 });
 
 testAsync('refuses to clobber a settings.json that is not valid JSON', async () => {
@@ -377,7 +446,11 @@ testAsync('refuses to clobber a settings.json that is not valid JSON', async () 
   fs.writeFileSync(settingsPath, corrupt);
 
   await assert.rejects(
-    () => installKimi('sk-key', { settingsPath, probe: async () => ({ ok: true }) }),
+    () => installKimi('sk-key', {
+      settingsPath,
+      keyFile: path.join(dir, 'moonshot-api-key'),
+      probe: async () => ({ ok: true }),
+    }),
     /not valid JSON/,
   );
   assert.strictEqual(fs.readFileSync(settingsPath, 'utf8'), corrupt, 'the unparseable file must be left untouched');
@@ -389,7 +462,11 @@ testAsync('refuses to clobber a settings.json whose top level is not an object',
   fs.writeFileSync(settingsPath, '[1, 2, 3]');
 
   await assert.rejects(
-    () => installKimi('sk-key', { settingsPath, probe: async () => ({ ok: true }) }),
+    () => installKimi('sk-key', {
+      settingsPath,
+      keyFile: path.join(dir, 'moonshot-api-key'),
+      probe: async () => ({ ok: true }),
+    }),
     /does not contain a JSON object/,
   );
 });
@@ -467,13 +544,16 @@ test('a cwd containing shell metacharacters cannot break out of the command', ()
   assert.strictEqual(fs.readFileSync(result.outputFile, 'utf8').trim(), 'hello');
 });
 
-test('the dispatched command refuses to run when MOONSHOT_API_KEY is unset (fails closed)', () => {
+test('the dispatched command refuses to run when no key is configured anywhere (fails closed)', () => {
   const parent = makeTmpDir();
   const cwd = path.join(parent, 'repo');
   fs.mkdirSync(cwd, { recursive: true });
   const canary = path.join(parent, 'claude-ran');
 
-  const result = dispatch({ model: 'kimi', prompt: 'hello', taskId: 'task-28' }, { cwd });
+  const result = dispatch(
+    { model: 'kimi', prompt: 'hello', taskId: 'task-28' },
+    { cwd, keyFile: path.join(parent, 'no-key-file') },
+  );
 
   // Stub `claude` so we can prove it is never reached: without the guard,
   // an empty MOONSHOT_API_KEY would still start the CLI with
@@ -512,6 +592,26 @@ test('the dispatched command still runs when MOONSHOT_API_KEY is present', () =>
   });
 
   assert.strictEqual(fs.readFileSync(result.outputFile, 'utf8').trim(), 'hello');
+});
+
+test('the dispatched command resolves the key from the key file when the env var is unset', () => {
+  const parent = makeTmpDir();
+  const cwd = path.join(parent, 'repo');
+  fs.mkdirSync(cwd, { recursive: true });
+  const keyFile = path.join(parent, 'moonshot-api-key');
+  fs.writeFileSync(keyFile, 'sk-file-key\n', { mode: 0o600 });
+
+  const result = dispatch({ model: 'kimi', prompt: 'hello', taskId: 'task-29b' }, { cwd, keyFile });
+
+  const binDir = path.join(parent, 'bin');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(path.join(binDir, 'claude'), '#!/bin/sh\necho "token=$ANTHROPIC_AUTH_TOKEN"\ncat > /dev/null\n', { mode: 0o755 });
+
+  const env = { ...process.env, PATH: `${binDir}:${process.env.PATH}` };
+  delete env.MOONSHOT_API_KEY;
+  execFileSync('/bin/sh', ['-c', result.command], { env });
+
+  assert.strictEqual(fs.readFileSync(result.outputFile, 'utf8').trim(), 'token=sk-file-key');
 });
 
 test('task ids that sanitize to the same string do not collide on disk', () => {
@@ -724,16 +824,25 @@ testAsync('still reports auth rejection distinctly', async () => {
 
 section('isKimiConfigured()');
 
-test('reports configured/unconfigured from the env alone, with no network call', () => {
-  assert.strictEqual(isKimiConfigured({ env: {} }), false);
-  assert.strictEqual(isKimiConfigured({ env: { MOONSHOT_API_KEY: '   ' } }), false);
-  assert.strictEqual(isKimiConfigured({ env: { MOONSHOT_API_KEY: 'sk-key' } }), true);
+test('reports configured/unconfigured offline, with no network call', () => {
+  const missing = path.join(makeTmpDir(), 'no-key-file');
+  assert.strictEqual(isKimiConfigured({ env: {}, keyFile: missing }), false);
+  assert.strictEqual(isKimiConfigured({ env: { MOONSHOT_API_KEY: '   ' }, keyFile: missing }), false);
+  assert.strictEqual(isKimiConfigured({ env: { MOONSHOT_API_KEY: 'sk-key' }, keyFile: missing }), true);
 });
 
 test('is synchronous — a menu label can never await a Moonshot round-trip', () => {
-  const result = isKimiConfigured({ env: { MOONSHOT_API_KEY: 'sk-key' } });
+  const result = isKimiConfigured({ env: { MOONSHOT_API_KEY: 'sk-key' }, keyFile: path.join(makeTmpDir(), 'none') });
   assert.strictEqual(typeof result, 'boolean');
   assert.ok(!(result instanceof Promise));
+});
+
+test('reads the key file when the env var is absent', () => {
+  const dir = makeTmpDir();
+  const keyFile = path.join(dir, 'moonshot-api-key');
+  fs.writeFileSync(keyFile, 'sk-from-file\n');
+  assert.strictEqual(isKimiConfigured({ env: {}, keyFile }), true);
+  assert.strictEqual(isKimiConfigured({ env: {}, keyFile: path.join(dir, 'other') }), false);
 });
 
 async function main() {
