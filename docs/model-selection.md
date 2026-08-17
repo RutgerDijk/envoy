@@ -176,13 +176,22 @@ bounded by its `subagent_type`'s own tool surface and the
 `dispatch()` still returns the normalized list on that path so both
 branches document the same intent.
 
-**Contract enforcement does not cover the Kimi path.** Envoy's
-`PreToolUse[Agent]` gate (`hooks/observe-gate.js`, driven by each rigid
-skill's `contract.json` `agentInvariants`) only fires for `Agent` tool
-calls. A Kimi dispatch goes out through `Bash`, so those invariants —
-including review's "the AI-review prompt must not grant Edit/Write" —
-are not evaluated for it. `--allowed-tools` is what enforces the tool
-surface on that path.
+**Contract invariants are enforced inside `dispatch()` on the Kimi
+path.** Envoy's `PreToolUse[Agent]` gate (`hooks/observe-gate.js`,
+driven by each rigid skill's `contract.json` `agentInvariants`) only
+fires for `Agent` tool calls, and a Kimi dispatch goes out through
+`Bash` — so `dispatch()` itself evaluates the worker prompt against the
+active skill's `agentInvariants` (`evaluateWorkerPrompt()` in
+`lib/contract-guard.js`, the same matching the hook uses) and **throws
+instead of building the command** when the prompt is missing a required
+token (the Iron Laws) or contains a forbidden one (review's "the
+AI-review prompt must not grant Edit/Write"). The skill is resolved
+from `.envoy/active-skill.json` — the marker the hook reads — so a
+caller cannot forget to opt in; when no rigid skill owns the session
+there is nothing to guard and dispatch proceeds. Unlike the hook's
+observe mode this is a hard refusal with no override: the worker runs
+unsupervised and billed, so a prompt that lost its discipline text must
+never launch.
 
 ## Security boundary: Moonshot never touches your main session
 
