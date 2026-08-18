@@ -201,6 +201,8 @@ test('documents run-unique output files read from the descriptor', () => {
   const content = readDoc();
   assert.ok(/run-unique|descriptor\.outputFile/.test(content),
     'expected doc to state output paths are run-unique and read from the descriptor');
+  assert.ok(!/agent-output\/<task-id>\.md/.test(content),
+    'expected no fixed per-task output path anywhere in the doc — the real file carries a run-unique suffix');
 });
 
 test('documents how to change the worker model mid-run', () => {
@@ -310,6 +312,18 @@ test('the link sits on (or near) the pickup and review command rows', () => {
   assert.ok(reviewLine, 'expected to find the review command row');
   assert.ok(pickupLine.includes('docs/model-selection.md'), 'expected the pickup row to link docs/model-selection.md');
   assert.ok(reviewLine.includes('docs/model-selection.md'), 'expected the review row to link docs/model-selection.md');
+});
+
+test('the review row does not name a fixed model', () => {
+  const content = fs.readFileSync(README_PATH, 'utf8');
+  const reviewLine = content.split('\n').find((l) => l.includes('| `/envoy:review`'));
+  assert.ok(reviewLine, 'expected to find the review command row');
+  for (const tier of ANTHROPIC_TIERS) {
+    assert.ok(
+      !new RegExp(`\\b${tier}\\b`, 'i').test(reviewLine),
+      `the review row must not name "${tier}" — its AI layers run on the worker model chosen for the run`
+    );
+  }
 });
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);

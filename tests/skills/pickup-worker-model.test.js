@@ -97,6 +97,10 @@ test('prompts.md branches on descriptor.kind and reads .envoy/agent-output on th
   assert.ok(/descriptor\.kind === ['"]agent['"]/.test(promptsMd), 'prompts.md must branch on the agent-tool dispatch kind');
   assert.ok(/descriptor\.kind === ['"]bash['"]|else \{/.test(promptsMd), 'prompts.md must handle the kimi bash-dispatch kind');
   assert.ok(/\.envoy\/agent-output/.test(promptsMd), 'prompts.md must read the report back from .envoy/agent-output/ on the headless path');
+  assert.ok(
+    !/agent-output\/<task-id>\.md/.test(promptsMd),
+    'prompts.md must not name a fixed per-task output file: buildKimiDispatch() appends a run-unique suffix, so descriptor.outputFile is the only valid source'
+  );
 });
 
 test('tdd.md documents both dispatch kinds for Step 13', () => {
