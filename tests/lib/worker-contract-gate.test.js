@@ -218,18 +218,19 @@ test('builds the descriptor when the implementer prompt carries the Iron Laws', 
   assert.strictEqual(result.kind, 'bash');
 });
 
-test("refuses review's AI-review prompt when it grants Edit (real review contract)", () => {
+test("refuses review's AI-review dispatch when its allowedTools grant Edit (real review contract)", () => {
   const cwd = makeTmpDir();
   assert.throws(
     () => dispatch(
       {
         model: 'kimi',
-        prompt: 'Read iterative-retrieval.md first (read-only review), then git diff main...HEAD\nTools: Edit',
+        prompt: 'Read iterative-retrieval.md first (read-only review), then git diff main...HEAD',
         taskId: 'ai-review',
+        allowedTools: ['Read', 'Grep', 'Glob', 'Edit'],
       },
       { cwd, contractPath: REVIEW_CONTRACT },
     ),
-    /forbidden token: "Edit"/,
+    /forbidden tool: "Edit"/,
   );
 });
 

@@ -13,12 +13,12 @@ brainstorm → pickup → review → finalize → cleanup
 **Key features:**
 - **Brainstorming**: Turn ideas into designs + implementation plans through Socratic dialogue
 - **Pickup**: Plan writing, worktree setup, and TDD-enforced implementation in one phase
-- **Review**: 5-layer local review (Cleanup, Lint, Sonnet AI, Visual, Docs) with complexity tiers
+- **Review**: 5-layer local review (Cleanup, Lint, AI review, Visual, Docs) with complexity tiers
 - **Finalization**: Create PR, handle GitHub CodeRabbit comments, verify, ship
 - **Cleanup**: Remove worktrees and branches, clear session state, sync wiki
 - **Hooks**: Config protection, batch lint, cost tracking, learning extraction
 - **Self-learning**: Graduated patterns, cross-PR CodeRabbit aggregation, user correction detection
-- **Token optimization**: ~60% cost savings via Sonnet AI review, selective stack loading, regex-first parsing
+- **Token optimization**: per-run worker model choice for AI review, selective stack loading, regex-first parsing
 - **Advanced patterns**: Eval harness, search-first, iterative retrieval, completion signals
 
 ## Installation
@@ -161,7 +161,7 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 ┌─────────────────────────────────────────────────────────────────────┐
 │  3. REVIEW (local)                                                  │
 │     /envoy:review                                                   │
-│     → Cleanup pass → Lint → Sonnet AI → Visual → Docs → Docstrings │
+│     → Cleanup pass → Lint → AI review → Visual → Docs → Docstrings │
 │     → Fix all local findings                                        │
 └──────────────────────────────┬──────────────────────────────────────┘
                                ▼
@@ -218,13 +218,13 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 | Tier | Criteria | Layers |
 |------|----------|--------|
 | Trivial | Docs/config only | Lint only |
-| Small | 1-3 code files | Cleanup + Lint + Sonnet AI |
+| Small | 1-3 code files | Cleanup + Lint + AI review |
 | Medium | 4-10 files | All 5 layers |
 | Large | 10+ files | All 5 layers |
 
 0. **Cleanup Pass** - Remove AI slop: dead code, debug artifacts, over-engineering
 1. **Automated Linting** - `npm run lint`
-2. **AI Review (Sonnet)** - Spec compliance, TDD verification, codebase patterns (~60% cheaper than Opus)
+2. **AI Review** - Spec compliance, TDD verification, codebase patterns (on the worker model chosen for the run)
 3. **Visual Review** - Chrome DevTools screenshots, console, network, health checks
 4. **Doc Gaps + Docstrings** - Find missing documentation, add docstrings to public APIs
 
@@ -414,7 +414,7 @@ claude
 # Writes plan, executes with TDD...
 
 > /envoy:review
-# Local review: cleanup pass, lint, Sonnet AI, visual, docs + docstrings...
+# Local review: cleanup pass, lint, AI review, visual, docs + docstrings...
 
 > /envoy:finalize
 # Creates PR #43, handles CodeRabbit comments, verifies CI
@@ -479,7 +479,7 @@ CodeRabbit provides AI-powered code review on your PRs via the GitHub App.
 
 **Alternative**: Install the [GitHub App](https://github.com/apps/coderabbitai) for automatic PR reviews.
 
-**Without CodeRabbit**: The finalize skill skips CodeRabbit comment handling. Local review (Sonnet AI, visual, docs) still runs.
+**Without CodeRabbit**: The finalize skill skips CodeRabbit comment handling. Local review (AI review, visual, docs) still runs.
 
 ### DevTools MCP Setup
 

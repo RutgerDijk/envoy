@@ -222,8 +222,15 @@ fires for `Agent` tool calls, and a Kimi dispatch goes out through
 active skill's `agentInvariants` (`evaluateWorkerPrompt()` in
 `lib/contract-guard.js`, the same token checks the hook applies) and
 **throws instead of building the command** when the prompt is missing a
-required token (the Iron Laws) or contains a forbidden one (review's
-"the AI-review prompt must not grant Edit/Write"). The skill is
+required token (the Iron Laws) or the dispatch grants a tool the
+invariant forbids (review's "the AI-review worker must not be granted
+Edit/Write", expressed as `forbiddenTools` and checked against the
+dispatch `allowedTools` by base name, so `Edit(docs/*)` counts as Edit).
+A read-only invariant is never a prose scan of the prompt — the prompt
+interpolates repo file paths, and a path like `MarkdownEditor.tsx`
+contains a tool name as a substring; on the Agent hook path, which has
+no per-call tool list, the `subagentType` assertion is the tool-surface
+bound instead. The skill is
 resolved from `.envoy/active-skill.json` — the marker the hook reads —
 so a caller cannot forget to opt in; when no rigid skill owns the
 session there is nothing to guard and dispatch proceeds. Unlike the

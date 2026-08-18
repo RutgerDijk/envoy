@@ -13,7 +13,8 @@
       "matchTaskId": "^ai-review$",
       "subagentType": "envoy:code-reviewer",
       "promptMustContain": ["iterative-retrieval.md", "read-only review", "git diff main...HEAD"],
-      "promptMustNotContain": ["Edit", "Write"]
+      "promptMustNotContain": [],
+      "forbiddenTools": ["Edit", "Write"]
     }
   ],
   "requiredArtifacts": [
