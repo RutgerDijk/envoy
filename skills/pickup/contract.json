@@ -2,19 +2,20 @@
   "skill": "pickup",
   "agentInvariants": [
     {
-      "matchPrompt": "Implement Task",
+      "matchDescription": "Implement Task",
+      "matchTaskId": ".+",
       "subagentType": "general-purpose",
       "promptMustContain": ["TDD Iron Law", "Scope Iron Law"],
       "promptMustNotContain": []
     },
     {
-      "matchPrompt": "Spec compliance review",
+      "matchDescription": "Spec compliance review",
       "subagentType": "general-purpose",
       "promptMustContain": ["Do Not Trust the Report", "git log"],
       "promptMustNotContain": []
     },
     {
-      "matchPrompt": "Code quality review",
+      "matchDescription": "Code quality review",
       "subagentType": "general-purpose",
       "promptMustContain": ["TDD compliance", "Stack common mistakes"],
       "promptMustNotContain": []

@@ -54,6 +54,7 @@ const descriptor = dispatch({
 if (descriptor.kind === 'agent') {
   // fable/opus/sonnet/haiku — Agent tool can name the model directly.
   Agent({
+    subagent_type: "general-purpose",
     model: descriptor.model,
     description: "Cleanup pass",
     prompt: descriptor.prompt,

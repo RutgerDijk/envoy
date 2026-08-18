@@ -44,14 +44,18 @@ function section(name) {
   process.stdout.write(`\n${name}\n`);
 }
 
-function collectMarkdown(dir) {
+function markdownFiles(dir) {
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...collectMarkdown(p));
-    else if (entry.name.endsWith('.md')) out.push(fs.readFileSync(p, 'utf8'));
+    if (entry.isDirectory()) out.push(...markdownFiles(p));
+    else if (entry.name.endsWith('.md')) out.push(p);
   }
-  return out.join('\n');
+  return out;
+}
+
+function collectMarkdown(dir) {
+  return markdownFiles(dir).map((p) => fs.readFileSync(p, 'utf8')).join('\n');
 }
 
 function skillsWithInvariants() {

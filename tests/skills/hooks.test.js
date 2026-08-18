@@ -128,7 +128,7 @@ test('code-reviewer prompt with all required tokens is not blocked', () => {
     tool_input: {
       subagent_type: 'envoy:code-reviewer',
       description: 'AI code review',
-      prompt: 'Read contexts/iterative-retrieval.md first. Read-only review. Run git diff main...HEAD.',
+      prompt: 'Read contexts/iterative-retrieval.md first (read-only review). Run git diff main...HEAD.',
     },
   };
   const d = evaluateAgentGuard(contractPath('review'), event);

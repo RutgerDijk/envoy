@@ -2,15 +2,17 @@
   "skill": "review",
   "agentInvariants": [
     {
-      "matchPrompt": "Cleanup pass",
+      "matchDescription": "Cleanup pass",
+      "matchTaskId": "^cleanup$",
       "subagentType": "general-purpose",
-      "promptMustContain": ["git diff main...HEAD", "never change functionality"],
+      "promptMustContain": ["git diff main...HEAD", "Never change functionality"],
       "promptMustNotContain": []
     },
     {
-      "matchPrompt": "AI code review",
+      "matchDescription": "AI code review",
+      "matchTaskId": "^ai-review$",
       "subagentType": "envoy:code-reviewer",
-      "promptMustContain": ["iterative-retrieval.md", "Read-only review", "git diff main...HEAD"],
+      "promptMustContain": ["iterative-retrieval.md", "read-only review", "git diff main...HEAD"],
       "promptMustNotContain": ["Edit", "Write"]
     }
   ],

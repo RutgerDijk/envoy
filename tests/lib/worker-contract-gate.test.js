@@ -64,7 +64,8 @@ const SYNTHETIC = {
   skill: 'synthetic',
   agentInvariants: [
     {
-      matchPrompt: 'Implement Task',
+      matchDescription: 'Implement Task',
+      matchTaskId: '^task-',
       subagentType: 'general-purpose',
       promptMustContain: ['TDD Iron Law', 'Scope Iron Law'],
       promptMustNotContain: ['sudo'],
@@ -79,30 +80,31 @@ const SYNTHETIC = {
 section('evaluateWorkerPrompt()');
 
 test('does not block when the contract file is absent', () => {
-  const decision = evaluateWorkerPrompt(path.join(makeTmpDir(), 'nope.json'), 'Implement Task 1');
+  const decision = evaluateWorkerPrompt(path.join(makeTmpDir(), 'nope.json'), 'Implement Task 1', 'task-1');
   assert.strictEqual(decision.block, false);
 });
 
-test('does not block a prompt no invariant matches', () => {
+test('does not block a taskId no invariant matches', () => {
   const contractPath = writeContract(makeTmpDir(), SYNTHETIC);
-  const decision = evaluateWorkerPrompt(contractPath, 'Summarize the changelog');
+  const decision = evaluateWorkerPrompt(contractPath, 'Summarize the changelog', 'changelog-summary');
   assert.strictEqual(decision.block, false);
 });
 
-test('blocks a matched prompt missing a required token, naming it', () => {
+test('blocks a matched taskId whose prompt misses a required token, naming it', () => {
   const contractPath = writeContract(makeTmpDir(), SYNTHETIC);
-  const decision = evaluateWorkerPrompt(contractPath, 'Implement Task 1: add the widget');
+  const decision = evaluateWorkerPrompt(contractPath, 'Implement Task 1: add the widget', 'task-1');
   assert.strictEqual(decision.block, true);
   assert.ok(decision.reason.includes('TDD Iron Law'));
   assert.ok(decision.reason.includes('Scope Iron Law'));
   assert.strictEqual(decision.skill, 'synthetic');
 });
 
-test('blocks a matched prompt containing a forbidden token', () => {
+test('blocks a matched taskId whose prompt contains a forbidden token', () => {
   const contractPath = writeContract(makeTmpDir(), SYNTHETIC);
   const decision = evaluateWorkerPrompt(
     contractPath,
     'Implement Task 1\nTDD Iron Law\nScope Iron Law\nrun sudo make install',
+    'task-1',
   );
   assert.strictEqual(decision.block, true);
   assert.ok(decision.reason.includes('sudo'));
@@ -113,7 +115,14 @@ test('passes a compliant prompt even though the invariant names a subagentType (
   const decision = evaluateWorkerPrompt(
     contractPath,
     'Implement Task 1\nTDD Iron Law applies.\nScope Iron Law applies.',
+    'task-1',
   );
+  assert.strictEqual(decision.block, false);
+});
+
+test('selection is by taskId, not prompt prose — a prose-matching prompt on a foreign taskId passes', () => {
+  const contractPath = writeContract(makeTmpDir(), SYNTHETIC);
+  const decision = evaluateWorkerPrompt(contractPath, 'Implement Task 1: add the widget', 'changelog-summary');
   assert.strictEqual(decision.block, false);
 });
 
@@ -153,7 +162,7 @@ test("refuses review's AI-review prompt when it grants Edit (real review contrac
     () => dispatch(
       {
         model: 'kimi',
-        prompt: 'AI code review\niterative-retrieval.md\nRead-only review\ngit diff main...HEAD\nTools: Edit',
+        prompt: 'Read iterative-retrieval.md first (read-only review), then git diff main...HEAD\nTools: Edit',
         taskId: 'ai-review',
       },
       { cwd, contractPath: REVIEW_CONTRACT },
