@@ -326,5 +326,23 @@ test('the review row does not name a fixed model', () => {
   }
 });
 
+test('no README line pairs the review AI layer with a fixed model tier', () => {
+  const content = fs.readFileSync(README_PATH, 'utf8');
+  const tiers = ANTHROPIC_TIERS.join('|');
+  const fixedModelClaims = [
+    new RegExp(`\\b(${tiers})\\s+AI\\b`, 'i'),
+    new RegExp(`AI\\s+Review\\s*\\((${tiers})\\)`, 'i'),
+    new RegExp(`\\b(${tiers})\\b[^\\n|]*\\bAI review\\b`, 'i'),
+  ];
+  const offenders = content
+    .split('\n')
+    .filter((l) => fixedModelClaims.some((re) => re.test(l)));
+  assert.deepStrictEqual(
+    offenders,
+    [],
+    `the AI review layer runs on the per-run worker model; these lines still claim a fixed model:\n${offenders.join('\n')}`
+  );
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

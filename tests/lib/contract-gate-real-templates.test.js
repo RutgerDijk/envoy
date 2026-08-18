@@ -70,8 +70,21 @@ const PLACEHOLDER_SOURCES = {
   TASK_GRANULARITY: 'contexts/discipline-task-granularity.md',
 };
 
+// The briefing interpolates repo file paths verbatim (formatForPrompt in
+// lib/relevance-scorer.js), and real paths routinely contain substrings
+// like "Editor" or "Writer" — the expansion must carry such paths, or a
+// gate that scans the interpolated prompt for tool names looks green here
+// while refusing every real dispatch.
+const REALISTIC_RELEVANCE_BRIEFING = [
+  '## Relevant Files',
+  '- `src/components/MarkdownEditor.tsx` — full (0.92)',
+  '- `src/reports/ReportWriter.cs` — focused (0.71)',
+  '- ... and 3 more at skim/skip level',
+].join('\n');
+
 function expandPlaceholders(template) {
   return template.replace(/\$\{(\w+)\}/g, (whole, name) => {
+    if (name === 'relevanceBriefing') return REALISTIC_RELEVANCE_BRIEFING;
     const source = PLACEHOLDER_SOURCES[name];
     if (!source) return 'X';
     return fs.readFileSync(path.join(REPO_ROOT, source), 'utf8');
@@ -110,8 +123,8 @@ test("review's real cleanup prompt passes as taskId 'cleanup'", () => {
   assert.strictEqual(d.block, false, JSON.stringify(d));
 });
 
-test("review's real AI-review prompt passes as taskId 'ai-review'", () => {
-  const d = evaluateWorkerPrompt(REVIEW_CONTRACT, realReviewPrompt, 'ai-review');
+test("review's real AI-review prompt passes as taskId 'ai-review' with its real tool list", () => {
+  const d = evaluateWorkerPrompt(REVIEW_CONTRACT, realReviewPrompt, 'ai-review', ['Read', 'Grep', 'Glob']);
   assert.strictEqual(d.block, false, JSON.stringify(d));
 });
 
@@ -151,6 +164,53 @@ test('dispatch() refuses to build the kimi command for the rogue AI-review promp
       { cwd, contractPath: REVIEW_CONTRACT },
     ),
     /contract/,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Worker path: the read-only bound is mechanical (forbiddenTools vs the
+// dispatch allowedTools), never a prose scan of the interpolated prompt
+// ---------------------------------------------------------------------------
+
+section('worker path — read-only bound is mechanical, not prose');
+
+test("review's ai-review invariant expresses read-only as forbiddenTools, not prompt tokens", () => {
+  const contract = JSON.parse(fs.readFileSync(REVIEW_CONTRACT, 'utf8'));
+  const inv = contract.agentInvariants.find(
+    (i) => i.matchTaskId && new RegExp(i.matchTaskId).test('ai-review'),
+  );
+  assert.ok(inv, 'no invariant covers ai-review');
+  const proseTokens = inv.promptMustNotContain || [];
+  assert.ok(
+    !proseTokens.includes('Edit') && !proseTokens.includes('Write'),
+    `tool names in promptMustNotContain (${JSON.stringify(proseTokens)}) false-positive on file paths in the interpolated briefing`,
+  );
+  assert.deepStrictEqual(
+    inv.forbiddenTools,
+    ['Edit', 'Write'],
+    'the read-only bound must be forbiddenTools, checked against the dispatch allowedTools',
+  );
+});
+
+test('an allowedTools list granting Edit is refused for ai-review', () => {
+  const d = evaluateWorkerPrompt(
+    REVIEW_CONTRACT, realReviewPrompt, 'ai-review', ['Read', 'Grep', 'Glob', 'Edit'],
+  );
+  assert.strictEqual(d.block, true, JSON.stringify(d));
+  assert.ok(/Edit/.test(d.reason), d.reason);
+});
+
+test('dispatch() refuses to build a kimi ai-review worker granted Edit', () => {
+  const cwd = makeTmpDir();
+  assert.throws(
+    () => dispatch(
+      {
+        model: 'kimi', prompt: realReviewPrompt, taskId: 'ai-review',
+        allowedTools: ['Read', 'Grep', 'Glob', 'Edit'],
+      },
+      { cwd, contractPath: REVIEW_CONTRACT },
+    ),
+    /forbidden tool/,
   );
 });
 

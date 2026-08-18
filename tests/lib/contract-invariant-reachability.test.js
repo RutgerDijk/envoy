@@ -74,8 +74,10 @@ section('contract invariants are reachable from real dispatch sites');
 
 for (const { name, invariants } of skillsWithInvariants()) {
   const markdown = collectMarkdown(path.join(SKILLS_DIR, name));
-  const descriptions = [...markdown.matchAll(/description:\s*"([^"]+)"/g)].map((m) => m[1]);
-  const taskIds = [...markdown.matchAll(/taskId:\s*'([^']+)'/g)].map((m) => m[1]);
+  // Both quote styles are in active use across the step files; matching
+  // only one would read the other's dispatch sites as unreachable.
+  const descriptions = [...markdown.matchAll(/description:\s*["']([^"']+)["']/g)].map((m) => m[1]);
+  const taskIds = [...markdown.matchAll(/taskId:\s*["']([^"']+)["']/g)].map((m) => m[1]);
   const hasDynamicTaskId = /taskId:\s*task\.id/.test(markdown);
 
   test(`${name}: every invariant selects by identity, not prompt prose`, () => {
@@ -111,6 +113,28 @@ for (const { name, invariants } of skillsWithInvariants()) {
       assert.ok(
         reachable,
         `matchTaskId "${inv.matchTaskId}" matches no taskId literal and the skill has no dynamic taskId site`,
+      );
+    }
+  });
+
+  test(`${name}: a catch-all matchTaskId covers only dynamic dispatch sites`, () => {
+    for (const inv of invariants) {
+      if (!inv.matchTaskId) continue;
+      const re = new RegExp(inv.matchTaskId);
+      if (!re.test('__probe-no-real-task-would-be-named-this__')) continue;
+      // A catch-all is fail-closed for dynamic ids (every worker must carry
+      // the tokens), but it also swallows any future literal-id site into
+      // this invariant's requirements without anyone choosing that. Keep
+      // catch-alls legal only while the skill has no literal sites at all —
+      // adding one forces an explicit per-site invariant here.
+      assert.ok(
+        hasDynamicTaskId,
+        `catch-all matchTaskId "${inv.matchTaskId}" but the skill has no dynamic taskId site`,
+      );
+      assert.strictEqual(
+        taskIds.length,
+        0,
+        `catch-all matchTaskId "${inv.matchTaskId}" would silently absorb literal taskIds ${JSON.stringify(taskIds)} — key an explicit invariant per literal site instead`,
       );
     }
   });

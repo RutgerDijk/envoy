@@ -127,6 +127,68 @@ test('selection is by taskId, not prompt prose — a prose-matching prompt on a 
 });
 
 // ---------------------------------------------------------------------------
+// evaluateWorkerPrompt() — forbiddenTools is checked against the dispatch
+// allowedTools (a mechanical bound; prompt prose can carry tool names freely)
+// ---------------------------------------------------------------------------
+
+section('evaluateWorkerPrompt() — forbiddenTools');
+
+const SYNTHETIC_READONLY = {
+  skill: 'synthetic',
+  agentInvariants: [
+    {
+      matchDescription: 'Read-only audit',
+      matchTaskId: '^audit$',
+      promptMustContain: [],
+      promptMustNotContain: [],
+      forbiddenTools: ['Edit', 'Write'],
+    },
+  ],
+};
+
+test('passes when the allowedTools list grants none of the forbidden tools', () => {
+  const contractPath = writeContract(makeTmpDir(), SYNTHETIC_READONLY);
+  const decision = evaluateWorkerPrompt(contractPath, 'Audit the repo.', 'audit', ['Read', 'Grep', 'Glob']);
+  assert.strictEqual(decision.block, false, JSON.stringify(decision));
+});
+
+test('a prompt merely NAMING a forbidden tool passes — only the granted list matters', () => {
+  const contractPath = writeContract(makeTmpDir(), SYNTHETIC_READONLY);
+  const decision = evaluateWorkerPrompt(
+    contractPath, 'Audit src/components/MarkdownEditor.tsx and ReportWriter.cs.', 'audit', ['Read'],
+  );
+  assert.strictEqual(decision.block, false, JSON.stringify(decision));
+});
+
+test('blocks when allowedTools grants a forbidden tool, naming it', () => {
+  const contractPath = writeContract(makeTmpDir(), SYNTHETIC_READONLY);
+  const decision = evaluateWorkerPrompt(contractPath, 'Audit the repo.', 'audit', ['Read', 'Edit']);
+  assert.strictEqual(decision.block, true);
+  assert.ok(decision.reason.includes('Edit'), decision.reason);
+});
+
+test('blocks a forbidden tool granted via a scoped spec like Edit(docs/*)', () => {
+  const contractPath = writeContract(makeTmpDir(), SYNTHETIC_READONLY);
+  const decision = evaluateWorkerPrompt(contractPath, 'Audit the repo.', 'audit', ['Read', 'Edit(docs/*)']);
+  assert.strictEqual(decision.block, true);
+  assert.ok(decision.reason.includes('Edit'), decision.reason);
+});
+
+test('blocks a forbidden tool granted via the comma-string form', () => {
+  const contractPath = writeContract(makeTmpDir(), SYNTHETIC_READONLY);
+  const decision = evaluateWorkerPrompt(contractPath, 'Audit the repo.', 'audit', 'Read,Write');
+  assert.strictEqual(decision.block, true);
+  assert.ok(decision.reason.includes('Write'), decision.reason);
+});
+
+test('fails closed: forbiddenTools present but no allowedTools provided blocks', () => {
+  const contractPath = writeContract(makeTmpDir(), SYNTHETIC_READONLY);
+  const decision = evaluateWorkerPrompt(contractPath, 'Audit the repo.', 'audit');
+  assert.strictEqual(decision.block, true);
+  assert.ok(/allowedTools/.test(decision.reason), decision.reason);
+});
+
+// ---------------------------------------------------------------------------
 // dispatch() — kimi prompts are gated by the dispatching skill's contract
 // ---------------------------------------------------------------------------
 
