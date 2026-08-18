@@ -189,7 +189,7 @@ Use `envoy:skill-name` prefix to force Envoy's version.
 |---------|-------------|
 | `/envoy:brainstorm` | Design + plan a feature through Socratic dialogue |
 | `/envoy:pickup [issue]` | Create worktree, write plan, execute with TDD (see [Model Selection](docs/model-selection.md) for the per-run worker model, including Kimi) |
-| `/envoy:review` | Local review: cleanup pass, lint, Sonnet AI, visual, docs + docstrings (see [Model Selection](docs/model-selection.md) for the per-run worker model, including Kimi) |
+| `/envoy:review` | Local review: cleanup pass, lint, AI review, visual, docs + docstrings (see [Model Selection](docs/model-selection.md) for the per-run worker model, including Kimi) |
 | `/envoy:finalize` | Ship: create PR → handle GitHub CodeRabbit → verify CI |
 | `/envoy:cleanup` | Clear session, sync wiki, remove worktree and branch |
 

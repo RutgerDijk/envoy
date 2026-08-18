@@ -77,8 +77,8 @@ if (descriptor.kind === 'agent') {
   // for a parallel wave, every task's shell must have exited before the
   // wave's reports are merged. Poll BashOutput(shell_id) until it
   // reports the shell has exited (or use Monitor to block on that
-  // condition), THEN read descriptor.outputFile
-  // (.envoy/agent-output/<task-id>.md) as the implementer's report.
+  // condition), THEN read descriptor.outputFile (run-unique, under
+  // .envoy/agent-output/) as the implementer's report.
 }
 ```
 

@@ -266,8 +266,9 @@ environment, and for the pickup-implementer and review-cleanup roles that
 same process is granted `Bash`. A Kimi worker can therefore read its own
 credential (`env`, `echo $ANTHROPIC_AUTH_TOKEN`) and, with network access,
 send it anywhere — or simply repeat it into its report at
-`.envoy/agent-output/<task-id>.md`, which the orchestrator later reads and
-may quote onward into commits or PR text. The worker is driven by a
+`descriptor.outputFile` (the run-unique file under `.envoy/agent-output/`),
+which the orchestrator later reads and may quote onward into commits or PR
+text. The worker is driven by a
 third-party model reading attacker-influenceable text (issue bodies,
 diffs), so prompt injection is the realistic trigger, not operator error.
 
