@@ -24,10 +24,10 @@ Write code before the test? **Delete it. Start over.**
 2. GREEN — Write MINIMAL code to make tests pass
    - Run only the test(s) under change to confirm they PASS — not the full suite
    - Commit: `feat(<scope>): implement <feature>`
-
-The full suite is a review-time gate, not a per-task one: it runs once, at /envoy:review — not after every RED/GREEN cycle.
 3. REFACTOR — Clean up while keeping tests green
    - Commit: `refactor(<scope>): clean up <feature>`
+
+The full suite is a review-time gate, not a per-task one: it runs once, at /envoy:review — not after every RED/GREEN cycle.
 
 **Commit scopes:** `backend`, `frontend`, `api`, `db`, `auth`, `tests`, `docs`
 

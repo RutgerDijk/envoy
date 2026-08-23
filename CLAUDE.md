@@ -10,7 +10,7 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 - `stacks/` — Technology profiles (best practices, common mistakes, review checklists)
 - `agents/` — Specialized agent definitions for code review, testing, security
 - `hooks/` — Session lifecycle hooks and automation (see Hooks section)
-- `lib/` — Shared Node.js utilities (stack-loader.js, ledger.js, etc.) — changes here affect ALL skills and hooks
+- `lib/` — Shared Node.js utilities (stack-loader.js, test-commands.js, ledger.js, etc.) — changes here affect ALL skills and hooks
 - `contexts/` — Phase-specific context fragments (review.md, implement.md, research.md)
 - `adapters/copilot/` — GitHub Copilot integration (prompts, instructions, agents)
 - `templates/` — Example artifacts (plan docs, spec docs, issue templates)
@@ -173,9 +173,8 @@ describe what Claude does; preflight supplies the inputs.
 
 ### Adding a New Stack Profile
 1. Create `stacks/<stack-name>.md` with required sections
-2. Add detection rule to `lib/stack-loader.js` STACK_RULES array
-3. Add detection pattern to `hooks/session-start.sh`
-4. Update `adapters/copilot/` if needed (instructions template)
+2. Add a detection rule to `lib/stack-loader.js`'s `STACK_RULES` array — this is the single source of truth; `stacks/detect-stacks.sh` and `hooks/session-start.sh` both delegate to it (#78), so no other file needs a matching edit
+3. Update `adapters/copilot/` if needed (instructions template)
 
 ### Adding a New Hook
 1. Create `hooks/<hook-name>.js` with `run(rawInput)` export
