@@ -7,9 +7,10 @@
 # This script delegates to `node lib/stack-loader.js` instead of carrying
 # its own copy of the detection logic, so it can never drift from it.
 #
-# One node invocation per script run (#78 code-review fix M6): the sweep
-# itself is the expensive part (dozens of find/grep probes), so every flag
-# below is derived from a single --json call rather than re-running it.
+# One *detection sweep* per script run (#78 code-review fix M6): the sweep
+# is the expensive part, so every output form below is rendered from a
+# single `--json` call's result. The short node invocations that format
+# that result are cheap and are not repeats of the sweep.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
@@ -22,7 +23,10 @@ NC='\033[0m' # No Color
 echo "Detecting project stacks..."
 echo ""
 
-JSON=$(node "$STACK_LOADER" . --json 2>/dev/null)
+# stderr is deliberately NOT suppressed: warnOnProbeFailure() writes probe
+# timeouts / broken-tool warnings there. Only stdout is captured, so those
+# warnings reach the user without breaking the JSON parse below.
+JSON=$(node "$STACK_LOADER" . --json)
 
 # A node failure (crash, missing binary, bad projectDir) leaves $JSON empty
 # or non-JSON — degrade to an empty result set rather than letting
@@ -33,11 +37,7 @@ fi
 
 echo "Detected stacks:"
 echo ""
-node -e '
-  const arr = JSON.parse(process.argv[1]);
-  for (const name of arr) console.log("✓ " + name);
-' "$JSON" | while IFS= read -r line; do
-    name="${line#✓ }"
+node -e 'JSON.parse(process.argv[1]).forEach(s => console.log(s))' "$JSON" | while IFS= read -r name; do
     echo -e "  ${GREEN}✓${NC} $name"
 done
 echo ""

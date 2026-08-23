@@ -22,6 +22,10 @@ const testCommands = resolveTestCommands(process.cwd());
 // repo (e.g. dotnet + Playwright) needs every entry re-run, not just one
 // (code-review fix, same bug commit 532b71a fixed in layers/tests.md).
 const TEST_CMDS = testCommands.commands.map(c => c.full).filter(Boolean);
+// Non-empty => a template was REJECTED as unsafe (shell metacharacters
+// outside {{test}} — a cloned repo's CLAUDE.md is untrusted content and
+// these commands run verbatim). Report them; never run a rejected command.
+const TEST_CMD_WARNINGS = testCommands.warnings || [];
 ```
 
 Pass `TEST_CMDS` (plural — may be zero, one, or several commands) into the

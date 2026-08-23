@@ -176,6 +176,7 @@ server), it is not silently skipped — see "If the layer cannot run" in
 | 0.5 re-run | ✓ / ⊘ | N items removed (after L1 fixes) |
 | 0.75: Tests | ✓ / ✗ / ⊘ | full-suite result (⊘ = no test command resolved) |
 | 1: AI Review | ✓ / ⊘ | N findings, N fixed |
+| 0.75 re-run | ✓ / ✗ / ⊘ | full-suite result after L1 fixes (⊘ = no L1 fixes) |
 | 2: Visual | ✓ / ⊘ / ⚠ | N issues found |
 | 3: Docs | ✓ / ⊘ | N APIs documented |
 
@@ -193,7 +194,9 @@ to `.envoy/observe-log.jsonl`.
 
 Write `.envoy/review/handoff-to-finalize.json` conforming to `lib/schemas/handoff-review-to-finalize.json`:
 
-`testsLayerStatus` comes from Layer 0.75 (`layers/tests.md`): `'passed'`,
+`testsLayerStatus` comes from Layer 0.75 (`layers/tests.md`) — from its
+**re-run after Layer 1** when Layer 1 produced commits, otherwise from the
+original pass (see `layers/ai-review.md`). It is `'passed'`,
 `'failed'`, or `'skipped'` (no test command resolved for this repo — carry
 the reason in that layer entry's `note`). `allLayersPassed` is computed,
 not assumed: it is `false` whenever any layer — including the tests layer —
@@ -208,7 +211,21 @@ only the handoff. So on Trivial tier, set `testsLayerStatus = 'skipped'`
 with the reason below *without running the layer* — never omit the entry
 and never invent a `'passed'` you didn't check.
 
+Every layer's status is a **named variable set by that layer when it ran**
+— `'passed'`, `'fixed'`, `'skipped'`, or `'failed'` (the enum the schema
+allows). Both the gate and the `layers[]` array below read those same
+variables, so the report can never disagree with the approve/needs-fixes
+decision. A layer that did not run for this tier is `'skipped'`.
+
 ```javascript
+// Set by each layer as it completes — never hardcode a status here.
+const lintStatus     = /* Layer 0    */ 'passed';
+const cleanupStatus  = /* Layer 0.5  */ 'fixed';
+const aiReviewStatus = /* Layer 1    */ 'fixed';
+const visualStatus   = /* Layer 2    */ 'skipped';
+const docsStatus     = /* Layer 3    */ 'skipped';
+// testsLayerStatus  — Layer 0.75, or its post-Layer-1 re-run (see above).
+
 const testsLayerEntry =
   tier === 'trivial'
     ? { name: 'tests', status: 'skipped', findings: 0, note: 'skipped — trivial tier, layer does not run' }
@@ -225,10 +242,10 @@ const handoff = {
   branch: handoffIn.branch,
   reviewStatus: allLayersPassed ? 'approved' : 'needs-fixes',
   layers: [
-    { name: 'lint', status: 'passed', findings: 0 },
-    { name: 'cleanup', status: 'fixed', findings: cleanupCount },
+    { name: 'lint', status: lintStatus, findings: lintCount },
+    { name: 'cleanup', status: cleanupStatus, findings: cleanupCount },
     testsLayerEntry,
-    { name: 'ai-review', status: 'fixed', findings: reviewCount },
+    { name: 'ai-review', status: aiReviewStatus, findings: reviewCount },
     { name: 'visual', status: visualStatus, findings: 0 },
     { name: 'docs', status: docsStatus, findings: 0 },
   ],

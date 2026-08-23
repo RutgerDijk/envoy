@@ -163,6 +163,10 @@ function main() {
   say('### Test Command');
   say('');
   const testCommands = resolveTestCommands(CWD);
+  // A rejected template is a security event, not a detail: the command was
+  // dropped because it carried shell metacharacters outside the {{test}}
+  // placeholder, and it would otherwise be executed verbatim downstream.
+  for (const w of testCommands.warnings || []) say(`WARNING: ${w}`);
   if (testCommands.filtered) {
     if (testCommands.commands.length > 1) {
       // .filtered/.full mirror commands[0] only — silently using that alone

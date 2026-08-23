@@ -63,6 +63,14 @@ anthropics/claude-code#22345.
 ### Stack Profiles
 - Each profile in `stacks/<stack-name>.md`
 - Must include: Best Practices, Common Mistakes, Review Checklist sections
+- May include an optional `## Test Command` section, read by `lib/test-commands.js`:
+  ```
+  ## Test Command
+
+  filtered: dotnet test --filter "FullyQualifiedName~{{test}}"
+  full: dotnet test
+  ```
+  `filtered:` runs one named test and must contain the literal `{{test}}` placeholder; `full:` runs the whole suite. A project's root `CLAUDE.md` may declare the same section to override the stack default. Templates containing shell metacharacters (`;`, `&&`, `||`, `|`, `$(`, backticks) outside the placeholder are rejected and reported as warnings — never executed.
 - Detection patterns are defined in `lib/stack-loader.js` STACK_RULES array
 - Use selective loading: `loadStackSection()` for specific sections, `detectStacksFromDiff()` for changed-file stacks
 

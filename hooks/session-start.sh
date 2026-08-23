@@ -82,7 +82,11 @@ fi
 # (same STACK_RULES, exclusion flags, and per-rule files: lists used by
 # stacks/detect-stacks.sh) instead of carrying its own copy of the probe
 # logic — one Node process, not one per rule, to stay fast on large repos.
-DETECTED_STACKS=$(node "$PLUGIN_DIR/lib/stack-loader.js" . 2>/dev/null)
+# stderr is deliberately NOT suppressed: warnOnProbeFailure() writes probe
+# timeouts / broken-tool warnings there, and silencing them would drop the
+# only signal that a stack was skipped for a fixable reason. Only stdout is
+# captured, so warnings cannot corrupt the detected-stack list.
+DETECTED_STACKS=$(node "$PLUGIN_DIR/lib/stack-loader.js" .)
 
 # Detect session state (cross-session continuity)
 SESSION_STATE=""
