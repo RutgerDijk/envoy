@@ -202,6 +202,45 @@ test('detectStacks() includes "security" even with no dotnet/react/api-patterns 
 });
 fs.rmSync(bareFixture, { recursive: true, force: true });
 
+// --- A probe that times out must not vanish silently (#78 defect A3 /
+// fix item 5). Now that traversal is bounded a timeout should never fire;
+// if it does, that is a signal worth surfacing, not a silently dropped
+// stack. Warnings go to stderr so the CLI's stdout JSON stays parseable.
+test('warnOnProbeFailure() warns on a timeout error', () => {
+  const { warnOnProbeFailure } = require(path.join(REPO_ROOT, 'lib', 'stack-loader'));
+  const original = console.warn;
+  const seen = [];
+  console.warn = (...args) => seen.push(args.join(' '));
+  try {
+    const err = new Error('spawnSync /bin/sh ETIMEDOUT');
+    err.code = 'ETIMEDOUT';
+    warnOnProbeFailure(err, 'dotnet');
+  } finally {
+    console.warn = original;
+  }
+  assert.strictEqual(seen.length, 1, `expected exactly one warning, got ${seen.length}`);
+  assert.ok(/dotnet/.test(seen[0]), `warning should name the rule: ${seen[0]}`);
+  assert.ok(/timed out/i.test(seen[0]), `warning should say it timed out: ${seen[0]}`);
+});
+
+test('warnOnProbeFailure() stays silent for an ordinary non-zero exit', () => {
+  const { warnOnProbeFailure } = require(path.join(REPO_ROOT, 'lib', 'stack-loader'));
+  const original = console.warn;
+  const seen = [];
+  console.warn = (...args) => seen.push(args.join(' '));
+  try {
+    // `find ... | head -1` exits non-zero when nothing matched — the
+    // overwhelmingly common "stack simply not present" case. Warning on
+    // that would make every run noisy and drown out real timeouts.
+    const err = new Error('Command failed');
+    err.status = 1;
+    warnOnProbeFailure(err, 'react');
+  } finally {
+    console.warn = original;
+  }
+  assert.strictEqual(seen.length, 0, `expected no warning, got: ${seen.join(' | ')}`);
+});
+
 fs.rmSync(fixture, { recursive: true, force: true });
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
