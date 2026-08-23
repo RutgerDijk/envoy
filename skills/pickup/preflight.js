@@ -23,6 +23,7 @@ const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'))
 const { extractEmbeddedBlock, ensureTasksDirIgnored } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
 const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
+const { resolveTestCommands } = require(path.join(REPO_ROOT, 'lib', 'test-commands'));
 
 // Best-effort fetch of an issue body via gh. Returns the body string, or null
 // when gh is unavailable or the call fails — callers must tolerate null.
@@ -158,6 +159,18 @@ function main() {
   say('');
   say('Tasks:');
   for (const t of tasks.tasks) say(`  - ${t.id}: ${t.title}`);
+  say('');
+  say('### Test Command');
+  say('');
+  const testCommands = resolveTestCommands(CWD);
+  if (testCommands.filtered) {
+    say(`Resolved (source: ${testCommands.source}): ${testCommands.filtered}`);
+    if (testCommands.full) say(`Full suite: ${testCommands.full}`);
+    say('Give the implementer agent this filtered command as ${RESOLVED_TEST_COMMAND} (see prompts.md).');
+  } else {
+    say('No test command could be resolved for this repo (no CLAUDE.md or stack profile Test Command section).');
+    say('Do NOT default to a full-suite command. Instruct the implementer agent to determine and report the narrowest test command itself.');
+  }
   say('');
   say('Next: read skills/pickup/steps/worktree.md and proceed with Step 1.');
 }

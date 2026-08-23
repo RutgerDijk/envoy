@@ -92,7 +92,11 @@ For each task:
    `contracts`/`outOfScope` fields per `lib/schemas/tasks.json` — never
    an ad-hoc format) plus `buildSiblingIndex(allTasks, task.id)` for a
    one-line-per-task index of siblings. Siblings never get their full
-   spec injected — only id + title.
+   spec injected — only id + title. Also fill `${RESOLVED_TEST_COMMAND}`
+   from preflight's `### Test Command` output — the concrete filtered
+   command when resolved, or the explicit "determine and report the
+   narrowest command yourself" instruction when not; never default to
+   the full suite.
 3. Once the implementer completes, dispatch BOTH reviewers — spec
    compliance and code quality — **in the same message/turn**, so they
    run concurrently. Both are read-only (review-only prompts, no
