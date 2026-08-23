@@ -11,6 +11,8 @@
     "reviewStatus": { "type": "string", "enum": ["approved", "needs-fixes", "blocked"] },
     "layers": {
       "type": "array",
+      "$comment": "requiredItemNames is an ENVOY EXTENSION, not a JSON Schema keyword: it asserts that an array of {name,...} objects contains an item for each listed name (see lib/validate-schema.js). Generic JSON Schema validators ignore it. Enforcement tier is the consumer's choice — skills/finalize/preflight.js degrades a missing \"tests\" entry to a warning so handoffs written before this requirement existed still finalize.",
+      "requiredItemNames": ["tests"],
       "items": {
         "type": "object",
         "required": ["name", "status"],

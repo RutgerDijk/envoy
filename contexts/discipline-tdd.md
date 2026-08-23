@@ -19,13 +19,15 @@ Write code before the test? **Delete it. Start over.**
 ## TDD Cycle
 
 1. RED — Write failing test(s) for expected behavior
-   - Run tests to confirm they FAIL
+   - Run only the test(s) under change to confirm they FAIL — not the full suite
    - Commit: `test(<scope>): add tests for <feature>`
 2. GREEN — Write MINIMAL code to make tests pass
-   - Run tests to confirm they PASS
+   - Run only the test(s) under change to confirm they PASS — not the full suite
    - Commit: `feat(<scope>): implement <feature>`
 3. REFACTOR — Clean up while keeping tests green
    - Commit: `refactor(<scope>): clean up <feature>`
+
+The full suite is a review-time gate, not a per-task one: it runs once, at /envoy:review — not after every RED/GREEN cycle.
 
 **Commit scopes:** `backend`, `frontend`, `api`, `db`, `auth`, `tests`, `docs`
 

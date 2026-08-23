@@ -178,25 +178,20 @@ function UserProfile({ userId }: { userId: number }) {
 
 **MANDATORY.**
 
+Run the filtered command for the test you just made pass — resolve it with `lib/test-commands.js` (`resolveTestCommands` + `buildFilteredCommand`) rather than hardcoding `dotnet test`/`npm test`:
+
 ```bash
-# .NET - run specific test
+# example resolved form — the actual command comes from lib/test-commands.js
 dotnet test --filter "CreateUser_WithValidEmail_ReturnsUser"
-
-# .NET - run all tests (check for regression)
-dotnet test
-
-# React
-npm test
 ```
 
 Confirm:
 - Test passes
-- **All other tests still pass**
 - Output is clean (no warnings)
 
 **Test fails?** Fix the code, not the test.
 
-**Other tests fail?** Fix the regression now.
+The full suite (all tests, checking for regressions) is a review-time gate — it runs once, at /envoy:review — not after every GREEN.
 
 ### REFACTOR - Clean Up
 
@@ -354,9 +349,11 @@ public async Task<User> CreateUserAsync(CreateUserDto dto)
 
 **Verify GREEN:**
 ```
-$ dotnet test
-PASS (all tests)
+$ dotnet test --filter "WithEmptyEmail"
+PASS
 ```
+
+The full suite is a review-time gate — it runs once, at /envoy:review — not per cycle.
 
 ## The Bottom Line
 

@@ -16,7 +16,27 @@ ever injecting another task's full spec.
 
 ## Implementer Agent Prompt
 
-Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`, `${SIBLING_INDEX}`
+Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`, `${SIBLING_INDEX}`, `${RESOLVED_TEST_COMMAND}`
+
+`${RESOLVED_TEST_COMMAND}` is populated from preflight's `### Test
+Command` output (preflight.js resolves it once via
+`lib/test-commands.js`'s `resolveTestCommands()` and prints it under
+that heading). Two cases:
+
+- **Resolved** — preflight printed a concrete filtered command
+  containing a `{{test}}` placeholder, e.g. `dotnet test --filter
+  "FullyQualifiedName~{{test}}"`. Do NOT paste it with the placeholder
+  still in it — that runs no test. Tell the implementer explicitly:
+  `Test command template: <the resolved command>. Before running it,
+  replace {{test}} with the actual name of the test you just wrote
+  (e.g. the fully-qualified test method name), then run the
+  substituted command — never the raw template.`
+- **Unresolved** — preflight found no CLAUDE.md or stack profile Test
+  Command section. Substitute the explicit instruction below — never
+  silently default to a full-suite command:
+  `No test command was resolved for this repo. Determine the
+  narrowest command that runs just your new/changed test(s) yourself,
+  and report what you used.`
 
 ```
 Agent({
@@ -52,6 +72,8 @@ buildSiblingIndex(allTasks, taskId). Never their full specs.>
 
 **Known patterns (avoid these):**
 <Confirmed patterns and team corrections from learning-loader>
+
+**Test command:** ${RESOLVED_TEST_COMMAND}
 
 **Requirements:**
 1. Follow TDD Iron Law above — NON-NEGOTIABLE

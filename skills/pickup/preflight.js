@@ -23,6 +23,7 @@ const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'))
 const { extractEmbeddedBlock, ensureTasksDirIgnored } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
 const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
+const { resolveTestCommands } = require(path.join(REPO_ROOT, 'lib', 'test-commands'));
 
 // Best-effort fetch of an issue body via gh. Returns the body string, or null
 // when gh is unavailable or the call fails — callers must tolerate null.
@@ -158,6 +159,33 @@ function main() {
   say('');
   say('Tasks:');
   for (const t of tasks.tasks) say(`  - ${t.id}: ${t.title}`);
+  say('');
+  say('### Test Command');
+  say('');
+  const testCommands = resolveTestCommands(CWD);
+  // A rejected template is a security event, not a detail: the command was
+  // dropped because it carried shell metacharacters outside the {{test}}
+  // placeholder, and it would otherwise be executed verbatim downstream.
+  for (const w of testCommands.warnings || []) say(`WARNING: ${w}`);
+  if (testCommands.filtered) {
+    if (testCommands.commands.length > 1) {
+      // .filtered/.full mirror commands[0] only — silently using that alone
+      // would hand the implementer a picked-at-random stack's command on a
+      // multi-stack repo with no indication another stack exists.
+      say(`Multiple stacks resolved a Test Command — reporting all ${testCommands.commands.length}:`);
+      for (const c of testCommands.commands) {
+        say(`  - ${c.stack} (source: ${c.source}): ${c.filtered}${c.full ? ` (full: ${c.full})` : ''}`);
+      }
+      say(`Primary (source: ${testCommands.source}): ${testCommands.filtered}`);
+    } else {
+      say(`Resolved (source: ${testCommands.source}): ${testCommands.filtered}`);
+      if (testCommands.full) say(`Full suite: ${testCommands.full}`);
+    }
+    say('Give the implementer agent this filtered command as ${RESOLVED_TEST_COMMAND} (see prompts.md).');
+  } else {
+    say('No test command could be resolved for this repo (no CLAUDE.md or stack profile Test Command section).');
+    say('Do NOT default to a full-suite command. Instruct the implementer agent to determine and report the narrowest test command itself.');
+  }
   say('');
   say('Next: read skills/pickup/steps/worktree.md and proceed with Step 1.');
 }

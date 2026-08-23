@@ -64,6 +64,18 @@ writeFixtureFile('package.json', JSON.stringify({
   },
 }, null, 2));
 writeFixtureFile('docker-compose.yml', 'services: {}\n');
+// api-patterns (task-8): the shell path historically hardcoded
+// --include="*.csproj" --include="package.json" --include="*.bicep" for
+// EVERY content rule, so a rule whose files: list is *.cs (api-patterns)
+// never resolved via stacks/detect-stacks.sh or hooks/session-start.sh —
+// only via the JS path. This file must be picked up by all three.
+writeFixtureFile('Controllers/WidgetsController.cs',
+  'namespace App.Controllers { public class WidgetsController : ApiController { } }\n');
+// github-actions (code-review fix): `find -name ".github/workflows/*.yml"`
+// never matches — -name compares basenames only, a pattern containing a
+// slash can never equal one. Needs -path. Caught only now that
+// lib/stack-loader.js's `find` invocation is the sole implementation.
+writeFixtureFile('.github/workflows/ci.yml', 'on: push\njobs: {}\n');
 
 // Dependency / debris files that must NOT drive detection:
 writeFixtureFile('node_modules/use-callback-ref/package.json', JSON.stringify({
@@ -85,8 +97,14 @@ writeFixtureFile('.git/package.json', JSON.stringify({
 }, null, 2));
 
 // --- Run all three implementations once against the fixture.
+// detectStacks() reports only what it actually detected. "security" is
+// appended by the CLI entry point, where the shell-parity requirement lives
+// (code-review fix item 12) — so the JS result is compared as
+// detected + the CLI's append, not as if detectStacks() produced it.
+const CLI_APPENDED = ['security'];
+
 function runDetectStacksJs() {
-  return detectStacks(fixture);
+  return detectStacks(fixture).concat(CLI_APPENDED);
 }
 
 function runDetectStacksSh() {
@@ -137,6 +155,16 @@ const MUST_DETECT = [
   ['application-insights', 'lowercase @microsoft/applicationinsights-web in the project manifest'],
   ['docker-compose', 'root docker-compose.yml (exclusions must not over-prune)'],
   ['shadcn-radix', 'class-variance-authority via | alternation (requires ERE grep)'],
+  ['api-patterns', 'AddControllers|ApiController in a *.cs file (files: list, not hardcoded csproj/package.json/bicep)'],
+  ['github-actions', '.github/workflows/ci.yml (find -name never matches a path pattern)'],
+  // Both shell scripts unconditionally appended "security" before task-8's
+  // consolidation, independent of any other detected stack. Consolidating
+  // onto detectStacks()'s conditional gate (dotnet/react/api-patterns only)
+  // silently dropped that guarantee for repos matching none of the three —
+  // regression caught by code review, not by this fixture (which happens
+  // to trip the api-patterns gate). Asserted here regardless of fixture
+  // shape so it can't regress silently again.
+  ['security', 'always applicable, independent of every other detected stack'],
 ];
 
 for (const [impl, detected] of Object.entries(results)) {
@@ -153,6 +181,154 @@ for (const [impl, detected] of Object.entries(results)) {
     });
   }
 }
+
+// --- Single-source-of-truth invariant (task-8): the three entry points
+// must agree by construction, not by three independently-maintained copies
+// happening to list the same stacks. Compare sorted output sets pairwise.
+const [jsResult, shResult, hookResult] = Object.values(results);
+test('detectStacks() and stacks/detect-stacks.sh --json produce identical results', () => {
+  assert.deepStrictEqual([...jsResult].sort(), [...shResult].sort());
+});
+test('detectStacks() and hooks/session-start.sh produce identical results', () => {
+  assert.deepStrictEqual([...jsResult].sort(), [...hookResult].sort());
+});
+
+// --- "security" is unconditional (code-review fix), isolated from a
+// fixture that matches none of dotnet/react/api-patterns, so this can't
+// pass by accident the way MUST_DETECT's shared fixture could.
+const bareFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-detect-bare-'));
+fs.writeFileSync(path.join(bareFixture, 'README.md'), '# just a readme, no stack signals\n');
+test('the CLI reports "security" even with no dotnet/react/api-patterns match', () => {
+  const loader = path.join(REPO_ROOT, 'lib', 'stack-loader.js');
+  const detected = JSON.parse(
+    execSync(`node "${loader}" "${bareFixture}" --json`, { encoding: 'utf8', timeout: 60000 })
+  );
+  assert.ok(!detected.some(s => ['dotnet', 'react', 'api-patterns'].includes(s)),
+    `fixture should not have tripped the old conditional gate: [${detected.join(', ')}]`);
+  assert.ok(detected.includes('security'),
+    `expected security to be unconditionally reported, got: [${detected.join(', ')}]`);
+});
+
+test('detectStacks() itself reports only detected stacks — no unconditional "security"', () => {
+  const { detectStacks } = require(path.join(REPO_ROOT, 'lib', 'stack-loader'));
+  assert.ok(!detectStacks(bareFixture).includes('security'),
+    'detectStacks() must not inject a stack it did not detect (item 12)');
+});
+fs.rmSync(bareFixture, { recursive: true, force: true });
+
+// --- A probe that times out must not vanish silently (#78 defect A3 /
+// fix item 5). Now that traversal is bounded a timeout should never fire;
+// if it does, that is a signal worth surfacing, not a silently dropped
+// stack. Warnings go to stderr so the CLI's stdout JSON stays parseable.
+test('warnOnProbeFailure() warns on a timeout error', () => {
+  const { warnOnProbeFailure } = require(path.join(REPO_ROOT, 'lib', 'stack-loader'));
+  const original = console.warn;
+  const seen = [];
+  console.warn = (...args) => seen.push(args.join(' '));
+  try {
+    const err = new Error('spawnSync /bin/sh ETIMEDOUT');
+    err.code = 'ETIMEDOUT';
+    warnOnProbeFailure(err, 'dotnet');
+  } finally {
+    console.warn = original;
+  }
+  assert.strictEqual(seen.length, 1, `expected exactly one warning, got ${seen.length}`);
+  assert.ok(/dotnet/.test(seen[0]), `warning should name the rule: ${seen[0]}`);
+  assert.ok(/timed out/i.test(seen[0]), `warning should say it timed out: ${seen[0]}`);
+});
+
+test('warnOnProbeFailure() stays silent for an ordinary non-zero exit', () => {
+  const { warnOnProbeFailure } = require(path.join(REPO_ROOT, 'lib', 'stack-loader'));
+  const original = console.warn;
+  const seen = [];
+  console.warn = (...args) => seen.push(args.join(' '));
+  try {
+    // `find ... | head -1` exits non-zero when nothing matched — the
+    // overwhelmingly common "stack simply not present" case. Warning on
+    // that would make every run noisy and drown out real timeouts.
+    const err = new Error('Command failed');
+    err.status = 1;
+    warnOnProbeFailure(err, 'react');
+  } finally {
+    console.warn = original;
+  }
+  assert.strictEqual(seen.length, 0, `expected no warning, got: ${seen.join(' | ')}`);
+});
+
+// --- Detection cache (#78 fix item 5): session-start.sh and pickup's
+// preflight used to run the identical full sweep moments apart.
+const { detectStacksCached } = require(path.join(REPO_ROOT, 'lib', 'stack-loader'));
+
+test('detectStacksCached() writes a cache under .envoy/ and returns the same result', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-detect-cache-'));
+  fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{}\n');
+  try {
+    const first = detectStacksCached(dir);
+    assert.deepStrictEqual([...first].sort(), [...detectStacks(dir)].sort());
+    const cachePath = path.join(dir, '.envoy', 'stack-detection.json');
+    assert.ok(fs.existsSync(cachePath), 'expected .envoy/stack-detection.json to be written');
+    // Creating .envoy/ itself bumps the root dir mtime, so the very first
+    // run always re-detects once; settle the key before asserting a hit.
+    detectStacksCached(dir);
+    // Second call must be served from the cache — proved by poisoning the
+    // stored result and seeing it come back verbatim.
+    const stored = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    stored.stacks = ['sentinel-from-cache'];
+    fs.writeFileSync(cachePath, JSON.stringify(stored));
+    assert.deepStrictEqual(detectStacksCached(dir), ['sentinel-from-cache']);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('detectStacksCached() re-detects when a root manifest changes', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-detect-cache2-'));
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ dependencies: {} }));
+  try {
+    detectStacksCached(dir);
+    detectStacksCached(dir); // settle the key (creating .envoy/ bumps the root mtime)
+    const cachePath = path.join(dir, '.envoy', 'stack-detection.json');
+    const stored = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    stored.stacks = ['sentinel-from-cache'];
+    fs.writeFileSync(cachePath, JSON.stringify(stored));
+
+    fs.writeFileSync(path.join(dir, 'package.json'),
+      JSON.stringify({ dependencies: { react: '18.0.0' } }));
+    const after = detectStacksCached(dir);
+    assert.ok(!after.includes('sentinel-from-cache'),
+      'a changed root manifest must invalidate the cache');
+    assert.ok(after.includes('react'), `expected react after the edit, got [${after.join(', ')}]`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('detectStacksCached() fails open on a corrupt cache file', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-detect-cache3-'));
+  fs.mkdirSync(path.join(dir, '.envoy'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.envoy', 'stack-detection.json'), 'not json at all');
+  fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{}\n');
+  try {
+    assert.ok(detectStacksCached(dir).includes('typescript'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- projectDir shell injection (code-review fix): detectStacks() builds
+// execSync command strings with projectDir interpolated unescaped. The
+// new CLI entry point (task-8) makes this externally reachable — verified
+// `node lib/stack-loader.js '/tmp/"; touch /tmp/envoy-pwned-marker; "'`
+// actually creates the marker file.
+const injectionMarker = path.join(os.tmpdir(), `envoy-pwned-marker-${process.pid}`);
+fs.rmSync(injectionMarker, { force: true });
+test('detectStacks() does not execute shell syntax embedded in projectDir', () => {
+  const maliciousDir = `/tmp/"; touch ${injectionMarker}; "`;
+  detectStacks(maliciousDir);
+  assert.ok(!fs.existsSync(injectionMarker),
+    `projectDir was interpreted as shell syntax — marker file was created: ${injectionMarker}`);
+});
+fs.rmSync(injectionMarker, { force: true });
 
 fs.rmSync(fixture, { recursive: true, force: true });
 

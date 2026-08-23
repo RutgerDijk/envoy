@@ -28,6 +28,7 @@ context: fork
 
 - [ ] Layer 0: Lint (`layers/lint.md`)
 - [ ] Layer 0.5: Cleanup pass (`layers/cleanup.md`)
+- [ ] Layer 0.75: Tests (`layers/tests.md`)
 - [ ] Layer 1: AI code review (`layers/ai-review.md`)
 - [ ] Layer 2: Visual review (`layers/visual.md`)
 - [ ] Layer 3: Documentation (`layers/docs.md`)
@@ -122,6 +123,7 @@ Each layer is documented in its own file. Execute them in order for the tier:
 |-------|------|------|
 | 0: Lint | `layers/lint.md` | All tiers |
 | 0.5: Cleanup | `layers/cleanup.md` | All tiers except trivial |
+| 0.75: Tests | `layers/tests.md` | All tiers except trivial |
 | 1: AI Review | `layers/ai-review.md` | Small+ tiers |
 | 2: Visual | `layers/visual.md` | Medium+ tiers, **OR forced on for any tier when the diff touches a frontend stack** (see below) |
 | 3: Docs | `layers/docs.md` | Medium+ tiers |
@@ -131,9 +133,15 @@ Each layer is documented in its own file. Execute them in order for the tier:
 | Tier | Layers |
 |------|--------|
 | Trivial | 0 only |
-| Small | 0, 0.5, 1 |
-| Medium | 0, 0.5, 1, 2, 3 |
-| Large | 0, 0.5, 1 (deep), 2, 3 |
+| Small | 0, 0.5, 0.75, 1 |
+| Medium | 0, 0.5, 0.75, 1, 2, 3 |
+| Large | 0, 0.5, 0.75, 1 (deep), 2, 3 |
+
+Layer 0.75 (Tests) runs at every tier except Trivial — same rule as
+Cleanup — because it is meant to be a real, enforced gate rather than a
+layer that only sometimes executes. It runs once, as a single dedicated
+step; the per-category test re-runs inside Layer 0.5 (Cleanup) are a
+separate, internal fast-check and do not substitute for it.
 
 "Deep" Layer 1 for Large tier means: increase iterative retrieval to full 3 cycles, expand to 'skim' relevance files, and follow additional import chain hops.
 
@@ -166,7 +174,9 @@ server), it is not silently skipped — see "If the layer cannot run" in
 | 0: Lint | ✓ / ✗ | N issues fixed |
 | 0.5: Cleanup | ✓ / ⊘ | N items removed |
 | 0.5 re-run | ✓ / ⊘ | N items removed (after L1 fixes) |
+| 0.75: Tests | ✓ / ✗ / ⊘ | full-suite result (⊘ = no test command resolved) |
 | 1: AI Review | ✓ / ⊘ | N findings, N fixed |
+| 0.75 re-run | ✓ / ✗ / ⊘ | full-suite result after L1 fixes (⊘ = no L1 fixes) |
 | 2: Visual | ✓ / ⊘ / ⚠ | N issues found |
 | 3: Docs | ✓ / ⊘ | N APIs documented |
 
@@ -184,16 +194,58 @@ to `.envoy/observe-log.jsonl`.
 
 Write `.envoy/review/handoff-to-finalize.json` conforming to `lib/schemas/handoff-review-to-finalize.json`:
 
+`testsLayerStatus` comes from Layer 0.75 (`layers/tests.md`) — from its
+**re-run after Layer 1** when Layer 1 produced commits, otherwise from the
+original pass (see `layers/ai-review.md`). It is `'passed'`,
+`'failed'`, or `'skipped'` (no test command resolved for this repo — carry
+the reason in that layer entry's `note`). `allLayersPassed` is computed,
+not assumed: it is `false` whenever any layer — including the tests layer —
+reports `'failed'`. A `'skipped'` tests-layer status does NOT by itself
+make `allLayersPassed` false (visibly reported, not silently green, but not
+a blocker either — there's nothing to run).
+
+**Trivial tier does not run Layer 0.75 at all** (see Complexity Tier
+Mapping above), but the handoff schema requires a `tests` entry in
+`layers[]` on every review regardless of tier — the schema can't see tier,
+only the handoff. So on Trivial tier, set `testsLayerStatus = 'skipped'`
+with the reason below *without running the layer* — never omit the entry
+and never invent a `'passed'` you didn't check.
+
+Every layer's status is a **named variable set by that layer when it ran**
+— `'passed'`, `'fixed'`, `'skipped'`, or `'failed'` (the enum the schema
+allows). Both the gate and the `layers[]` array below read those same
+variables, so the report can never disagree with the approve/needs-fixes
+decision. A layer that did not run for this tier is `'skipped'`.
+
 ```javascript
+// Set by each layer as it completes — never hardcode a status here.
+const lintStatus     = /* Layer 0    */ 'passed';
+const cleanupStatus  = /* Layer 0.5  */ 'fixed';
+const aiReviewStatus = /* Layer 1    */ 'fixed';
+const visualStatus   = /* Layer 2    */ 'skipped';
+const docsStatus     = /* Layer 3    */ 'skipped';
+// testsLayerStatus  — Layer 0.75, or its post-Layer-1 re-run (see above).
+
+const testsLayerEntry =
+  tier === 'trivial'
+    ? { name: 'tests', status: 'skipped', findings: 0, note: 'skipped — trivial tier, layer does not run' }
+    : testsLayerStatus === 'skipped'
+    ? { name: 'tests', status: 'skipped', findings: 0, note: 'skipped — no test command resolved' }
+    : { name: 'tests', status: testsLayerStatus, findings: 0 };
+
+const allLayersPassed = ![lintStatus, cleanupStatus, testsLayerEntry.status, aiReviewStatus, visualStatus, docsStatus]
+  .includes('failed');
+
 const handoff = {
   $schemaVersion: '1',
   issueNumber: handoffIn.issueNumber,
   branch: handoffIn.branch,
   reviewStatus: allLayersPassed ? 'approved' : 'needs-fixes',
   layers: [
-    { name: 'lint', status: 'passed', findings: 0 },
-    { name: 'cleanup', status: 'fixed', findings: cleanupCount },
-    { name: 'ai-review', status: 'fixed', findings: reviewCount },
+    { name: 'lint', status: lintStatus, findings: lintCount },
+    { name: 'cleanup', status: cleanupStatus, findings: cleanupCount },
+    testsLayerEntry,
+    { name: 'ai-review', status: aiReviewStatus, findings: reviewCount },
     { name: 'visual', status: visualStatus, findings: 0 },
     { name: 'docs', status: docsStatus, findings: 0 },
   ],
