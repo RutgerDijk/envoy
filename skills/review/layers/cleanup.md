@@ -8,6 +8,20 @@ Spawn a fresh cleanup agent that ONLY sees the diff — no implementation contex
 
 **Key principle:** Never add "don't do X" instructions to the implementing agent — let it implement freely, then run this focused cleanup.
 
+**Test command:** resolve it once before spawning the agent — do not
+hardcode a stack-specific command:
+
+```javascript
+const { resolveTestCommands } = require('../../../lib/test-commands');
+const TEST_CMD = resolveTestCommands(process.cwd()).full;
+```
+
+Pass `TEST_CMD` into the agent prompt below. If `TEST_CMD` is `null` (no
+test command resolved for this repo), the agent should skip the "run
+tests" step for each category and rely on the full-suite gate in Layer
+0.75 (`layers/tests.md`) instead — do not fall back to a hardcoded
+command.
+
 ```
 Agent({
   model: "sonnet",
@@ -51,7 +65,7 @@ Remove:
 - Defensive checks documented as intentional (explicit comment explaining why)
 
 ```bash
-dotnet test && npm test
+${TEST_CMD}
 git add <changed-files>
 git commit -m "refactor: remove unnecessary defensive checks"
 ```
@@ -73,7 +87,7 @@ Remove:
 - Configuration that's documented as user-facing
 
 ```bash
-dotnet test && npm test
+${TEST_CMD}
 git add <changed-files>
 git commit -m "refactor: remove over-engineering"
 ```
@@ -93,7 +107,7 @@ Remove:
 - Tests for error handling
 
 ```bash
-dotnet test && npm test
+${TEST_CMD}
 git add <changed-files>
 git commit -m "refactor: remove redundant tests"
 ```
@@ -115,7 +129,7 @@ Remove:
 - Regulatory/compliance comments
 
 ```bash
-dotnet test && npm test
+${TEST_CMD}
 git add <changed-files>
 git commit -m "refactor: remove excessive comments"
 ```
@@ -135,7 +149,7 @@ Remove:
 - Types used only in test files
 
 ```bash
-dotnet test && npm test
+${TEST_CMD}
 git add <changed-files>
 git commit -m "refactor: remove dead code and unused imports"
 ```
