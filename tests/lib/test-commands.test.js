@@ -13,6 +13,8 @@ const path = require('path');
 const {
     resolveTestCommands,
     buildFilteredCommand,
+    extractTestCommandSection,
+    parseTestCommandSection,
     PLACEHOLDER,
 } = require('../../lib/test-commands.js');
 
@@ -239,6 +241,61 @@ test('returns filtered command unchanged (no placeholder found) rather than thro
 
 test('null filtered command returns null, not a throw', () => {
     assert.strictEqual(buildFilteredCommand(null, 'MyTests.ShouldDoThing'), null);
+});
+
+section('resolveTestCommands: real stack profiles (stacks/testing-dotnet.md, stacks/testing-playwright.md)');
+
+test('real testing-dotnet.md profile contributes a resolvable Test Command section', () => {
+    const realStacksDir = path.join(__dirname, '..', '..', 'stacks');
+    const content = fs.readFileSync(path.join(realStacksDir, 'testing-dotnet.md'), 'utf8');
+    const section = extractTestCommandSection(content);
+    const parsed = parseTestCommandSection(section);
+
+    assert.ok(parsed.filtered, 'expected a filtered command in stacks/testing-dotnet.md');
+    assert.ok(parsed.full, 'expected a full command in stacks/testing-dotnet.md');
+    assert.ok(parsed.filtered.includes(PLACEHOLDER));
+    assert.strictEqual(parsed.full, 'dotnet test');
+
+    const built = buildFilteredCommand(parsed.filtered, 'MyTests.ShouldDoThing');
+    assert.ok(built.includes('MyTests.ShouldDoThing'));
+});
+
+test('real testing-playwright.md profile contributes a resolvable Test Command section', () => {
+    const realStacksDir = path.join(__dirname, '..', '..', 'stacks');
+    const content = fs.readFileSync(path.join(realStacksDir, 'testing-playwright.md'), 'utf8');
+    const section = extractTestCommandSection(content);
+    const parsed = parseTestCommandSection(section);
+
+    assert.ok(parsed.filtered, 'expected a filtered command in stacks/testing-playwright.md');
+    assert.ok(parsed.full, 'expected a full command in stacks/testing-playwright.md');
+    assert.ok(parsed.filtered.includes(PLACEHOLDER));
+    assert.strictEqual(parsed.full, 'npx playwright test');
+
+    const built = buildFilteredCommand(parsed.filtered, 'login test');
+    assert.ok(built.includes('login test'));
+});
+
+test('resolveTestCommands resolves both real profiles end-to-end via detectStacks fixture', () => {
+    const project = mkTmp();
+    fs.writeFileSync(path.join(project, 'App.csproj'), '<Project><ItemGroup><PackageReference Include="xunit" /></ItemGroup></Project>', 'utf8');
+    fs.writeFileSync(
+        path.join(project, 'package.json'),
+        JSON.stringify({ devDependencies: { '@playwright/test': '1.0.0' } }),
+        'utf8'
+    );
+
+    const realStacksDir = path.join(__dirname, '..', '..', 'stacks');
+    const resolved = resolveTestCommands(project, { stacksDir: realStacksDir });
+
+    assert.strictEqual(resolved.source, 'stack-profile');
+    const dotnetCmd = resolved.commands.find((c) => c.stack === 'testing-dotnet');
+    const pwCmd = resolved.commands.find((c) => c.stack === 'testing-playwright');
+    assert.ok(dotnetCmd, 'expected testing-dotnet to contribute a resolved command');
+    assert.ok(pwCmd, 'expected testing-playwright to contribute a resolved command');
+    assert.strictEqual(dotnetCmd.full, 'dotnet test');
+    assert.strictEqual(pwCmd.full, 'npx playwright test');
+
+    fs.rmSync(project, { recursive: true, force: true });
 });
 
 process.stdout.write(`\n\x1b[1m${passed} passed, ${failed} failed\x1b[0m\n`);
