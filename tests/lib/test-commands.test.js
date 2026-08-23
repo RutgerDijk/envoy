@@ -239,6 +239,20 @@ test('returns filtered command unchanged (no placeholder found) rather than thro
     assert.strictEqual(built, 'dotnet test');
 });
 
+test('warns (not throws) when the placeholder is missing, so a malformed profile is not silently ignored', () => {
+    const originalWarn = console.warn;
+    let warned = null;
+    console.warn = (msg) => { warned = msg; };
+    try {
+        const built = buildFilteredCommand('dotnet test', 'MyTests.ShouldDoThing');
+        assert.strictEqual(built, 'dotnet test');
+        assert.ok(warned, 'expected a console.warn call');
+        assert.ok(warned.includes(PLACEHOLDER), 'warning should mention the missing placeholder');
+    } finally {
+        console.warn = originalWarn;
+    }
+});
+
 test('null filtered command returns null, not a throw', () => {
     assert.strictEqual(buildFilteredCommand(null, 'MyTests.ShouldDoThing'), null);
 });
