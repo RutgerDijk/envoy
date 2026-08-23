@@ -71,6 +71,11 @@ writeFixtureFile('docker-compose.yml', 'services: {}\n');
 // only via the JS path. This file must be picked up by all three.
 writeFixtureFile('Controllers/WidgetsController.cs',
   'namespace App.Controllers { public class WidgetsController : ApiController { } }\n');
+// github-actions (code-review fix): `find -name ".github/workflows/*.yml"`
+// never matches — -name compares basenames only, a pattern containing a
+// slash can never equal one. Needs -path. Caught only now that
+// lib/stack-loader.js's `find` invocation is the sole implementation.
+writeFixtureFile('.github/workflows/ci.yml', 'on: push\njobs: {}\n');
 
 // Dependency / debris files that must NOT drive detection:
 writeFixtureFile('node_modules/use-callback-ref/package.json', JSON.stringify({
@@ -145,6 +150,7 @@ const MUST_DETECT = [
   ['docker-compose', 'root docker-compose.yml (exclusions must not over-prune)'],
   ['shadcn-radix', 'class-variance-authority via | alternation (requires ERE grep)'],
   ['api-patterns', 'AddControllers|ApiController in a *.cs file (files: list, not hardcoded csproj/package.json/bicep)'],
+  ['github-actions', '.github/workflows/ci.yml (find -name never matches a path pattern)'],
   // Both shell scripts unconditionally appended "security" before task-8's
   // consolidation, independent of any other detected stack. Consolidating
   // onto detectStacks()'s conditional gate (dotnet/react/api-patterns only)
