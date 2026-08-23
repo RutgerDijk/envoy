@@ -13,7 +13,13 @@ spending AI-review effort on code that doesn't even pass its own test suite.
 ## Resolve and run
 
 ```javascript
-const { resolveTestCommands } = require('./lib/test-commands'); // CWD-relative — these snippets run with CWD at repo root
+// Envoy is a plugin: at review time CWD is the CONSUMER repo, which has no
+// lib/. Resolve against the plugin's own install dir via ${CLAUDE_SKILL_DIR}
+// (this skill's directory), the pattern every other skill snippet uses
+// (e.g. skills/verification/SKILL.md, skills/pickup/steps/worktree.md) —
+// never a CWD-relative require (code-review fix: MODULE_NOT_FOUND in any
+// consumer repo).
+const { resolveTestCommands } = require('${CLAUDE_SKILL_DIR}/../../lib/test-commands');
 const testCommands = resolveTestCommands(process.cwd());
 ```
 

@@ -12,11 +12,20 @@ Spawn a fresh cleanup agent that ONLY sees the diff — no implementation contex
 hardcode a stack-specific command:
 
 ```javascript
-const { resolveTestCommands } = require('./lib/test-commands'); // CWD-relative — these snippets run with CWD at repo root
-const TEST_CMD = resolveTestCommands(process.cwd()).full;
+// Envoy is a plugin: at review time CWD is the CONSUMER repo, which has no
+// lib/. Resolve against the plugin's own install dir via ${CLAUDE_SKILL_DIR}
+// (this skill's directory) — never a CWD-relative require (code-review
+// fix: MODULE_NOT_FOUND in any consumer repo).
+const { resolveTestCommands } = require('${CLAUDE_SKILL_DIR}/../../lib/test-commands');
+const testCommands = resolveTestCommands(process.cwd());
+// .full mirrors only the FIRST detected stack (commands[0]) — a multi-stack
+// repo (e.g. dotnet + Playwright) needs every entry re-run, not just one
+// (code-review fix, same bug commit 532b71a fixed in layers/tests.md).
+const TEST_CMDS = testCommands.commands.map(c => c.full).filter(Boolean);
 ```
 
-Pass `TEST_CMD` into the agent prompt below. If `TEST_CMD` is `null` (no
+Pass `TEST_CMDS` (plural — may be zero, one, or several commands) into the
+agent prompt below: run every command in it. If `TEST_CMDS` is empty (no
 test command resolved for this repo), the agent should skip the "run
 tests" step for each category and rely on the full-suite gate in Layer
 0.75 (`layers/tests.md`) instead — do not fall back to a hardcoded
@@ -65,7 +74,7 @@ Remove:
 - Defensive checks documented as intentional (explicit comment explaining why)
 
 ```bash
-${TEST_CMD}
+${TEST_CMDS.join(' && ')}
 git add <changed-files>
 git commit -m "refactor: remove unnecessary defensive checks"
 ```
@@ -87,7 +96,7 @@ Remove:
 - Configuration that's documented as user-facing
 
 ```bash
-${TEST_CMD}
+${TEST_CMDS.join(' && ')}
 git add <changed-files>
 git commit -m "refactor: remove over-engineering"
 ```
@@ -107,7 +116,7 @@ Remove:
 - Tests for error handling
 
 ```bash
-${TEST_CMD}
+${TEST_CMDS.join(' && ')}
 git add <changed-files>
 git commit -m "refactor: remove redundant tests"
 ```
@@ -129,7 +138,7 @@ Remove:
 - Regulatory/compliance comments
 
 ```bash
-${TEST_CMD}
+${TEST_CMDS.join(' && ')}
 git add <changed-files>
 git commit -m "refactor: remove excessive comments"
 ```
@@ -149,7 +158,7 @@ Remove:
 - Types used only in test files
 
 ```bash
-${TEST_CMD}
+${TEST_CMDS.join(' && ')}
 git add <changed-files>
 git commit -m "refactor: remove dead code and unused imports"
 ```
