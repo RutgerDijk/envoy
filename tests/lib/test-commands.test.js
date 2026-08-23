@@ -106,7 +106,7 @@ section('resolveTestCommands: stack-profile fallback');
 test('no CLAUDE.md declaration falls back to stack profile Test Command section', () => {
     const project = mkTmp();
     const stacksDir = mkStacksDir({ 'testing-dotnet': DOTNET_PROFILE });
-    fs.writeFileSync(path.join(project, 'App.csproj'), '<Project></Project>', 'utf8');
+    fs.writeFileSync(path.join(project, 'App.csproj'), '<Project><ItemGroup><PackageReference Include="xunit" /></ItemGroup></Project>', 'utf8');
 
     const resolved = resolveTestCommands(project, { stacksDir });
 
@@ -124,7 +124,7 @@ test('multiple detected stacks produce multiple commands, not a single guess', (
         'testing-dotnet': DOTNET_PROFILE,
         'testing-playwright': PLAYWRIGHT_PROFILE,
     });
-    fs.writeFileSync(path.join(project, 'App.csproj'), '<Project></Project>', 'utf8');
+    fs.writeFileSync(path.join(project, 'App.csproj'), '<Project><ItemGroup><PackageReference Include="xunit" /></ItemGroup></Project>', 'utf8');
     fs.writeFileSync(
         path.join(project, 'package.json'),
         JSON.stringify({ devDependencies: { '@playwright/test': '1.0.0' } }),
@@ -221,7 +221,7 @@ test('substitutes the test name into the stack filter placeholder', () => {
 test('resolved commands expose a buildFilteredCommand(testName) helper', () => {
     const project = mkTmp();
     const stacksDir = mkStacksDir({ 'testing-dotnet': DOTNET_PROFILE });
-    fs.writeFileSync(path.join(project, 'App.csproj'), '<Project></Project>', 'utf8');
+    fs.writeFileSync(path.join(project, 'App.csproj'), '<Project><ItemGroup><PackageReference Include="xunit" /></ItemGroup></Project>', 'utf8');
 
     const resolved = resolveTestCommands(project, { stacksDir });
     const built = resolved.commands[0].buildFilteredCommand('MyTests.ShouldDoThing');
