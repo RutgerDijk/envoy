@@ -164,8 +164,19 @@ function main() {
   say('');
   const testCommands = resolveTestCommands(CWD);
   if (testCommands.filtered) {
-    say(`Resolved (source: ${testCommands.source}): ${testCommands.filtered}`);
-    if (testCommands.full) say(`Full suite: ${testCommands.full}`);
+    if (testCommands.commands.length > 1) {
+      // .filtered/.full mirror commands[0] only — silently using that alone
+      // would hand the implementer a picked-at-random stack's command on a
+      // multi-stack repo with no indication another stack exists.
+      say(`Multiple stacks resolved a Test Command — reporting all ${testCommands.commands.length}:`);
+      for (const c of testCommands.commands) {
+        say(`  - ${c.stack} (source: ${c.source}): ${c.filtered}${c.full ? ` (full: ${c.full})` : ''}`);
+      }
+      say(`Primary (source: ${testCommands.source}): ${testCommands.filtered}`);
+    } else {
+      say(`Resolved (source: ${testCommands.source}): ${testCommands.filtered}`);
+      if (testCommands.full) say(`Full suite: ${testCommands.full}`);
+    }
     say('Give the implementer agent this filtered command as ${RESOLVED_TEST_COMMAND} (see prompts.md).');
   } else {
     say('No test command could be resolved for this repo (no CLAUDE.md or stack profile Test Command section).');
