@@ -229,22 +229,9 @@ Please review the remaining items and decide how to proceed.
 
 ## Verification Commands
 
-### Backend (.NET)
+Test commands come from `lib/test-commands.js`'s `resolveTestCommands(projectDir)` — never hardcode a repo layout (e.g. `cd backend && dotnet test`) here, since the layout varies per repo. "Tests pass" during task work means the relevant/filtered tests for the change; the full suite is a separate gate enforced at `/envoy:review`, not something this skill runs per task.
 
-```bash
-cd backend && dotnet test
-dotnet build
-dotnet build --warnaserror
-```
-
-### Frontend (React/TypeScript)
-
-```bash
-cd frontend && npx tsc --noEmit
-npm run lint
-npm test
-npm run test:e2e
-```
+Other verification commands (build, lint, type-check, e2e) remain project-specific — resolve them from the detected stack profile(s) in `stacks/` for this repo rather than assuming a fixed layout.
 
 ## Evidence Format
 
@@ -254,8 +241,9 @@ When reporting verification, provide evidence:
 **Verification Complete**
 
 ## Tests
-$ dotnet test
-Passed: 147, Failed: 0, Skipped: 0
+$ dotnet test --filter "FullyQualifiedName~CreateUser"
+Passed: 3, Failed: 0, Skipped: 0
+(Full suite runs at /envoy:review, not here.)
 
 ## Build
 $ dotnet build
