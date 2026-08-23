@@ -7,6 +7,11 @@
 grep -E '"@playwright/test"|"playwright"' package.json 2>/dev/null | head -1
 ```
 
+## Test Command
+
+filtered: npx playwright test -g "{{test}}"
+full: npx playwright test
+
 ## Best Practices
 
 ### Test Project Structure
