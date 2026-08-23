@@ -64,6 +64,13 @@ writeFixtureFile('package.json', JSON.stringify({
   },
 }, null, 2));
 writeFixtureFile('docker-compose.yml', 'services: {}\n');
+// api-patterns (task-8): the shell path historically hardcoded
+// --include="*.csproj" --include="package.json" --include="*.bicep" for
+// EVERY content rule, so a rule whose files: list is *.cs (api-patterns)
+// never resolved via stacks/detect-stacks.sh or hooks/session-start.sh —
+// only via the JS path. This file must be picked up by all three.
+writeFixtureFile('Controllers/WidgetsController.cs',
+  'namespace App.Controllers { public class WidgetsController : ApiController { } }\n');
 
 // Dependency / debris files that must NOT drive detection:
 writeFixtureFile('node_modules/use-callback-ref/package.json', JSON.stringify({
@@ -137,6 +144,7 @@ const MUST_DETECT = [
   ['application-insights', 'lowercase @microsoft/applicationinsights-web in the project manifest'],
   ['docker-compose', 'root docker-compose.yml (exclusions must not over-prune)'],
   ['shadcn-radix', 'class-variance-authority via | alternation (requires ERE grep)'],
+  ['api-patterns', 'AddControllers|ApiController in a *.cs file (files: list, not hardcoded csproj/package.json/bicep)'],
 ];
 
 for (const [impl, detected] of Object.entries(results)) {
@@ -153,6 +161,17 @@ for (const [impl, detected] of Object.entries(results)) {
     });
   }
 }
+
+// --- Single-source-of-truth invariant (task-8): the three entry points
+// must agree by construction, not by three independently-maintained copies
+// happening to list the same stacks. Compare sorted output sets pairwise.
+const [jsResult, shResult, hookResult] = Object.values(results);
+test('detectStacks() and stacks/detect-stacks.sh --json produce identical results', () => {
+  assert.deepStrictEqual([...jsResult].sort(), [...shResult].sort());
+});
+test('detectStacks() and hooks/session-start.sh produce identical results', () => {
+  assert.deepStrictEqual([...jsResult].sort(), [...hookResult].sort());
+});
 
 fs.rmSync(fixture, { recursive: true, force: true });
 
