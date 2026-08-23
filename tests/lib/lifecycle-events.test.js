@@ -96,7 +96,10 @@ const CASES = [
         issueNumber: 41,
         branch: 'feature/41-compliance',
         reviewStatus: 'approved',
-        layers: [{ name: 'lint', status: 'passed', findings: 0 }],
+        layers: [
+          { name: 'lint', status: 'passed', findings: 0 },
+          { name: 'tests', status: 'passed', findings: 0 },
+        ],
       });
     },
   },
