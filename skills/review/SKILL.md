@@ -201,13 +201,22 @@ reports `'failed'`. A `'skipped'` tests-layer status does NOT by itself
 make `allLayersPassed` false (visibly reported, not silently green, but not
 a blocker either — there's nothing to run).
 
+**Trivial tier does not run Layer 0.75 at all** (see Complexity Tier
+Mapping above), but the handoff schema requires a `tests` entry in
+`layers[]` on every review regardless of tier — the schema can't see tier,
+only the handoff. So on Trivial tier, set `testsLayerStatus = 'skipped'`
+with the reason below *without running the layer* — never omit the entry
+and never invent a `'passed'` you didn't check.
+
 ```javascript
 const testsLayerEntry =
-  testsLayerStatus === 'skipped'
+  tier === 'trivial'
+    ? { name: 'tests', status: 'skipped', findings: 0, note: 'skipped — trivial tier, layer does not run' }
+    : testsLayerStatus === 'skipped'
     ? { name: 'tests', status: 'skipped', findings: 0, note: 'skipped — no test command resolved' }
     : { name: 'tests', status: testsLayerStatus, findings: 0 };
 
-const allLayersPassed = ![lintStatus, cleanupStatus, testsLayerStatus, aiReviewStatus, visualStatus, docsStatus]
+const allLayersPassed = ![lintStatus, cleanupStatus, testsLayerEntry.status, aiReviewStatus, visualStatus, docsStatus]
   .includes('failed');
 
 const handoff = {

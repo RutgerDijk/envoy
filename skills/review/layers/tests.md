@@ -47,4 +47,8 @@ this gate must run **every** entry's `full` command, not just the first:
 - `passed` → no effect; other layers still gate normally.
 
 **For trivial tier: this layer does not run** (matches Cleanup's "all tiers
-except trivial" rule — trivial diffs stop after Lint).
+except trivial" rule — trivial diffs stop after Lint). The handoff still
+needs a `tests` entry regardless — see `SKILL.md`'s "Write the finalize
+handoff" section for how Trivial tier reports `status: 'skipped'` with a
+`'skipped — trivial tier, layer does not run'` note without running
+anything.
