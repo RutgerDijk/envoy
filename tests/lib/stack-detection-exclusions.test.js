@@ -145,6 +145,14 @@ const MUST_DETECT = [
   ['docker-compose', 'root docker-compose.yml (exclusions must not over-prune)'],
   ['shadcn-radix', 'class-variance-authority via | alternation (requires ERE grep)'],
   ['api-patterns', 'AddControllers|ApiController in a *.cs file (files: list, not hardcoded csproj/package.json/bicep)'],
+  // Both shell scripts unconditionally appended "security" before task-8's
+  // consolidation, independent of any other detected stack. Consolidating
+  // onto detectStacks()'s conditional gate (dotnet/react/api-patterns only)
+  // silently dropped that guarantee for repos matching none of the three —
+  // regression caught by code review, not by this fixture (which happens
+  // to trip the api-patterns gate). Asserted here regardless of fixture
+  // shape so it can't regress silently again.
+  ['security', 'always applicable, independent of every other detected stack'],
 ];
 
 for (const [impl, detected] of Object.entries(results)) {
@@ -172,6 +180,21 @@ test('detectStacks() and stacks/detect-stacks.sh --json produce identical result
 test('detectStacks() and hooks/session-start.sh produce identical results', () => {
   assert.deepStrictEqual([...jsResult].sort(), [...hookResult].sort());
 });
+
+// --- "security" is unconditional (code-review fix), isolated from a
+// fixture that matches none of dotnet/react/api-patterns, so this can't
+// pass by accident the way MUST_DETECT's shared fixture could.
+const bareFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-detect-bare-'));
+fs.writeFileSync(path.join(bareFixture, 'README.md'), '# just a readme, no stack signals\n');
+test('detectStacks() includes "security" even with no dotnet/react/api-patterns match', () => {
+  const { detectStacks } = require(path.join(REPO_ROOT, 'lib', 'stack-loader'));
+  const detected = detectStacks(bareFixture);
+  assert.ok(!detected.some(s => ['dotnet', 'react', 'api-patterns'].includes(s)),
+    `fixture should not have tripped the old conditional gate: [${detected.join(', ')}]`);
+  assert.ok(detected.includes('security'),
+    `expected security to be unconditionally detected, got: [${detected.join(', ')}]`);
+});
+fs.rmSync(bareFixture, { recursive: true, force: true });
 
 fs.rmSync(fixture, { recursive: true, force: true });
 
