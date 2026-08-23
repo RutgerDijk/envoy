@@ -257,6 +257,42 @@ test('null filtered command returns null, not a throw', () => {
     assert.strictEqual(buildFilteredCommand(null, 'MyTests.ShouldDoThing'), null);
 });
 
+test('escaping is context-aware: single-quoted placeholder does not corrupt an ordinary test name', () => {
+    // A CLAUDE.md override (precedence rule 1) can supply ANY template —
+    // not just the two shipped double-quoted forms. Blindly escaping for
+    // double-quote context (backslash-escaping $) breaks a single-quoted
+    // template: inside '...', backslash is a literal character, not an
+    // escape, so "My$Test" would come out as the corrupted "My\$Test" and
+    // match zero tests. Code-review finding.
+    const filtered = "pytest -k '{{test}}'";
+    const built = buildFilteredCommand(filtered, 'My$Test');
+    assert.strictEqual(built, "pytest -k 'My$Test'");
+});
+
+test('escaping is context-aware: single-quoted placeholder escapes an embedded single quote', () => {
+    const filtered = "pytest -k '{{test}}'";
+    const built = buildFilteredCommand(filtered, "it's a test");
+    // Only valid way to embed a ' inside a '...' shell token: close, escaped
+    // quote, reopen.
+    assert.strictEqual(built, "pytest -k 'it'\\''s a test'");
+});
+
+test('unquoted placeholder gets the substituted value safely single-quoted, not left bare', () => {
+    // Not every template quotes the placeholder at all (unenforceable per
+    // precedence rule 1 — any consumer CLAUDE.md can supply an unquoted
+    // template). A bare, unescaped substitution here is a direct shell
+    // injection: verified `pytest -k {{test}}` + testName `a; rm -rf /tmp/x`
+    // previously produced `pytest -k a; rm -rf /tmp/x`, executing `rm -rf`
+    // as a second command. The fix wraps the value in its own single-quoted
+    // token so it can never be interpreted as separate shell syntax,
+    // regardless of what surrounds the placeholder.
+    const filtered = 'pytest -k {{test}}';
+    const built = buildFilteredCommand(filtered, 'a; rm -rf /tmp/x');
+    assert.strictEqual(built, "pytest -k 'a; rm -rf /tmp/x'");
+    assert.ok(!/(^|[^'])(;|&&|\|\|)/.test(built.replace(/'a; rm -rf \/tmp\/x'/, '')),
+        `expected no unquoted shell metacharacters outside the safe token: ${built}`);
+});
+
 test('escapes double-quote-sensitive shell metacharacters in the substituted test name', () => {
     // Both shipped profiles wrap the placeholder in double quotes, e.g.
     // dotnet test --filter "FullyQualifiedName~{{test}}". A test name
