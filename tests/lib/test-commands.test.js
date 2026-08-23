@@ -264,7 +264,11 @@ test('escapes double-quote-sensitive shell metacharacters in the substituted tes
     // inject shell syntax when the caller execs the built command.
     const filtered = 'dotnet test --filter "FullyQualifiedName~{{test}}"';
     const built = buildFilteredCommand(filtered, 'Foo"; rm -rf / #');
-    assert.ok(!built.includes('"; rm -rf / #'), `unescaped injection survived: ${built}`);
+    // Only the two quotes wrapping the placeholder in the original template
+    // may remain unescaped; every quote character contributed by testName
+    // must be backslash-escaped so it can't close the shell's quoting early.
+    const unescapedQuotes = (built.match(/(?<!\\)"/g) || []).length;
+    assert.strictEqual(unescapedQuotes, 2, `expected only the wrapping quotes to be unescaped: ${built}`);
     assert.ok(built.includes('\\"'), 'expected the embedded quote to be backslash-escaped');
 });
 

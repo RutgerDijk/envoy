@@ -23,9 +23,14 @@ Command` output (preflight.js resolves it once via
 `lib/test-commands.js`'s `resolveTestCommands()` and prints it under
 that heading). Two cases:
 
-- **Resolved** — preflight printed a concrete filtered command. Paste
-  it verbatim, e.g. `Test command: dotnet test --filter
-  "FullyQualifiedName~{{test}}"`.
+- **Resolved** — preflight printed a concrete filtered command
+  containing a `{{test}}` placeholder, e.g. `dotnet test --filter
+  "FullyQualifiedName~{{test}}"`. Do NOT paste it with the placeholder
+  still in it — that runs no test. Tell the implementer explicitly:
+  `Test command template: <the resolved command>. Before running it,
+  replace {{test}} with the actual name of the test you just wrote
+  (e.g. the fully-qualified test method name), then run the
+  substituted command — never the raw template.`
 - **Unresolved** — preflight found no CLAUDE.md or stack profile Test
   Command section. Substitute the explicit instruction below — never
   silently default to a full-suite command:
