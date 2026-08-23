@@ -17,16 +17,23 @@ const { resolveTestCommands } = require('./lib/test-commands'); // CWD-relative 
 const testCommands = resolveTestCommands(process.cwd());
 ```
 
-- If `testCommands.full` is set: run it (the full command, not `filtered` —
-  this is a full-suite gate, not a targeted regression check).
-  - Exit 0 → layer status `passed`.
-  - Non-zero exit → layer status `failed`.
-- If `testCommands.full` is `null` (no `CLAUDE.md` or stack profile `## Test
-  Command` section resolved anything): do NOT run anything and do NOT treat
-  this as a pass. Layer status is `skipped`, with
-  `note: 'skipped — no test command resolved'`. This must be visibly
-  reported in the review report (see `SKILL.md` Report template) — never
-  silently green.
+`testCommands.full` (and `.filtered`) mirror only `commands[0]` — the
+*first* detected stack's command. A multi-stack repo (e.g. a .NET backend
+plus a Playwright frontend) resolves one `commands[]` entry per stack, and
+this gate must run **every** entry's `full` command, not just the first:
+
+- If `testCommands.commands` has one or more entries with a non-null
+  `full`: run each one (the full command, not `filtered` — this is a
+  full-suite gate, not a targeted regression check).
+  - All exit 0 → layer status `passed`.
+  - Any non-zero exit → layer status `failed` (report which stack's suite
+    failed).
+- If `testCommands.commands` is empty, or every entry's `full` is `null`
+  (no `CLAUDE.md` or stack profile `## Test Command` section resolved
+  anything): do NOT run anything and do NOT treat this as a pass. Layer
+  status is `skipped`, with `note: 'skipped — no test command resolved'`.
+  This must be visibly reported in the review report (see `SKILL.md`
+  Report template) — never silently green.
 
 ## Effect on reviewStatus
 
