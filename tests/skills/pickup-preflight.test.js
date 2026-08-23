@@ -80,6 +80,28 @@ test('resolved test command -> prints ### Test Command section with the filtered
   assert.ok(out.includes('npm test -- -t "{{test}}"'), 'expected the resolved filtered command in output');
 });
 
+test('multi-stack repo -> reports every stack, not just the picked-at-random primary (code-review fix)', () => {
+  // testCommands.filtered/.full mirror only commands[0]; printing just
+  // those on a dotnet+Playwright repo would hand the implementer one
+  // stack's command with no indication another stack's tests exist.
+  const dir = makeTmpDir();
+  writeTasksFile(dir, 32);
+  fs.writeFileSync(
+    path.join(dir, 'App.csproj'),
+    '<Project><ItemGroup><PackageReference Include="xunit" /></ItemGroup></Project>\n'
+  );
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify({ devDependencies: { '@playwright/test': '^1.0.0' } })
+  );
+  const { status, out } = runPreflight(dir, { ENVOY_ISSUE_NUMBER: '32' });
+  assert.strictEqual(status, 'ok');
+  assert.ok(/### Test Command/.test(out), 'expected a ### Test Command section');
+  assert.ok(/Multiple stacks/i.test(out), 'expected an explicit multi-stack notice');
+  assert.ok(out.includes('testing-dotnet'), 'expected the dotnet stack command listed');
+  assert.ok(out.includes('testing-playwright'), 'expected the playwright stack command listed');
+});
+
 test('no resolvable test command -> explicit instruction, never a silent full-suite fallback', () => {
   const dir = makeTmpDir();
   writeTasksFile(dir, 31);
