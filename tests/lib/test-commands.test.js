@@ -257,6 +257,17 @@ test('null filtered command returns null, not a throw', () => {
     assert.strictEqual(buildFilteredCommand(null, 'MyTests.ShouldDoThing'), null);
 });
 
+test('escapes double-quote-sensitive shell metacharacters in the substituted test name', () => {
+    // Both shipped profiles wrap the placeholder in double quotes, e.g.
+    // dotnet test --filter "FullyQualifiedName~{{test}}". A test name
+    // containing ", $, `, or \ must not break out of that quoting or
+    // inject shell syntax when the caller execs the built command.
+    const filtered = 'dotnet test --filter "FullyQualifiedName~{{test}}"';
+    const built = buildFilteredCommand(filtered, 'Foo"; rm -rf / #');
+    assert.ok(!built.includes('"; rm -rf / #'), `unescaped injection survived: ${built}`);
+    assert.ok(built.includes('\\"'), 'expected the embedded quote to be backslash-escaped');
+});
+
 section('resolveTestCommands: real stack profiles (stacks/testing-dotnet.md, stacks/testing-playwright.md)');
 
 test('real testing-dotnet.md profile contributes a resolvable Test Command section', () => {
