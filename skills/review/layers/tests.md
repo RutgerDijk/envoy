@@ -13,7 +13,7 @@ spending AI-review effort on code that doesn't even pass its own test suite.
 ## Resolve and run
 
 ```javascript
-const { resolveTestCommands } = require('../../../lib/test-commands');
+const { resolveTestCommands } = require('./lib/test-commands'); // CWD-relative — these snippets run with CWD at repo root
 const testCommands = resolveTestCommands(process.cwd());
 ```
 

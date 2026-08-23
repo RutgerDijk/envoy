@@ -12,7 +12,7 @@ Spawn a fresh cleanup agent that ONLY sees the diff — no implementation contex
 hardcode a stack-specific command:
 
 ```javascript
-const { resolveTestCommands } = require('../../../lib/test-commands');
+const { resolveTestCommands } = require('./lib/test-commands'); // CWD-relative — these snippets run with CWD at repo root
 const TEST_CMD = resolveTestCommands(process.cwd()).full;
 ```
 
