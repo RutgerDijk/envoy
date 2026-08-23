@@ -241,6 +241,21 @@ test('warnOnProbeFailure() stays silent for an ordinary non-zero exit', () => {
   assert.strictEqual(seen.length, 0, `expected no warning, got: ${seen.join(' | ')}`);
 });
 
+// --- projectDir shell injection (code-review fix): detectStacks() builds
+// execSync command strings with projectDir interpolated unescaped. The
+// new CLI entry point (task-8) makes this externally reachable — verified
+// `node lib/stack-loader.js '/tmp/"; touch /tmp/envoy-pwned-marker; "'`
+// actually creates the marker file.
+const injectionMarker = path.join(os.tmpdir(), `envoy-pwned-marker-${process.pid}`);
+fs.rmSync(injectionMarker, { force: true });
+test('detectStacks() does not execute shell syntax embedded in projectDir', () => {
+  const maliciousDir = `/tmp/"; touch ${injectionMarker}; "`;
+  detectStacks(maliciousDir);
+  assert.ok(!fs.existsSync(injectionMarker),
+    `projectDir was interpreted as shell syntax — marker file was created: ${injectionMarker}`);
+});
+fs.rmSync(injectionMarker, { force: true });
+
 fs.rmSync(fixture, { recursive: true, force: true });
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
