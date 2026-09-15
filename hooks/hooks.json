@@ -40,6 +40,11 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" issue-create-guard",
             "_profiles": ["minimal", "standard", "strict"]
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" issue-guard",
+            "_profiles": ["minimal", "standard", "strict"]
           }
         ]
       }

@@ -25,6 +25,7 @@ Hooks receive JSON on stdin describing the event. They control behavior via exit
 |------|-------|---------|
 | `session-start.sh` | SessionStart | Loads Envoy skills, detects tech stacks, restores session state |
 | `config-protection.js` | PreToolUse (Edit/Write) | Blocks linter/formatter config modifications |
+| `issue-guard.js` | PreToolUse (Bash) | Forces a manual approval prompt on `gh issue create` |
 | `post-edit-accumulator.js` | PostToolUse (Edit/Write) | Tracks edited files for batched processing |
 | `post-pr-poll.js` | PostToolUse (Bash) | Triggers CodeRabbit polling after `gh pr create` |
 | `stop-batch-lint.js` | Stop | Runs lint once across all session edits |
@@ -55,7 +56,7 @@ All hooks route through `hook-runner.js` which checks `ENVOY_HOOK_PROFILE`:
 
 | Profile | Hooks | Use Case |
 |---------|-------|----------|
-| `minimal` | session-start, config-protection | Lowest overhead |
+| `minimal` | session-start, config-protection, issue-guard | Lowest overhead |
 | `standard` | All hooks (default) | Full automation |
 | `strict` | All hooks + future verification gates | Maximum safety |
 
