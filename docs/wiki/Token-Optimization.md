@@ -98,7 +98,7 @@ Based on "Lost in the Middle" (Liu et al., 2023), LLMs attend most to the beginn
 - **Middle (low attention):** Reference material, stack profiles, examples
 - **End (high attention):** Acceptance criteria, known patterns
 
-Used by `dispatching-parallel-agents` and `pickup`.
+Used by `envoy-authoring` (dispatching-parallel-agents step) and `pickup`.
 
 ### 12. Shell Output Compression
 

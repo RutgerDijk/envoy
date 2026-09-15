@@ -11,7 +11,7 @@ Professional development workflows for Claude Code and GitHub Copilot.
 - [[Stack Profiles]] — Technology-specific best practices
 - [[Token Optimization]] — How Envoy minimizes token usage
 - [[Context Efficiency]] — LITM-aware prompts, session continuity, agent coordination, output compression
-- [[Advanced Patterns]] — Eval harness, search-first, iterative retrieval
+- [[Advanced Patterns]] — Eval harness, search-first (envoy-authoring steps), iterative retrieval
 
 ## What Is Envoy?
 

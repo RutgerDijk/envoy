@@ -18,7 +18,7 @@ When you receive a task, check if any Envoy skill applies:
 | New feature idea | `envoy:brainstorm` |
 | Pick up GitHub issue | `envoy:pickup` |
 | Bug or test failure | `envoy:systematic-debugging` |
-| Multiple independent tasks | `envoy:dispatching-parallel-agents` |
+| Multiple independent tasks | `envoy:envoy-authoring` (dispatching-parallel-agents step) |
 | Create git worktree | `envoy:using-git-worktrees` |
 | Review code changes | `envoy:review` or `envoy:requesting-code-review` |
 | Received review feedback | `envoy:receiving-code-review` |
@@ -28,7 +28,7 @@ When you receive a task, check if any Envoy skill applies:
 | Clean up after PR merge | `envoy:cleanup` |
 | Add API documentation | `envoy:docstrings` |
 | Sync wiki documentation | `envoy:wiki-sync` |
-| Create new Envoy skill | `envoy:writing-skills` |
+| Create new Envoy skill | `envoy:envoy-authoring` (writing-skills step) |
 
 ## Red Flags
 

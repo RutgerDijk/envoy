@@ -6,3 +6,4 @@
 .envoy-scratchpad.json.tmp
 .claude/scheduled_tasks.lock
 docs/costs/reports/
+.envoy-tasks/

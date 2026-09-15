@@ -207,4 +207,4 @@ Verify. Question. Then implement.
 **Related skills:**
 - `envoy:verification` — Verify fixes after implementing feedback
 - `envoy:systematic-debugging` — If feedback reveals bug, debug properly
-- `envoy:pressure-test-scenarios` — Scenarios 7, 8, 9 test review discipline
+- `envoy:envoy-authoring` (pressure-test-scenarios step) — Scenarios 7, 8, 9 test review discipline

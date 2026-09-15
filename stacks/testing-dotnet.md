@@ -7,6 +7,11 @@
 grep -E "xunit|Moq|FluentAssertions" *.csproj **/*.csproj 2>/dev/null | head -1
 ```
 
+## Test Command
+
+filtered: dotnet test --filter "FullyQualifiedName~{{test}}"
+full: dotnet test
+
 ## Best Practices
 
 ### Test Project Structure

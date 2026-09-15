@@ -9,7 +9,8 @@
  *
  * Reads the JSON file at <tasksJsonPath> (the payload brainstorm drafted
  * for the issue body), validates it against lib/schemas/tasks.json, and
- * writes .envoy-tasks/<issueNumber>.json in the current repo.
+ * writes the local (gitignored) .envoy-tasks/<issueNumber>.json. The issue's
+ * embedded block is the durable copy; pickup rematerializes the file from it.
  *
  * Exits 0 on success, 1 on validation failure or I/O error.
  */
@@ -23,6 +24,7 @@ const {
   enforceSpecFields,
   renderTasksSection,
   renderEmbeddedBlock,
+  ensureTasksDirIgnored,
 } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
 
 function fail(msg) {
@@ -79,6 +81,7 @@ function main() {
   fs.mkdirSync(outDir, { recursive: true });
   const outPath = path.join(outDir, `${issueNumber}.json`);
   fs.writeFileSync(outPath, JSON.stringify(payload, null, 2) + '\n');
+  ensureTasksDirIgnored(process.cwd());
 
   // stdout carries the issue-ready markdown (human section + recoverable block)
   // so brainstorm splices it into the issue body from this single source;

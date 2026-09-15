@@ -9,6 +9,22 @@ Verify the plan is still viable against the current repo state:
 2. Have any referenced APIs, interfaces, or database schemas changed since the plan was written?
 3. Are any referenced external dependencies missing?
 
+Also check the plan's combined footprint: count unique file paths across all
+tasks' `files` lists (`lib/pr-size-check.js`'s `countUniqueFiles(tasks)`). If
+it exceeds 150 (`proposeSplit(count)` returns non-null), surface an early,
+informational warning — this is the same threshold `envoy:finalize` checks
+against the actual diff before opening the PR, just raised here at planning
+time so it isn't a surprise later:
+
+```
+Early warning: this plan's tasks touch <N> unique files (>150), which will
+likely trigger the PR-split advisory when finalize runs. Consider whether
+the issue should be split into multiple smaller issues/PRs now, or proceed
+and address the advisory at finalize time.
+
+This is informational only — nothing is split automatically.
+```
+
 **If viable:** proceed to Step 8.
 
 **If stale:** surface specific staleness concerns:
@@ -97,6 +113,7 @@ Worktree for this issue already exists at: .worktrees/<N>-<topic>
 
 To continue working:
   cd .worktrees/<N>-<topic>
+  [ -t 1 ] && printf '\033]0;#%s %s\007' "<N>" "<topic>"
 
 To start fresh:
   git worktree remove .worktrees/<N>-<topic>

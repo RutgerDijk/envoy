@@ -22,5 +22,5 @@ refactor(<scope>): clean up <feature>
 ## Rules
 - No production code without a failing test first
 - Commit after each TDD phase
-- Run full test suite after each task
+- Run only the narrowest failing test under change after each task — the full suite runs once, at /envoy:review, not per task
 - Load relevant stack profiles for best practices

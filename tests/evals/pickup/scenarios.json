@@ -4,7 +4,7 @@
     {
       "name": "missing tasks file for issue → fatal with remediation",
       "setup": { "files": {} },
-      "env": { "ENVOY_ISSUE_NUMBER": "23" },
+      "env": { "ENVOY_ISSUE_NUMBER": "23", "ENVOY_ISSUE_BODY_FILE": "/nonexistent/no-issue-body.md" },
       "expected": {
         "status": "fatal",
         "stdout_matches": "tasks file.*not found|\\.envoy-tasks/23\\.json",

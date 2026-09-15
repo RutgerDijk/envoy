@@ -260,10 +260,10 @@ const API_URL = "https://api.myapp.com";
 const API_URL = import.meta.env.VITE_API_URL;
 ```
 
-### Mistake: Free Tier Without Custom Domain Plan
+### Mistake: Free Tier For Production Workloads
 
 ```bicep
-// Bad: Free tier can't use custom domains with SSL
+// Bad: Free tier has no SLA, no private endpoints, no BYO backends
 sku: {
   name: 'Free'
 }
@@ -273,6 +273,8 @@ sku: {
   name: environment == 'prod' ? 'Standard' : 'Free'
 }
 ```
+
+Free tier does support custom domains with free SSL (limit of 2 domains); Standard is needed for the SLA, private endpoints, bring-your-own backends, and password protection.
 
 ## Review Checklist
 

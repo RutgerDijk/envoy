@@ -4,10 +4,10 @@
  *
  * Run: node tests/skills/pickup-materialize.test.js
  *
- * When the committed .envoy-tasks/<n>.json is missing, preflight recovers the
- * payload from the issue's embedded block (degraded tier — reconstructed state
- * needs confirmation). When present but the issue block disagrees, it warns
- * (non-fatal). gh is stubbed via ENVOY_ISSUE_BODY_FILE.
+ * When the local .envoy-tasks/<n>.json is missing, preflight materializes the
+ * payload from the issue's embedded block — the normal path. When present but
+ * the issue block disagrees, it warns (non-fatal). gh is stubbed via
+ * ENVOY_ISSUE_BODY_FILE.
  */
 
 const assert = require('assert');
@@ -59,7 +59,7 @@ function runPreflight(cwd, issueNumber, bodyFile) {
   return { status, out };
 }
 
-test('committed file present → ok, session seeded', () => {
+test('local file present → ok, session seeded', () => {
   const cwd = makeCwd();
   fs.mkdirSync(path.join(cwd, '.envoy-tasks'), { recursive: true });
   fs.writeFileSync(path.join(cwd, '.envoy-tasks', '77.json'), JSON.stringify(payload(77, TASKS)));
@@ -68,14 +68,18 @@ test('committed file present → ok, session seeded', () => {
   assert.ok(fs.existsSync(path.join(cwd, '.envoy', 'pickup', 'session.json')), 'session seeded');
 });
 
-test('file missing + issue has block → materialized (degraded) and file written', () => {
+test('file missing + issue has block → materialized at ok, no reconstruction warning', () => {
   const cwd = makeCwd();
   const bodyFile = path.join(cwd, 'body.md');
   fs.writeFileSync(bodyFile, 'Issue text\n' + renderEmbeddedBlock(payload(78, TASKS)));
   const { status, out } = runPreflight(cwd, 78, bodyFile);
-  assert.strictEqual(status, 'degraded');
-  assert.ok(/reconstructed/i.test(out), 'notes reconstruction');
+  assert.strictEqual(status, 'ok');
+  assert.ok(!/reconstructed/i.test(out), 'materializing is the normal path, not a recovery');
   assert.ok(fs.existsSync(path.join(cwd, '.envoy-tasks', '78.json')), 'materialized file written');
+  const ignore = fs.existsSync(path.join(cwd, '.gitignore'))
+    ? fs.readFileSync(path.join(cwd, '.gitignore'), 'utf8')
+    : '';
+  assert.ok(/^\.envoy-tasks\/$/m.test(ignore), 'materializing ensures .envoy-tasks/ is gitignored in the consumer repo');
 });
 
 test('file missing + no recoverable block → fatal', () => {
@@ -86,7 +90,27 @@ test('file missing + no recoverable block → fatal', () => {
   assert.strictEqual(status, 'fatal');
 });
 
-test('committed file present but issue block disagrees → warns (still ok)', () => {
+test('.envoy-tasks/ is runtime state: gitignored and never tracked', () => {
+  const repoRoot = path.join(__dirname, '..', '..');
+  const { execSync, spawnSync } = require('child_process');
+  // check-ignore asserts the EFFECTIVE rule (a later negation would defeat a
+  // plain .gitignore text match); exit 0 = ignored.
+  const probe = spawnSync('git', ['check-ignore', '-q', '.envoy-tasks/probe.json'], { cwd: repoRoot });
+  assert.strictEqual(probe.status, 0, '.envoy-tasks/ must be effectively ignored');
+  const tracked = execSync('git ls-files .envoy-tasks/', { cwd: repoRoot, encoding: 'utf8' }).trim();
+  assert.strictEqual(tracked, '', `tracked files remain under .envoy-tasks/: ${tracked}`);
+});
+
+test('brainstorm no longer instructs a task-handoff commit', () => {
+  const repoRoot = path.join(__dirname, '..', '..');
+  for (const rel of ['skills/brainstorm/SKILL.md', 'adapters/copilot/templates/prompts/brainstorm.prompt.md']) {
+    const content = fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    assert.ok(!/git (add|commit).*envoy-tasks/.test(content), `${rel} still stages .envoy-tasks`);
+    assert.ok(!/chore: task handoff/.test(content), `${rel} still instructs the handoff commit`);
+  }
+});
+
+test('local file present but issue block disagrees → warns (still ok)', () => {
   const cwd = makeCwd();
   fs.mkdirSync(path.join(cwd, '.envoy-tasks'), { recursive: true });
   fs.writeFileSync(path.join(cwd, '.envoy-tasks', '80.json'), JSON.stringify(payload(80, TASKS)));

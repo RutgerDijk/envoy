@@ -21,7 +21,7 @@ On session start, Envoy scans your project for technology markers:
 Each profile in `stacks/<name>.md` has three sections:
 
 ### Best Practices
-Patterns to follow during implementation. Loaded by `pickup` and `search-first`.
+Patterns to follow during implementation. Loaded by `pickup` and `envoy-authoring`'s search-first step.
 
 ### Common Mistakes
 Anti-patterns with fixes. Loaded by `review` during the AI review layer.
@@ -63,4 +63,4 @@ const mistakes = loadStackSection('dotnet', 'Common Mistakes', stacksDir);
 1. Create `stacks/<name>.md` with Best Practices, Common Mistakes, and Review Checklist sections
 2. Add detection rule to `lib/stack-loader.js` STACK_RULES array
 3. Add detection pattern to `hooks/session-start.sh`
-4. Update `adapters/copilot/` if needed
+4. Add `adapters/copilot/templates/instructions/<name>.instructions.md` (condensed, with an `applyTo` glob) — `tests/adapters/copilot-template-drift.test.js` fails without it

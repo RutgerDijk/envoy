@@ -64,5 +64,77 @@ test('additionalContext carries the bootstrap content', () => {
   assert.ok(ctx.includes('Envoy'), 'bootstrap must mention Envoy');
 });
 
+test('output stays lean (<=2000 bytes) when there is no active workflow', () => {
+  // Budget: 2000 bytes. With the lead-in strip fixed to handle BOTH
+  // description shapes (rigid "<Skill> expert. ALWAYS invoke when..." and
+  // flexible "Use when..."), 27 routing-table entries at a 42-char
+  // per-description cap measure ~1900 bytes — this budget keeps a small
+  // margin (~100 bytes) for skill-count/description drift rather than the
+  // much wider slack an unfixed strip previously required. Still cuts the
+  // original ~4.7KB (full using-envoy body inlined) by more than half.
+  const raw = runHook();
+  assert.ok(
+    raw.length <= 2000,
+    `expected SessionStart output <= 2000 bytes with no active workflow, got ${raw.length}`
+  );
+});
+
+test('additionalContext routes to skills via the Skill tool rather than inlining the full using-envoy body', () => {
+  const parsed = JSON.parse(runHook());
+  const ctx = parsed.hookSpecificOutput.additionalContext;
+  assert.ok(!ctx.includes('## Red Flags'), 'full using-envoy body (Red Flags section) must not be inlined');
+  assert.ok(ctx.includes('using-envoy'), 'routing table must reference using-envoy');
+});
+
+test('routing table entries are not all near-identical truncated boilerplate', () => {
+  const parsed = JSON.parse(runHook());
+  const ctx = parsed.hookSpecificOutput.additionalContext;
+  const lines = ctx.split('\n').filter((l) => /^[a-z0-9-]+: /.test(l));
+  assert.ok(lines.length >= 5, `expected several routing-table lines, got ${lines.length}`);
+  // Strip the "name: " prefix and common generic lead-ins, then require
+  // meaningful (differentiating) content to remain — not a stub cut off
+  // mid lead-in like "Use when you...".
+  const stripLeadIn = (desc) =>
+    desc.replace(/^(ALWAYS\s+)?(invoke\s+)?(use\s+(when|before|after|this)|before|when)\b[.:]?\s*/i, '');
+  const meaningful = lines.map((l) => {
+    const desc = l.slice(l.indexOf(': ') + 2);
+    return stripLeadIn(desc).replace(/\.\.\.$/, '');
+  });
+  for (const m of meaningful) {
+    assert.ok(
+      m.trim().length >= 15,
+      `expected meaningful content (>=15 chars after stripping lead-in), got "${m}"`
+    );
+  }
+  // Entries should actually differ from each other, not collapse into the
+  // same generic stub.
+  const unique = new Set(meaningful.map((m) => m.trim().toLowerCase()));
+  assert.ok(unique.size >= Math.min(5, meaningful.length) - 1, 'routing-table entries must be differentiated, not near-identical stubs');
+});
+
+test('routing table lines never contain raw boilerplate phrases (independent of the stripping regex)', () => {
+  // Deliberately does NOT reuse the implementation's own lead-in-stripping
+  // regex — it checks for the literal boilerplate substrings straight out
+  // of the rigid-skill description template ("<Skill> expert. ALWAYS
+  // invoke when...") and the flexible-skill template ("Use when...").
+  // This is the check that a same-regex tautology cannot catch: if the
+  // implementation's strip is incomplete (e.g. only anchored at position
+  // 0, missing the "<Skill> expert." prefix rigid skills prepend), these
+  // raw phrases leak straight into the output and this test fails.
+  const parsed = JSON.parse(runHook());
+  const ctx = parsed.hookSpecificOutput.additionalContext;
+  const lines = ctx.split('\n').filter((l) => /^[a-z0-9-]+: /.test(l));
+  assert.ok(lines.length >= 5, `expected several routing-table lines, got ${lines.length}`);
+  const rawBoilerplatePhrases = ['ALWAYS invoke when', 'ALWAYS invoke before', 'expert. ALWAYS', 'Use when'];
+  for (const line of lines) {
+    for (const phrase of rawBoilerplatePhrases) {
+      assert.ok(
+        !line.includes(phrase),
+        `routing-table line "${line}" still contains raw boilerplate phrase "${phrase}"`
+      );
+    }
+  }
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

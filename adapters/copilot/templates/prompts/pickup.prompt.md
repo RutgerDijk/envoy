@@ -62,7 +62,7 @@ Identify:
 
 ## Step 6: Execute the Plan
 
-Execute the tasks from the committed `.envoy-tasks/<issue-number>.json` file in order, using the worktree as working directory and following TDD for each task.
+Execute the tasks from the issue's embedded task list in order (materialized locally as `.envoy-tasks/<issue-number>.json`), using the worktree as working directory and following TDD for each task.
 
 All implementation must follow TDD:
 1. Write failing test

@@ -5,6 +5,18 @@ description: Use when starting any new feature, significant change, or when you 
 
 # Brainstorming Ideas Into Designs
 
+## Briefing
+!`node ${CLAUDE_SKILL_DIR}/preflight.js`
+
+- [ ] Preflight ok/degraded acknowledged (fatal stops here)
+- [ ] Phase 1: Understanding the Idea
+- [ ] Phase 1.5: Repo Exploration
+- [ ] Phase 2: Exploring Approaches
+- [ ] Phase 3: Presenting the Design
+- [ ] Phase 3.5: Scope Confirmation (BLOCKING)
+- [ ] Phase 4: Create GitHub Issue and Task Handoff
+- [ ] Phase 5: Final Handoff
+
 ## Overview
 
 Turn ideas into fully formed designs through collaborative dialogue. Produces ONE artifact:
@@ -43,14 +55,33 @@ This produces the implementation task list in the issue. Every referenced file p
 3. Cover: architecture, components, data flow, error handling, testing
 4. Be ready to revise based on feedback
 
+### Phase 3.5: Scope Confirmation (BLOCKING)
+
+Before creating THE issue, present its scope and wait for explicit
+confirmation. There is exactly one issue — this phase is not a decision
+between issue counts, it is a check that the scope you've converged on is
+correct:
+
+1. State the issue's title and a one-line scope summary covering everything
+   it will contain.
+2. Ask: "Does this scope look right, or does anything need to be added,
+   removed, or narrowed before I create the issue?"
+3. Do NOT run `gh issue create` until the user confirms or edits the scope.
+
+The task list inside the issue is what absorbs size — a big issue with a
+long task list is normal. Do not split into multiple issues; that is no
+longer an option this phase offers.
+
 ### Phase 4: Create GitHub Issue and Task Handoff
 
 The task list has a **single authoring surface**: you draft the spec-driven
 payload once, `write-tasks.js` renders the human `## Tasks` section and a
-recoverable machine block from it, and the issue carries both. `pickup`
-materializes `.envoy-tasks/<n>.json` from the committed file (and can recover
-it from the issue's block if the file is ever missing). Never hand-write the
-task section — it is rendered.
+machine-readable block from it, and the issue carries both. The issue block
+is the durable contract; `pickup` materializes `.envoy-tasks/<n>.json` from
+it (the directory is gitignored runtime state — task handoff makes NO
+commits, so no CI or review bots fire for it). `write-tasks.js` also writes
+the local file as a same-session fast path. Never hand-write the task
+section — it is rendered.
 
 Each task is **spec-driven**: `intent` (why), `behavior` (testable
 given/when/then that seeds the RED tests), and `acceptance` are REQUIRED;
@@ -97,17 +128,25 @@ EOF
 )" --label "<labels>")
 ISSUE_NUMBER=$(basename "$ISSUE_URL")
 
-# 3. write-tasks.js commits .envoy-tasks/<n>.json AND prints the issue-ready
-#    markdown (human ## Tasks section + recoverable block) to stdout.
+# 2b. Record this run's issue in .envoy/brainstorm/session.json immediately after
+#     `gh issue create` succeeds. The PreToolUse[Bash] issue-create-guard reads
+#     this file to block any further `gh issue create` (or `gh api .../issues
+#     -X POST` bypass) attempted later in the same run — a second issue create
+#     is always a bug, never a valid retry.
+mkdir -p .envoy/brainstorm
+cat > .envoy/brainstorm/session.json <<EOF
+{"\$schemaVersion":"1","issueNumber":$ISSUE_NUMBER,"createdAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+EOF
+
+# 3. write-tasks.js writes the local (gitignored) .envoy-tasks/<n>.json AND
+#    prints the issue-ready markdown (human ## Tasks section + machine block).
 TASKS_MD=$(node "$(dirname "$0")/write-tasks.js" "$ISSUE_NUMBER" /tmp/envoy-tasks-payload.json)
 
 # 4. Append the rendered tasks (single source) to the issue body.
+#    The issue block IS the handoff — nothing is committed.
 gh issue edit "$ISSUE_NUMBER" --body "$(gh issue view "$ISSUE_NUMBER" --json body -q .body)
 
 $TASKS_MD"
-
-git add ".envoy-tasks/$ISSUE_NUMBER.json"
-git commit -m "chore: task handoff for #$ISSUE_NUMBER"
 ```
 
 ### Phase 5: Final Handoff

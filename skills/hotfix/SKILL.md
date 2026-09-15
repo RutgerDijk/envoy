@@ -20,7 +20,7 @@ allowed-tools:
 ## Overview
 
 The fast lane for one urgent defect. It **skips** brainstorm, the design issue's
-task list, the committed `.envoy-tasks/` handoff, and the multi-layer
+task list, the `.envoy-tasks/` handoff, and the multi-layer
 `envoy:review`. It **keeps** the discipline that actually protects production:
 worktree isolation, a failing repro test (TDD), verification with evidence, and
 the normal PR → CodeRabbit → CI gates.

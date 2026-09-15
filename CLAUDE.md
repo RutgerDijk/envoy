@@ -9,9 +9,8 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 - `skills/` — Workflow skills (SKILL.md files with YAML frontmatter)
 - `stacks/` — Technology profiles (best practices, common mistakes, review checklists)
 - `agents/` — Specialized agent definitions for code review, testing, security
-- `commands/` — Thin wrappers that route `/envoy:*` commands to skills
 - `hooks/` — Session lifecycle hooks and automation (see Hooks section)
-- `lib/` — Shared Node.js utilities (skills-core.js, stack-loader.js) — changes here affect ALL skills and hooks
+- `lib/` — Shared Node.js utilities (stack-loader.js, test-commands.js, ledger.js, etc.) — changes here affect ALL skills and hooks
 - `contexts/` — Phase-specific context fragments (review.md, implement.md, research.md)
 - `adapters/copilot/` — GitHub Copilot integration (prompts, instructions, agents)
 - `templates/` — Example artifacts (plan docs, spec docs, issue templates)
@@ -22,9 +21,9 @@ Envoy is a Claude Code plugin providing professional development workflows. It i
 
 ### Skills
 - Each skill lives in `skills/<skill-name>/SKILL.md`
-- Rigid skills follow a contract-backed pattern (see `## Rigid Skills` below). Flexible skills (brainstorming, planning) use the simpler legacy frontmatter — `name`, `description`, and nothing else required.
-- Rigid skills: `review`, `pickup`, `finalize`, `cleanup`, `fix-ci`, `coderabbit-pr-review`, `wiki-sync`, `verification`, `test-driven-development`, `systematic-debugging`, `receiving-code-review`. Follow exactly, no adaptation.
-- Flexible skills: `brainstorm`, `using-envoy`, `search-first`, `dispatching-parallel-agents`, `pressure-test-scenarios`, `requesting-code-review`, etc. Adapt principles to context.
+- Rigid skills follow a contract-backed pattern (see `## Rigid Skills` below). Flexible skills (planning, etc.) use the simpler legacy frontmatter — `name`, `description`, and nothing else required.
+- Rigid skills: `review`, `pickup`, `finalize`, `cleanup`, `fix-ci`, `coderabbit-pr-review`, `wiki-sync`, `verification`, `test-driven-development`, `systematic-debugging`, `receiving-code-review`, `brainstorm`. Follow exactly, no adaptation.
+- Flexible skills: `using-envoy`, `envoy-authoring`, `requesting-code-review`, etc. Adapt principles to context.
 - Include "Announce at start" directive and "Integration with Envoy" section.
 
 ### Rigid skills (contract-backed)
@@ -64,12 +63,19 @@ anthropics/claude-code#22345.
 ### Stack Profiles
 - Each profile in `stacks/<stack-name>.md`
 - Must include: Best Practices, Common Mistakes, Review Checklist sections
+- May include an optional `## Test Command` section, read by `lib/test-commands.js`:
+  ```
+  ## Test Command
+
+  filtered: dotnet test --filter "FullyQualifiedName~{{test}}"
+  full: dotnet test
+  ```
+  `filtered:` runs one named test and must contain the literal `{{test}}` placeholder; `full:` runs the whole suite. A project's root `CLAUDE.md` may declare the same section to override the stack default. Templates containing shell metacharacters (`;`, `&&`, `||`, `|`, `$(`, backticks) outside the placeholder are rejected and reported as warnings — never executed.
 - Detection patterns are defined in `lib/stack-loader.js` STACK_RULES array
 - Use selective loading: `loadStackSection()` for specific sections, `detectStacksFromDiff()` for changed-file stacks
 
 ### Commands
-- Each command in `commands/<name>.md` with YAML frontmatter (`description`)
-- Commands are thin — they just invoke the corresponding skill
+- No standalone `commands/` directory — Claude Code merges custom commands into skills. A plugin skill's `name:` frontmatter (e.g. `pickup`) auto-creates `/envoy:pickup`; no separate wrapper file is needed.
 
 ### Agents
 - Agent definitions in `agents/<name>.md`
@@ -98,9 +104,10 @@ anthropics/claude-code#22345.
 Rigid skills hand off to each other through validated JSON artifacts,
 not through prose conventions. Two locations:
 
-- `.envoy-tasks/<issue>.json` — **committed**. Brainstorm → pickup.
-  Conforms to `lib/schemas/tasks.json`. Visible in PR diffs so the
-  contract is reviewable.
+- `.envoy-tasks/<issue>.json` — **gitignored**. Brainstorm → pickup.
+  Conforms to `lib/schemas/tasks.json`. The durable copy is the machine
+  block embedded in the GitHub issue; pickup materializes the local file
+  from it, so task handoff makes no commits.
 - `.envoy/` — **gitignored** runtime state:
   - `.envoy/active-skill.json` (which skill currently owns the session)
   - `.envoy/pickup/session.json` (replaces the retired `.envoy-session.json`)
@@ -174,9 +181,8 @@ describe what Claude does; preflight supplies the inputs.
 
 ### Adding a New Stack Profile
 1. Create `stacks/<stack-name>.md` with required sections
-2. Add detection rule to `lib/stack-loader.js` STACK_RULES array
-3. Add detection pattern to `hooks/session-start.sh`
-4. Update `adapters/copilot/` if needed (instructions template)
+2. Add a detection rule to `lib/stack-loader.js`'s `STACK_RULES` array — this is the single source of truth; `stacks/detect-stacks.sh` and `hooks/session-start.sh` both delegate to it (#78), so no other file needs a matching edit
+3. Update `adapters/copilot/` if needed (instructions template)
 
 ### Adding a New Hook
 1. Create `hooks/<hook-name>.js` with `run(rawInput)` export

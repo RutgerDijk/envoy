@@ -83,3 +83,22 @@ L1_FILES=$(git diff --name-only HEAD~1)
 ```
 
 Run the cleanup agent again with the diff scoped to these files. Commit messages use the same pattern but this pass appears as "0.5 re-run" in the report.
+
+## If Layer 1 Produced Fixes: Re-run Layer 0.75 (Tests)
+
+Layer 0.75 is the authoritative full-suite gate that decides
+`reviewStatus`, but it runs *before* Layer 1 — so its result describes the
+tree as it was before Layer 1 (and the 0.5 re-run) committed anything. A
+result from a tree that is no longer HEAD cannot gate anything.
+
+So whenever Layer 1 produced any commit — its own fixes or the 0.5 re-run's
+— re-run `layers/tests.md` in full against the current HEAD, after those
+commits land. Same commands, same pass/fail/skip rules. This pass appears
+as "0.75 re-run" in the report.
+
+**`testsLayerStatus` comes from this re-run when it happens**, and from the
+original Layer 0.75 pass only when Layer 1 produced no commits. Never carry
+the pre-fix `passed` forward over a post-fix tree.
+
+If Layer 1 produced no commits, skip the re-run and report `⊘ (no L1
+fixes)`.

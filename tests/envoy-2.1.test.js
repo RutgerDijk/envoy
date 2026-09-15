@@ -835,9 +835,16 @@ test('classifyPhase is exported', () => {
 
 section('hooks: session-start.sh');
 
-test('Uses awk for frontmatter stripping (POSIX-compatible)', () => {
+test('Does not use GNU-only sed syntax (POSIX-compatible)', () => {
+  // Pre-Task-16, session-start.sh injected the full using-envoy SKILL.md body
+  // and used `awk` to strip its YAML frontmatter — awk was chosen specifically
+  // to dodge a BSD-sed portability bug on macOS (see the sibling test below).
+  // Task 16 replaced that injection with a routing table built from each
+  // skill's frontmatter via a small Node script, so there is no frontmatter
+  // left to strip and the awk line is correctly gone. What must still hold —
+  // regardless of which tool a future change uses for text munging here — is
+  // POSIX/BSD portability: no GNU sed extensions that break on macOS's sed.
   const content = fs.readFileSync(path.join(HOOKS, 'session-start.sh'), 'utf8');
-  assert(content.includes('awk'), 'Should use awk for frontmatter stripping');
   assert(!content.includes("sed '1{"), 'Should not use GNU sed 1{} syntax');
 });
 

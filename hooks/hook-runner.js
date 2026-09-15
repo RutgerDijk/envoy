@@ -24,6 +24,8 @@ const HOOK_PROFILES = {
   'session-start':          ['minimal', 'standard', 'strict'],
   'config-protection':      ['minimal', 'standard', 'strict'],
   'issue-guard':            ['minimal', 'standard', 'strict'],
+  'edit-guard-combined':    ['minimal', 'standard', 'strict'],
+  'issue-create-guard':     ['minimal', 'standard', 'strict'],
   'pre-compact':            ['minimal', 'standard', 'strict'],
   'post-edit-accumulator':  ['standard', 'strict'],
   'stop-batch-lint':        ['standard', 'strict'],

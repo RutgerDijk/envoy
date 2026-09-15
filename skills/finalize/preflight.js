@@ -40,12 +40,27 @@ function main() {
   }
 
   const result = validateFile('handoff-review-to-finalize', handoffPath);
-  if (!result.valid) {
+  // Migration path: the `tests` layer entry became required only after the
+  // Layer 0.75 gate was introduced, so every handoff written before it
+  // legitimately lacks one. Failing those fatally would strand in-flight
+  // branches with no way forward except hand-editing runtime state — so a
+  // missing required layer entry degrades to a warning, while every other
+  // schema error stays fatal. `ENVOY_HOOK_PROFILE=strict` promotes it back
+  // to fatal, per the plugin-wide preflight convention.
+  const MISSING_ITEM = /missing required item with name/;
+  const hardErrors = result.errors.filter(e => !MISSING_ITEM.test(e));
+  const softErrors = result.errors.filter(e => MISSING_ITEM.test(e));
+  const strict = process.env.ENVOY_HOOK_PROFILE === 'strict';
+
+  if (hardErrors.length > 0 || (strict && softErrors.length > 0)) {
     banner('fatal');
     say('review handoff schema validation failed:');
-    for (const e of result.errors) say(`  - ${e}`);
+    for (const e of hardErrors.concat(strict ? softErrors : [])) say(`  - ${e}`);
     return;
   }
+  const warnings = softErrors.map(
+    e => `${e} — handoff predates the Layer 0.75 tests gate; re-run /envoy:review to record it`
+  );
 
   const handoff = JSON.parse(fs.readFileSync(handoffPath, 'utf8'));
 
@@ -79,8 +94,10 @@ function main() {
   });
   appendEvent(CWD, { type: 'skill-started', skill: 'finalize', issue: handoff.issueNumber });
 
-  banner('ok');
+  banner(warnings.length > 0 ? 'degraded' : 'ok');
   say('');
+  for (const w of warnings) say(`WARNING: ${w}`);
+  if (warnings.length > 0) say('');
   say(`Review approved — ready to finalize branch ${handoff.branch}`);
   say(`Issue: #${handoff.issueNumber}`);
   const passed = handoff.layers.filter(l => l.status === 'passed' || l.status === 'fixed').length;

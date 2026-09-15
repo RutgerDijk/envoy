@@ -311,7 +311,7 @@ See `condition-based-waiting.md` for implementation patterns.
 **Related skills:**
 - `envoy:test-driven-development` — Write failing test before fix (Phase 4)
 - `envoy:pickup` — TDD enforcement during implementation
-- `envoy:pressure-test-scenarios` — Scenarios 1, 10, 11, 12 test debugging discipline
+- `envoy:envoy-authoring` (pressure-test-scenarios step) — Scenarios 1, 10, 11, 12 test debugging discipline
 
 **Stack profiles to consult:**
 - `../../stacks/dotnet.md` — Common .NET debugging patterns

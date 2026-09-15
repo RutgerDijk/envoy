@@ -34,6 +34,8 @@ allowed-tools:
 
 Pick up a GitHub issue, create a worktree, verify the implementation plan in the issue body, and execute tasks with TDD. This is the single entry point for going from issue to working code.
 
+**Task file:** the issue's embedded machine-readable block (rendered by brainstorm's `write-tasks.js`, schema `lib/schemas/tasks.json`) is the durable task contract. Preflight materializes it into `.envoy-tasks/<issue-number>.json` — gitignored runtime state, like the `.envoy/` handoffs (`pickup/session.json`, `pickup/handoff-to-review.json`, `review/handoff-to-finalize.json`, `finalize/state.json`, `active-skill.json`). An issue with no valid block is not pickup-ready: preflight fails fatal (trackers stay trackers).
+
 **Announce at start:** "I'm using envoy:pickup to implement issue #<number>."
 
 **Discipline rule:** This is a rigid skill. The spec is the contract. Execute every task. Do NOT narrate, skip, or adapt steps. See `contexts/discipline-scope.md`, `contexts/discipline-tdd.md`, `contexts/discipline-blocker.md`, `contexts/discipline-task-granularity.md`, and `contexts/execution-announce.md`.

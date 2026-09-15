@@ -46,7 +46,7 @@ Save to `docs/plans/YYYY-MM-DD-<topic>.md` where topic is a short kebab-case nam
 ```markdown
 # <Feature Name>
 
-> **For Copilot:** Use the `/pickup` command with the committed `.envoy-tasks/<issue-number>.json` task file to implement this issue task-by-task, following TDD.
+> **For Copilot:** Use the `/pickup` command to implement this issue task-by-task, following TDD. The task list travels in the issue itself; pickup materializes a local `.envoy-tasks/<issue-number>.json` from it.
 
 ## Overview
 
@@ -119,6 +119,8 @@ git checkout main
 ```
 
 ## Phase 6: Create GitHub Issue
+
+**Issue-plan approval (blocking):** before creating ANY issue, list every issue you intend to create (title + one-line scope, dependency order if more than one) as lettered options with your recommendation first, and wait for the user to pick. Default bias: ONE issue — a split needs a concrete reason (independently shippable parts, different reviewers, or a decision gate between parts), not "it feels big".
 
 ```bash
 gh issue create \

@@ -170,6 +170,45 @@ for (const name of expectedSchemas) {
   });
 }
 
+section('requiredItemNames — array must contain a named item (code-review fix M3)');
+
+test('handoff-review-to-finalize requires a "tests" entry in layers', () => {
+  const base = {
+    $schemaVersion: '1',
+    issueNumber: 1,
+    branch: 'x',
+    reviewStatus: 'approved',
+    layers: [
+      { name: 'lint', status: 'passed' },
+      { name: 'cleanup', status: 'fixed' },
+      { name: 'ai-review', status: 'fixed' },
+    ],
+  };
+  const result = validate('handoff-review-to-finalize', base);
+  assert.strictEqual(result.valid, false, 'expected validation to fail without a tests layer entry');
+  assert.ok(
+    result.errors.some(e => e.includes('tests')),
+    `expected an error mentioning the missing "tests" layer, got: ${JSON.stringify(result.errors)}`
+  );
+});
+
+test('handoff-review-to-finalize passes once a "tests" entry is present', () => {
+  const base = {
+    $schemaVersion: '1',
+    issueNumber: 1,
+    branch: 'x',
+    reviewStatus: 'approved',
+    layers: [
+      { name: 'lint', status: 'passed' },
+      { name: 'cleanup', status: 'fixed' },
+      { name: 'tests', status: 'passed' },
+      { name: 'ai-review', status: 'fixed' },
+    ],
+  };
+  const result = validate('handoff-review-to-finalize', base);
+  assert.strictEqual(result.valid, true, `expected validation to pass: ${JSON.stringify(result.errors)}`);
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════

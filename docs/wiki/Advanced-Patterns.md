@@ -4,7 +4,7 @@ Patterns that make autonomous agent workflows more reliable and efficient.
 
 ## Eval Harness
 
-**Skill:** `envoy:eval-harness`
+**Skill:** `envoy:envoy-authoring` (eval-harness step)
 
 Automated skill testing. Define scenarios in YAML, run them as subagents, get pass/fail metrics.
 
@@ -28,7 +28,7 @@ Produces **pass@1** (first try) and **pass@3** (passes within 3 tries) metrics.
 
 ## Search-First
 
-**Skill:** `envoy:search-first`
+**Skill:** `envoy:envoy-authoring` (search-first step)
 
 Before building anything, check if it already exists:
 
@@ -81,7 +81,7 @@ Makes the reviewer codebase-aware instead of diff-only. Defined in `contexts/ite
 
 **Lib:** `lib/agent-scratchpad.js`
 
-When multiple agents run in parallel (via `dispatching-parallel-agents` or `pickup` parallel strategy), they can coordinate through a shared scratchpad file (`.envoy-scratchpad.json`):
+When multiple agents run in parallel (via `envoy:envoy-authoring`'s dispatching-parallel-agents step, or `pickup`'s parallel strategy), they can coordinate through a shared scratchpad file (`.envoy-scratchpad.json`):
 
 - **Register:** Each agent declares its role and file scope
 - **Post findings:** Discoveries, conflicts, dependencies, questions

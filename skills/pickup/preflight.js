@@ -8,7 +8,7 @@
  * writes .envoy/pickup/session.json (seeded from the tasks list) and
  * .envoy/active-skill.json, then prints a briefing.
  *
- * Emits `## STATUS: ok|degraded|fatal` as the first content line so the
+ * Emits `## STATUS: ok|fatal` as the first content line so the
  * eval harness (and Claude reading the inline `!` substitution) can parse
  * the outcome.
  */
@@ -20,9 +20,10 @@ const { execFileSync } = require('child_process');
 const CWD = process.cwd();
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
 const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
-const { extractEmbeddedBlock } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
+const { extractEmbeddedBlock, ensureTasksDirIgnored } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
 const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
+const { resolveTestCommands } = require(path.join(REPO_ROOT, 'lib', 'test-commands'));
 
 // Best-effort fetch of an issue body via gh. Returns the body string, or null
 // when gh is unavailable or the call fails — callers must tolerate null.
@@ -56,11 +57,6 @@ function payloadFromIssue(issueNumber) {
 function say(line) { process.stdout.write(`${line}\n`); }
 function banner(tier) { say(`## STATUS: ${tier}`); }
 
-function strictPromote(tier) {
-  if (tier === 'degraded' && process.env.ENVOY_HOOK_PROFILE === 'strict') return 'fatal';
-  return tier;
-}
-
 function writeJson(rel, data) {
   const full = path.join(CWD, rel);
   fs.mkdirSync(path.dirname(full), { recursive: true });
@@ -83,11 +79,13 @@ function main() {
   let materialized = false;
 
   if (!fs.existsSync(tasksFile)) {
-    // Recover from the machine block embedded in the issue before giving up.
+    // The issue's embedded machine block is the durable task source —
+    // materialize the local file from it.
     const recovered = payloadFromIssue(issueNumber);
     if (recovered) {
       recovered.issueNumber = Number(issueNumber);
       writeJson(path.join('.envoy-tasks', `${issueNumber}.json`), recovered);
+      ensureTasksDirIgnored(CWD);
       materialized = true;
     } else {
       banner('fatal');
@@ -112,15 +110,16 @@ function main() {
 
   const tasks = JSON.parse(fs.readFileSync(tasksFile, 'utf8'));
 
-  // Non-fatal drift check: if the committed file and the issue's embedded block
-  // disagree on the task set, the issue was likely edited after filing.
+  // Non-fatal drift check: if the local file and the issue's embedded block
+  // disagree on the task set, the issue was likely edited after the file
+  // was materialized.
   let driftWarning = null;
   if (!materialized) {
     const issuePayload = payloadFromIssue(issueNumber);
     if (issuePayload) {
       const key = (p) => JSON.stringify((p.tasks || []).map((t) => [t.id, t.title]));
       if (key(issuePayload) !== key(tasks)) {
-        driftWarning = 'committed .envoy-tasks differs from the issue\'s embedded task block (issue edited after filing?)';
+        driftWarning = 'local .envoy-tasks file differs from the issue\'s embedded task block (issue edited after it was materialized?)';
       }
     }
   }
@@ -145,12 +144,10 @@ function main() {
   writeActiveSkill(CWD, { skill: 'pickup', issueNumber: issueNumber ? Number(issueNumber) : undefined });
   appendEvent(CWD, { type: 'skill-started', skill: 'pickup', issue: Number(issueNumber) });
 
-  const tier = strictPromote(materialized ? 'degraded' : 'ok');
-  banner(tier);
+  banner('ok');
   say('');
   if (materialized) {
-    say('NOTE: tasks file was reconstructed from the issue\'s embedded block.');
-    say('Confirm the recovered task list before proceeding.');
+    say('Tasks materialized from the issue\'s embedded block.');
     say('');
   }
   if (driftWarning) {
@@ -162,6 +159,33 @@ function main() {
   say('');
   say('Tasks:');
   for (const t of tasks.tasks) say(`  - ${t.id}: ${t.title}`);
+  say('');
+  say('### Test Command');
+  say('');
+  const testCommands = resolveTestCommands(CWD);
+  // A rejected template is a security event, not a detail: the command was
+  // dropped because it carried shell metacharacters outside the {{test}}
+  // placeholder, and it would otherwise be executed verbatim downstream.
+  for (const w of testCommands.warnings || []) say(`WARNING: ${w}`);
+  if (testCommands.filtered) {
+    if (testCommands.commands.length > 1) {
+      // .filtered/.full mirror commands[0] only — silently using that alone
+      // would hand the implementer a picked-at-random stack's command on a
+      // multi-stack repo with no indication another stack exists.
+      say(`Multiple stacks resolved a Test Command — reporting all ${testCommands.commands.length}:`);
+      for (const c of testCommands.commands) {
+        say(`  - ${c.stack} (source: ${c.source}): ${c.filtered}${c.full ? ` (full: ${c.full})` : ''}`);
+      }
+      say(`Primary (source: ${testCommands.source}): ${testCommands.filtered}`);
+    } else {
+      say(`Resolved (source: ${testCommands.source}): ${testCommands.filtered}`);
+      if (testCommands.full) say(`Full suite: ${testCommands.full}`);
+    }
+    say('Give the implementer agent this filtered command as ${RESOLVED_TEST_COMMAND} (see prompts.md).');
+  } else {
+    say('No test command could be resolved for this repo (no CLAUDE.md or stack profile Test Command section).');
+    say('Do NOT default to a full-suite command. Instruct the implementer agent to determine and report the narrowest test command itself.');
+  }
   say('');
   say('Next: read skills/pickup/steps/worktree.md and proceed with Step 1.');
 }

@@ -63,6 +63,11 @@ MAIN_REPO=$(git worktree list | grep -v ".worktrees" | awk '{print $1}')
 
 ```bash
 cd "$MAIN_REPO"
+
+# Reset the terminal tab title so it doesn't keep showing a stale
+# `#N slug` for a worktree that's about to be removed. Guarded on
+# [ -t 1 ] so this never pollutes piped output or hook logs.
+[ -t 1 ] && printf '\033]0;\007'
 ```
 
 ### Step 3: Update Main Branch
@@ -83,10 +88,18 @@ if [ -f "$WORKTREE_PATH/.envoy/finalize/state.json" ]; then
   FINALIZE_PR=$(jq -r '.prNumber // empty' "$WORKTREE_PATH/.envoy/finalize/state.json")
 fi
 
-# Clear ephemeral envoy state before removing worktree
-rm -rf "$WORKTREE_PATH/.envoy"
-rm -f  "$WORKTREE_PATH/.envoy-session.json"      # retired path
-rm -f  "$WORKTREE_PATH/.envoy-scratchpad.json"   # retired path
+# Clear ephemeral envoy state before removing worktree.
+# git clean only removes UNTRACKED files, so any tracked files under .envoy/
+# (repos that commit .envoy/ contents, e.g. .envoy/search-decisions/*.json)
+# survive automatically.
+git -C "$WORKTREE_PATH" clean -fdx -- .envoy .envoy-session.json .envoy-scratchpad.json
+
+# Verify no residue remains. .envoy/ is gitignored, so any leftover untracked
+# file shows as "!!" (ignored-untracked) under --ignored, not "??" — match both
+# markers so this check isn't a silent no-op. Must run here, before Step 6
+# removes the worktree (after removal, `git -C "$WORKTREE_PATH" status` fails
+# since the directory no longer exists).
+git -C "$WORKTREE_PATH" status --porcelain --ignored -- .envoy .envoy-session.json .envoy-scratchpad.json | grep -qE '^(\?\?|!!)' && echo "✗ untracked .envoy residue found" || echo "✓ no untracked .envoy residue"
 ```
 
 ### Step 5: Wiki Sync
@@ -172,10 +185,9 @@ git worktree list
 git branch -a | grep "$BRANCH"
 # Should return nothing
 
-# Session state cleared
-[ ! -d "$WORKTREE_PATH/.envoy" ] && echo "✓ .envoy/ gone" || echo "✗ .envoy/ still exists"
-[ ! -f "$WORKTREE_PATH/.envoy-session.json" ] && echo "✓ retired session file gone" || echo "✗ retired session file still exists"
-[ ! -f "$WORKTREE_PATH/.envoy-scratchpad.json" ] && echo "✓ scratchpad.json gone" || echo "✗ scratchpad.json still exists"
+# Session state: the untracked-residue check already ran in Step 4, before
+# the worktree was removed (the directory no longer exists at this point, so
+# re-running git status against $WORKTREE_PATH here would just fail).
 
 # Issue closed
 gh issue view "$ISSUE_NUMBER" --json state --jq '.state'

@@ -14,7 +14,7 @@
       "name": "valid review handoff with approved status → ok; finalize state initialised",
       "setup": {
         "files": {
-          ".envoy/review/handoff-to-finalize.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"reviewStatus\":\"approved\",\"layers\":[{\"name\":\"lint\",\"status\":\"passed\"}],\"commitShas\":[\"aaaaaaa\"],\"producedAt\":\"2026-04-23T00:00:00Z\"}"
+          ".envoy/review/handoff-to-finalize.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"reviewStatus\":\"approved\",\"layers\":[{\"name\":\"lint\",\"status\":\"passed\"},{\"name\":\"tests\",\"status\":\"passed\"}],\"commitShas\":[\"aaaaaaa\"],\"producedAt\":\"2026-04-23T00:00:00Z\"}"
         }
       },
       "expected": {
@@ -24,10 +24,37 @@
       }
     },
     {
+      "name": "legacy handoff without a tests layer entry → degraded, not fatal (migration path)",
+      "setup": {
+        "files": {
+          ".envoy/review/handoff-to-finalize.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"reviewStatus\":\"approved\",\"layers\":[{\"name\":\"lint\",\"status\":\"passed\"},{\"name\":\"ai-review\",\"status\":\"fixed\"}],\"commitShas\":[\"aaaaaaa\"],\"producedAt\":\"2026-04-23T00:00:00Z\"}"
+        }
+      },
+      "expected": {
+        "status": "degraded",
+        "stdout_matches": "tests|predates",
+        "artifacts_created": [".envoy/finalize/state.json"]
+      }
+    },
+    {
+      "name": "legacy handoff without a tests layer entry → fatal under ENVOY_HOOK_PROFILE=strict",
+      "setup": {
+        "files": {
+          ".envoy/review/handoff-to-finalize.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"reviewStatus\":\"approved\",\"layers\":[{\"name\":\"lint\",\"status\":\"passed\"},{\"name\":\"ai-review\",\"status\":\"fixed\"}],\"commitShas\":[\"aaaaaaa\"],\"producedAt\":\"2026-04-23T00:00:00Z\"}"
+        }
+      },
+      "env": { "ENVOY_HOOK_PROFILE": "strict" },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "missing required item",
+        "artifacts_missing": [".envoy/finalize/state.json"]
+      }
+    },
+    {
       "name": "review handoff marked needs-fixes → fatal (should not finalize)",
       "setup": {
         "files": {
-          ".envoy/review/handoff-to-finalize.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"reviewStatus\":\"needs-fixes\",\"layers\":[],\"commitShas\":[],\"producedAt\":\"2026-04-23T00:00:00Z\"}"
+          ".envoy/review/handoff-to-finalize.json": "{\"$schemaVersion\":\"1\",\"issueNumber\":42,\"branch\":\"feature/42-x\",\"reviewStatus\":\"needs-fixes\",\"layers\":[{\"name\":\"lint\",\"status\":\"passed\"},{\"name\":\"tests\",\"status\":\"failed\"}],\"commitShas\":[],\"producedAt\":\"2026-04-23T00:00:00Z\"}"
         }
       },
       "expected": {
