@@ -72,7 +72,7 @@ function runPreflight(cwd, home, extraEnv = {}) {
   delete env.ENVOY_HOOK_PROFILE;
   let out;
   try {
-    out = execFileSync('node', [PREFLIGHT], { cwd, env, encoding: 'utf8' });
+    out = execFileSync('node', [PREFLIGHT], { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (err) {
     out = (err.stdout || '') + (err.stderr || '');
   }
