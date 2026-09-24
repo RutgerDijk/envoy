@@ -186,6 +186,22 @@ test('xUnit [FAIL] lines with only a Failed! summary → original passes through
   assert.strictEqual(out, '', `expected passthrough, got: ${out}`);
 });
 
+test('CRLF xUnit [FAIL] lines with only a Failed! summary → original passes through', () => {
+  const log = readFixture('dotnet-test-xunit-fail-only.log').replace(/\n/g, '\r\n');
+  const { out } = runHook(hook, JSON.stringify(bashEvent('dotnet test', log)));
+  assert.strictEqual(out, '', `expected passthrough, got: ${out}`);
+});
+
+test('indented Failed <name> lines beyond what the compressor keeps → original passes through', () => {
+  const names = Array.from({ length: 40 }, (_, i) => `Lib.Tests.T.Case${i}`);
+  const log = names.map(n => `  Failed ${n} [1 ms]\r\n  Error Message:\r\n   boom\r\n`).join('')
+    + `\r\nFailed!  - Failed:    40, Passed:     0, Skipped:     0, Total:    40 - Lib.Tests.dll\r\n`;
+  const { out } = runHook(hook, JSON.stringify(bashEvent('dotnet test', log)));
+  if (out === '') return;
+  const stdout = JSON.parse(out).hookSpecificOutput.updatedToolOutput.stdout;
+  for (const n of names) assert.ok(stdout.includes(n), `compressed output dropped ${n}`);
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // Pass-through cases
 // ═══════════════════════════════════════════════════════════════════
