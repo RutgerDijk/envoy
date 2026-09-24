@@ -437,15 +437,97 @@ test('prompts.md gives one concrete, escape-free recipe', () => {
   assert.ok(impl.includes('D=$(mktemp -d)'), 'temp dir recipe');
   assert.ok(impl.includes('${CLAUDE_SKILL_DIR}/../../contexts/discipline-tdd.md'), 'constraintsFiles via CLAUDE_SKILL_DIR');
   assert.ok(!impl.includes('<absolute path to the plugin>'), 'no vague plugin path placeholder');
-  assert.ok(impl.includes('--out'), 'writes the prompt to a file');
-  assert.ok(impl.includes('Your full instructions are in'), 'short dispatch prompt pointing at the file');
   assert.ok(/worktree root/i.test(impl), 'CLI runs from the worktree root');
+  assert.ok(impl.includes('rm -rf "$D"'), 'recipe cleans up its temp dir');
+});
+
+test('prompts.md: default dispatch pastes the CLI-printed prompt; pointer-only dispatch is forbidden', () => {
+  const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
+  assert.ok(impl.includes('===== PROMPT ====='), 'paste everything after the PROMPT marker');
+  assert.ok(!impl.includes('Your full instructions are in'), 'no pointer-only dispatch recommended');
+  assert.ok(/do not[^.]*pointer/i.test(impl), 'explicitly forbids a pointer-only dispatch');
+  assert.ok(impl.includes('contract.json'), 'names the contract invariant it would bypass');
+  assert.ok(/--out[^.]*optional/i.test(impl), '--out is an optional convenience');
 });
 
 test('tdd.md Step 13 item 2 points at the budgeted build', () => {
   const step13 = TDD.split('### Step 13')[1] || '';
   assert.ok(step13.includes('buildAgentPrompt') && step13.includes('context-budget.js build'), step13.slice(0, 400));
   assert.ok(step13.includes('### Complexity'), 'uses the preflight tier');
+  assert.ok(step13.includes('===== PROMPT ====='), 'dispatches the printed prompt');
+  assert.ok(!/pointing at that file/.test(step13), 'no pointer-only dispatch');
+});
+
+// ---------------------------------------------------------------------------
+console.log('\n  contract invariant — the documented dispatch is checked, not bypassed');
+
+const { evaluateAgentGuard, findInvariantMatch, loadContract } = require(path.join(REPO_ROOT, 'lib', 'contract-guard.js'));
+const CONTRACT = path.join(REPO_ROOT, 'skills', 'pickup', 'contract.json');
+
+// Build the implementer prompt exactly as prompts.md documents: its heredoc
+// params.json (with ${CLAUDE_SKILL_DIR} resolved to the real skill dir, so the
+// real contexts/discipline files are read) and the CLI's printed prompt.
+function buildDocumentedPrompt({ withLaws = true } = {}) {
+  const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
+  const m = impl.match(/<<JSON\n([\s\S]*?)\nJSON\n/);
+  assert.ok(m, 'prompts.md recipe has a <<JSON heredoc');
+  const skillDir = path.join(REPO_ROOT, 'skills', 'pickup');
+  const params = JSON.parse(m[1].split('${CLAUDE_SKILL_DIR}').join(skillDir));
+  if (!withLaws) delete params.constraintsFiles;
+  const dir = makeTmpDir('pickup-dispatch-');
+  const files = {
+    'objective.md': 'Implement Task 4: Pickup classifies task complexity\n\n**Full task specification:**\n- intent: x',
+    'constraints.md': '**Requirements:**\n1. Follow TDD Iron Law above — NON-NEGOTIABLE\n\n**Test command:** npm test -- -t "{{test}}"',
+    'acceptance.md': '- works\n\n**Return:**\n- summary',
+    'learnings.md': '(none recorded)',
+    'context.md': 'task-5: sibling',
+    'reference.md': 'stack notes',
+  };
+  for (const [f, c] of Object.entries(files)) fs.writeFileSync(path.join(dir, f), c);
+  fs.writeFileSync(path.join(dir, 'params.json'), JSON.stringify(params));
+  const r = runCli(dir, ['build', path.join(dir, 'params.json'), '--tier', 'standard']);
+  assert.strictEqual(r.code, 0, r.err);
+  const idx = r.out.indexOf('===== PROMPT =====\n');
+  assert.ok(idx > -1, r.out);
+  return r.out.slice(idx + '===== PROMPT =====\n'.length);
+}
+
+function agentEvent(prompt) {
+  return { tool_name: 'Agent', tool_input: { prompt, subagent_type: 'general-purpose' } };
+}
+
+test('documented dispatch prompt matches the Implement Task invariant and does not block', () => {
+  const prompt = buildDocumentedPrompt();
+  const inv = findInvariantMatch(loadContract(CONTRACT).agentInvariants, prompt);
+  assert.ok(inv && inv.matchPrompt === 'Implement Task', 'invariant matched');
+  const verdict = evaluateAgentGuard(CONTRACT, agentEvent(prompt));
+  assert.strictEqual(verdict.block, false, JSON.stringify(verdict));
+});
+
+test('control: the same prompt without the Iron Laws is blocked (the check is live)', () => {
+  const verdict = evaluateAgentGuard(CONTRACT, agentEvent(buildDocumentedPrompt({ withLaws: false })));
+  assert.strictEqual(verdict.block, true, JSON.stringify(verdict));
+});
+
+test('a pointer-only prompt would never match the invariant (why it is forbidden)', () => {
+  const inv = findInvariantMatch(loadContract(CONTRACT).agentInvariants,
+    'Your full instructions are in /tmp/x/prompt.md. Read it completely before doing anything, then follow it.');
+  assert.strictEqual(inv, null);
+});
+
+// ---------------------------------------------------------------------------
+console.log('\n  build CLI — --out resolution');
+
+test('--out resolves relative to the params dir and creates its parent', () => {
+  const dir = makeTmpDir();
+  const elsewhere = makeTmpDir('pickup-cwd-');
+  const f = writeParams(dir, { objective: 'OBJ', constraints: 'CON', acceptance: 'ACC' });
+  const r = runCli(elsewhere, ['build', f, '--tier', 'standard', '--out', 'sub/prompt.md']);
+  assert.strictEqual(r.code, 0, r.err);
+  const written = path.join(dir, 'sub', 'prompt.md');
+  assert.ok(fs.existsSync(written), r.out);
+  assert.ok(r.out.includes(written), 'names the resolved path');
+  assert.ok(!fs.existsSync(path.join(elsewhere, 'sub')), 'not written relative to cwd');
 });
 
 // ---------------------------------------------------------------------------
