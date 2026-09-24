@@ -264,6 +264,15 @@ test('paths are normalized: ./, trailing /, case, bare directory', () => {
   assert.deepStrictEqual(ids, ['task-2', 'task-4', 'task-6']);
 });
 
+for (const root of ['.', './']) {
+  test(`task scoped to "${root}" contains every path → conflicts with every other task`, () => {
+    const dir = setup('parallel', [task('task-1', [root]), task('task-2', ['lib/a.js']), task('task-3', ['README.md'])]);
+    run(dir, ['--init-scratchpad']);
+    const ids = scratchpad.getConflicts(scratchpad.load(dir)).map((c) => c.agentId).sort();
+    assert.deepStrictEqual(ids, ['task-2', 'task-3']);
+  });
+}
+
 test('task id unsafe for shell use: init refuses, no pad', () => {
   const dir = setup('parallel', [task('task 1;rm', ['a.js']), task('task-2', ['b.js'])]);
   const r = run(dir, ['--init-scratchpad']);
@@ -388,6 +397,21 @@ test('done marks the agent finished; others no longer see it as active', () => {
   assert.ok(!brief.includes('task-1: '), brief);
 });
 
+const canChmod = process.platform !== 'win32' && typeof process.getuid === 'function' && process.getuid() !== 0;
+for (const args of [['--scratchpad-post', 'task-1', 'discovery', 'hi'], ['--scratchpad-done', 'task-1']]) {
+  test(`${args[0]}: a failing save exits 1 with a one-line message, no stack trace`, () => {
+    if (!canChmod) { console.log('    (skipped: cannot make a dir unwritable here)'); return; }
+    const dir = setup('parallel', DISJOINT);
+    run(dir, ['--init-scratchpad']);
+    fs.chmodSync(dir, 0o555);
+    let r;
+    try { r = run(dir, args); } finally { fs.chmodSync(dir, 0o755); }
+    assert.strictEqual(r.code, 1, r.out);
+    assert.ok(/could not save/i.test(r.out), r.out);
+    assert.ok(!/\n\s+at /.test(r.out), `stack trace leaked:\n${r.out}`);
+  });
+}
+
 test('done rejects an unknown agent', () => {
   const dir = setup('parallel', DISJOINT);
   run(dir, ['--init-scratchpad']);
@@ -425,6 +449,8 @@ test('prompts.md: implementers post, re-read the briefing before committing, and
   assert.ok(PROMPTS.includes('--scratchpad-done'), 'done command');
   assert.ok(/before (each )?commit/i.test(PROMPTS), 're-read before committing');
   assert.ok(PROMPTS.includes('${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-post'), 'via CLAUDE_SKILL_DIR');
+  assert.ok(/fails[^.]*retry/i.test(PROMPTS), 'retry a failed post/done');
+  assert.ok(/never skip/i.test(PROMPTS), 'never skip reporting');
 });
 
 test('tdd.md Step 12: overlapping files force batch, citing ### Scratchpad', () => {
@@ -433,6 +459,8 @@ test('tdd.md Step 12: overlapping files force batch, citing ### Scratchpad', () 
   assert.ok(/overlap/i.test(s12) && /batch/i.test(s12), s12);
   assert.ok(s12.includes('--exclude'), 'batched tasks are excluded from the pad');
   assert.ok(!/section means the tasks file's strategy is not parallel/.test(s12), 'no backwards wording');
+  assert.ok(/after the parallel wave/i.test(s12), 'batched tasks run after the parallel wave');
+  assert.ok(/never alongside the parallel/i.test(s12), 'never alongside the parallel group');
 });
 
 test('tdd.md Step 13: parallel creates the pad first; sequential/batch do not', () => {
@@ -441,6 +469,7 @@ test('tdd.md Step 13: parallel creates the pad first; sequential/batch do not', 
   assert.ok(/sequential or batch/i.test(s13) && /no scratchpad/i.test(s13), 'no pad for sequential/batch');
   assert.ok(/parallel chosen/i.test(s13), 'keyed on the strategy Step 12 chose');
   assert.ok(s13.includes('--exclude'), 'documents --exclude');
+  assert.ok(/after the parallel wave/i.test(s13), 'Step 13 orders the batched tasks after the wave');
 });
 
 test('tdd.md keeps all its Step headings', () => {
