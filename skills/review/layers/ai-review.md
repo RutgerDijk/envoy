@@ -6,6 +6,14 @@ Announce: `Running Layer 1: AI Code Review...`
 
 **If you do not spawn an Agent tool call, STOP — do not proceed to Layer 2.**
 
+`${KNOWN_PATTERNS}` is populated from preflight's `### Known patterns`
+output (preflight.js loads it via `lib/learning-loader.js` —
+confirmed review/CodeRabbit patterns filtered to the diff's detected
+stacks, plus team corrections from `memory/corrections.md` and
+`~/.claude/learnings/corrections.md` — and renders it with
+`formatReminders()`). Paste the section body verbatim, including
+`(none recorded)` or any "could not be read" line.
+
 Spawn a fresh **Sonnet** agent with NO implementation context. The agent uses **iterative retrieval** to understand codebase context:
 
 ```
@@ -32,6 +40,9 @@ Agent({
   Also read:
   - <spec-path> (acceptance criteria)
   - <stack-common-mistakes> (patterns to check)
+
+  **Known patterns (flag recurrences; do not flag code that follows a team correction):**
+  ${KNOWN_PATTERNS}
 
   Focus areas:
   1. Spec/acceptance criteria compliance

@@ -24,6 +24,7 @@ const { extractEmbeddedBlock, ensureTasksDirIgnored } = require(path.join(REPO_R
 const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
 const { resolveTestCommands } = require(path.join(REPO_ROOT, 'lib', 'test-commands'));
+const { detectStacksCached } = require(path.join(REPO_ROOT, 'lib', 'stack-loader'));
 
 // Best-effort fetch of an issue body via gh. Returns the body string, or null
 // when gh is unavailable or the call fails — callers must tolerate null.
@@ -64,6 +65,48 @@ function writeJson(rel, data) {
 }
 
 function nowIso() { return new Date().toISOString(); }
+
+// ### Known patterns — confirmed review/CodeRabbit patterns plus team
+// corrections from lib/learning-loader.js, rendered by formatReminders().
+// Fail-soft: any loader error is reported inside the section and never
+// touches the STATUS banner. The loader swallows parse errors, so a file
+// that exists but cannot be read (or carries an unparseable DATA block) is
+// detected here and named explicitly.
+function printKnownPatterns(stackNames) {
+  say('### Known patterns');
+  say('');
+  const unreadable = [];
+  let reminders = '';
+  try {
+    const loader = require(path.join(REPO_ROOT, 'lib', 'learning-loader'));
+    const readable = (full) => {
+      if (!fs.existsSync(full)) return null;
+      try { return fs.readFileSync(full, 'utf8'); } catch { return false; }
+    };
+    for (const rel of ['memory/review-learnings.md', 'memory/coderabbit-patterns.md']) {
+      const content = readable(path.join(CWD, rel));
+      if (content === false || (content && /<!--\s*DATA:/.test(content) && loader.loadDataFromFile(path.join(CWD, rel)) === null)) {
+        unreadable.push(rel);
+      }
+    }
+    const userCorrections = path.join(process.env.HOME || process.env.USERPROFILE || '~', '.claude', 'learnings', 'corrections.md');
+    if (readable(path.join(CWD, 'memory', 'corrections.md')) === false) unreadable.push('memory/corrections.md');
+    if (readable(userCorrections) === false) unreadable.push('~/.claude/learnings/corrections.md');
+
+    let patterns = [];
+    let corrections = [];
+    try { patterns = loader.loadConfirmedPatterns(stackNames); } catch { unreadable.push('confirmed patterns (loader error)'); }
+    try { corrections = loader.loadCorrections(CWD); } catch { unreadable.push('team corrections (loader error)'); }
+    reminders = loader.formatReminders(patterns, corrections);
+  } catch {
+    unreadable.push('lib/learning-loader.js (loader error)');
+  }
+  if (reminders) say(reminders);
+  for (const f of [...new Set(unreadable)]) {
+    say(`Learnings could not be read from ${f} (corrupt or unreadable) — skipped.`);
+  }
+  if (!reminders && unreadable.length === 0) say('(none recorded)');
+}
 
 function main() {
   const issueNumber = process.env.ENVOY_ISSUE_NUMBER;
@@ -186,6 +229,14 @@ function main() {
     say('No test command could be resolved for this repo (no CLAUDE.md or stack profile Test Command section).');
     say('Do NOT default to a full-suite command. Instruct the implementer agent to determine and report the narrowest test command itself.');
   }
+  say('');
+  // Stack filter for the patterns — best-effort: a detection error means
+  // "no filter" (all confirmed patterns), never a failed preflight.
+  let stacks = [];
+  try { stacks = detectStacksCached(CWD); } catch { stacks = []; }
+  printKnownPatterns(stacks);
+  say('');
+  say('Give the implementer agent this section verbatim as its **Known patterns (avoid these):** block (see prompts.md).');
   say('');
   say('Next: read skills/pickup/steps/worktree.md and proceed with Step 1.');
 }
