@@ -149,6 +149,30 @@ test('Resolves relative import when file exists', () => {
   assert(result === null || typeof result === 'string'); // May or may not find .js
 });
 
+{
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-root-'));
+  const root = path.join(outer, 'proj');
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'a.js'), '');
+  fs.writeFileSync(path.join(root, 'src', 'b.js'), '');
+  fs.writeFileSync(path.join(outer, 'secret.js'), '');
+  const from = path.join(root, 'src', 'a.js');
+
+  test('Resolves an in-root relative import', () => {
+    assert.strictEqual(relevance.resolveImport('./b', from, root), path.join(root, 'src', 'b.js'));
+  });
+
+  test('Rejects a ../ import that escapes the project root', () => {
+    assert.strictEqual(relevance.resolveImport('../../secret', from, root), null);
+  });
+
+  test('Rejects an absolute import outside the project root', () => {
+    assert.strictEqual(relevance.resolveImport(path.join(outer, 'secret.js'), from, root), null);
+  });
+
+  fs.rmSync(outer, { recursive: true, force: true });
+}
+
 section('relevance-scorer: recommendDepth');
 
 test('Seed files always get full', () => {
