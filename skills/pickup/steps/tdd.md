@@ -102,7 +102,7 @@ For each task:
    with the task's tier from preflight's `### Complexity` table. It runs
    `checkBudget` (Iron Laws excluded as fixed overhead); over budget, it
    trims Reference first, then Context, and records the trim in the
-   ledger. Dispatch the prompt it prints. The model tier is advisory
+   ledger. Write each section as a plain markdown file in `D=$(mktemp -d)`, pass `--out "$D/prompt.md"`, and dispatch the implementer pointing at that file (recipe in `prompts.md`). The model tier is advisory
    only.
 3. Once the implementer completes, dispatch BOTH reviewers — spec
    compliance and code quality — **in the same message/turn**, so they
