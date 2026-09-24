@@ -37,6 +37,29 @@ const ALLOWED_INVOCATIONS = {
 };
 
 /**
+ * Loss guard. Compressor patterns can hide failures even for allowlisted
+ * runners: the dotnet-build pattern drops code-less MSBuild errors
+ * (`error : …`), and dotnet-test reports a solution where one test project
+ * fails to compile but another passes as "All tests passed.". So any
+ * distinct original line carrying a failure signal must survive
+ * compression verbatim, or the original output stands.
+ */
+const FAILURE_SIGNAL = /: error |\berror [A-Z]+\d+:|\berror :|aborted|host process crashed/i;
+
+/**
+ * @param {string} original
+ * @param {string} compressed
+ * @returns {boolean} true when every failure-signal line survived
+ */
+function keepsFailureSignals(original, compressed) {
+  const lines = new Set(original.split('\n').map(l => l.trim()).filter(Boolean));
+  for (const line of lines) {
+    if (FAILURE_SIGNAL.test(line) && !compressed.includes(line)) return false;
+  }
+  return true;
+}
+
+/**
  * Normalize a command to a single simple invocation, or null when it is
  * compound (&&, ||, ;, |, &, $(, backticks, newlines). A single trailing
  * `2>&1` redirect is allowed.
@@ -73,6 +96,7 @@ function buildOutput(event) {
   const invocation = pattern && ALLOWED_INVOCATIONS[pattern];
   if (!invocation || !invocation.test(simple)) return null;
   if (typeof compressed !== 'string' || compressed === stdout) return null;
+  if (!keepsFailureSignals(stdout, compressed)) return null;
 
   return {
     hookSpecificOutput: {
@@ -115,4 +139,4 @@ function run(rawInput) {
   return 0;
 }
 
-module.exports = { run, buildOutput, simpleCommand, ALLOWED_INVOCATIONS };
+module.exports = { run, buildOutput, simpleCommand, keepsFailureSignals, ALLOWED_INVOCATIONS, FAILURE_SIGNAL };
