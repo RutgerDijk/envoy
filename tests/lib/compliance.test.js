@@ -433,6 +433,47 @@ test('hotfix render lists brainstorm and review as sanctioned skips', () => {
   assert.ok(/review\s+skipped \(sanctioned/.test(out), out);
 });
 
+section('hotfix: no unsanctioned skips (hotfix does pickup + finalize jobs itself)');
+
+test('hotfix trail has no plain unsanctioned skipped lines', () => {
+  const ledger = [
+    { ts: '2026-07-22T08:00:00.000Z', branch: 'hotfix/99-crash', issue: 99, type: 'skill-started', skill: 'hotfix' },
+  ];
+  const m = compliance.buildTrail({ ledger, observeLog: [], pending: ['cleanup'] });
+  for (const skill of ['brainstorm', 'pickup', 'review', 'finalize']) {
+    assert.strictEqual(m.steps.find((s) => s.skill === skill).sanctionedSkip, true, `${skill} sanctioned`);
+  }
+  const out = compliance.renderTrail(m);
+  const plain = out.split('\n').filter((l) => /✗/.test(l) && /skipped\s*$/.test(l));
+  assert.deepStrictEqual(plain, [], `unsanctioned skip lines: ${plain.join(' | ')}`);
+  assert.ok(/pickup/.test(out.split('Hotfix:')[1]), 'hotfix prose mentions pickup');
+  assert.ok(/finalize/.test(out.split('Hotfix:')[1]), 'hotfix prose mentions finalize');
+});
+
+test('pickup/finalize skips NOT sanctioned without a hotfix', () => {
+  const m = compliance.buildTrail({ ledger: [
+    { ts: 't', branch: 'b', type: 'skill-started', skill: 'review' },
+  ], observeLog: [] });
+  assert.ok(!m.steps.find((s) => s.skill === 'pickup').sanctionedSkip);
+  assert.ok(!m.steps.find((s) => s.skill === 'finalize').sanctionedSkip);
+});
+
+section('sanitizeForPrBody hardening');
+
+test('strips bidi, zero-width and C1 control characters', () => {
+  const dirty = 'a\u200Bb\u200Fc\u202Ad\u202Ee\u2066f\u2069g\u0080h\u009Fi\nj';
+  assert.strictEqual(compliance.sanitizeForPrBody(dirty, '/nohome'), 'abcdefghi\nj');
+});
+
+test('home replacement respects a path boundary', () => {
+  const home = '/Users/rutger';
+  const out = compliance.sanitizeForPrBody(
+    '/Users/rutger/x /Users/rutgerX/y /Users/rutger end /Users/rutger',
+    home
+  );
+  assert.strictEqual(out, '~/x /Users/rutgerX/y ~ end ~');
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
