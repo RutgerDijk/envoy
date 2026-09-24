@@ -95,10 +95,9 @@ function buildOutput(event) {
   if (!simple) return null;
 
   const { compressed, savings } = compress(stdout, simple);
-  const pattern = savings && savings.pattern;
-  const invocation = pattern && ALLOWED_INVOCATIONS[pattern];
+  const invocation = savings.pattern && ALLOWED_INVOCATIONS[savings.pattern];
   if (!invocation || !invocation.test(simple)) return null;
-  if (typeof compressed !== 'string' || compressed === stdout) return null;
+  if (compressed === stdout) return null;
   if (!keepsFailureSignals(stdout, compressed)) return null;
 
   return {
