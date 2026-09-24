@@ -175,7 +175,7 @@ const result = compress(rawOutput, 'dotnet test');
 - **Allowlist:** only a simple (non-compound) command whose leading tool is `dotnet build`/`test`, direct `jest`/`vitest`, or `cargo build`/`check`/`clippy` is compressed. `git`, `docker`, `npm install`/`build`/`test`, `playwright` and `cargo test` are deliberately left alone because their patterns could hide failures. Commands with `&&`, `||`, `;`, `|`, `&`, `$(`, backticks or newlines are never compressed (a single trailing `2>&1` is allowed).
 - **Loss guard:** if any line carrying a failure signal (`: error `, `error CODE:`, `error :`, `aborted`, `host process crashed`) would be dropped, the original output is passed through.
 - **Fail-open:** any error or unexpected input leaves the output unchanged. `stderr` is never touched.
-- **Cost:** one extra node process per Bash call (about 35 ms).
+- **Cost:** one extra node process per Bash call (node startup time; machine-dependent).
 
 Disable it with `ENVOY_DISABLED_HOOKS=output-compress`.
 
