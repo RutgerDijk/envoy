@@ -101,6 +101,22 @@ test('carries branch + issue label from ledger events', () => {
   assert.strictEqual(m.issue, 41);
 });
 
+test('labels the trail with the latest branch, not the pre-worktree main checkout', () => {
+  // Brainstorm and pickup preflight run in the main checkout before the
+  // worktree exists, so their events carry branch "main"; the PR's branch
+  // only appears on later events.
+  const m = compliance.buildTrail({
+    ledger: [
+      { ts: '2026-07-21T09:00:00.000Z', branch: 'main', type: 'skill-started', skill: 'brainstorm' },
+      { ts: '2026-07-21T10:00:00.000Z', branch: 'main', issue: 41, type: 'skill-started', skill: 'pickup' },
+      { ts: '2026-07-21T11:00:00.000Z', branch: 'feature/41-compliance', type: 'handoff-written', from: 'pickup', to: 'review' },
+    ],
+    observeLog: [],
+  });
+  assert.strictEqual(m.branch, 'feature/41-compliance');
+  assert.strictEqual(m.issue, 41);
+});
+
 test('surfaces handoffs from handoff-written events', () => {
   const m = compliance.buildTrail({ ledger: fullFlowLedger(), observeLog: [] });
   assert.strictEqual(m.handoffs.length, 2);
