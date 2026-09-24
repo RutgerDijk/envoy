@@ -155,8 +155,15 @@ ISSUE_NUMBER="<issue-number>" IS_FINAL_PR="${IS_FINAL_PR:-true}" node -e '
 LINKED_ISSUE_LINE=$(cat /tmp/envoy-linked-issue-line.txt)
 ```
 
+Write the body to a file, append the compliance trail, then create the PR
+from that file. The trail command prints a blank line, `## Envoy trail`, and
+the branch's ledger trail in a fenced code block (cleanup shows as `pending`
+— it cannot have run before merge; home paths are redacted). With no ledger
+it prints a "Nothing recorded" section and still exits 0, so PR creation is
+never blocked by it.
+
 ```bash
-gh pr create --title "<title>" --body "$(cat <<PREOF
+cat > /tmp/envoy-pr-body.md <<PREOF
 ## Summary
 
 <Brief description of changes>
@@ -178,7 +185,8 @@ $LINKED_ISSUE_LINE
 
 *Created with Envoy*
 PREOF
-)"
+node "${CLAUDE_SKILL_DIR}/../../lib/compliance.js" --pr-body >> /tmp/envoy-pr-body.md
+gh pr create --title "<title>" --body-file /tmp/envoy-pr-body.md
 ```
 
 ```bash
