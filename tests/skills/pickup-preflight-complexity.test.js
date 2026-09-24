@@ -408,8 +408,17 @@ console.log('\n  prompts.md / tdd.md');
 const PROMPTS = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'pickup', 'steps', 'prompts.md'), 'utf8');
 const TDD = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'pickup', 'steps', 'tdd.md'), 'utf8');
 
+// The implementer section ends at the Spec Compliance Reviewer heading. Assert
+// the marker exists so a missing heading can't silently widen the split to
+// the whole file.
+function implSection() {
+  const marker = '## Spec Compliance Reviewer Prompt';
+  assert.ok(PROMPTS.includes(marker), `prompts.md must contain "${marker}"`);
+  return PROMPTS.split(marker)[0];
+}
+
 test('prompts.md expresses the implementer prompt as buildAgentPrompt parameters', () => {
-  const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
+  const impl = implSection();
   assert.ok(impl.includes('buildAgentPrompt'), 'names buildAgentPrompt');
   assert.ok(impl.includes('checkBudget'), 'names checkBudget');
   assert.ok(impl.includes('lib/context-budget.js build'), 'uses the build CLI');
@@ -425,7 +434,7 @@ test('prompts.md expresses the implementer prompt as buildAgentPrompt parameters
 });
 
 test('the test command lives in a never-trimmed section (constraints), not context/reference', () => {
-  const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
+  const impl = implSection();
   const row = (file) => (impl.match(new RegExp(`^\\| \`${file}\`.*$`, 'm')) || [''])[0];
   assert.ok(row('constraints.md').includes('${RESOLVED_TEST_COMMAND}'), 'constraints.md carries the test command');
   assert.ok(row('context.md') && !row('context.md').includes('${RESOLVED_TEST_COMMAND}'), 'context is trimmable');
@@ -433,7 +442,7 @@ test('the test command lives in a never-trimmed section (constraints), not conte
 });
 
 test('prompts.md gives one concrete, escape-free recipe', () => {
-  const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
+  const impl = implSection();
   assert.ok(impl.includes('D=$(mktemp -d)'), 'temp dir recipe');
   assert.ok(impl.includes('${CLAUDE_SKILL_DIR}/../../contexts/discipline-tdd.md'), 'constraintsFiles via CLAUDE_SKILL_DIR');
   assert.ok(!impl.includes('<absolute path to the plugin>'), 'no vague plugin path placeholder');
@@ -442,7 +451,7 @@ test('prompts.md gives one concrete, escape-free recipe', () => {
 });
 
 test('prompts.md: default dispatch pastes the CLI-printed prompt; pointer-only dispatch is forbidden', () => {
-  const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
+  const impl = implSection();
   assert.ok(impl.includes('===== PROMPT ====='), 'paste everything after the PROMPT marker');
   assert.ok(!impl.includes('Your full instructions are in'), 'no pointer-only dispatch recommended');
   assert.ok(/do not[^.]*pointer/i.test(impl), 'explicitly forbids a pointer-only dispatch');
@@ -468,7 +477,7 @@ const CONTRACT = path.join(REPO_ROOT, 'skills', 'pickup', 'contract.json');
 // params.json (with ${CLAUDE_SKILL_DIR} resolved to the real skill dir, so the
 // real contexts/discipline files are read) and the CLI's printed prompt.
 function buildDocumentedPrompt({ withLaws = true } = {}) {
-  const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
+  const impl = implSection();
   const m = impl.match(/<<JSON\n([\s\S]*?)\nJSON\n/);
   assert.ok(m, 'prompts.md recipe has a <<JSON heredoc');
   const skillDir = path.join(REPO_ROOT, 'skills', 'pickup');
@@ -514,6 +523,30 @@ test('a pointer-only prompt would never match the invariant (why it is forbidden
     'Your full instructions are in /tmp/x/prompt.md. Read it completely before doing anything, then follow it.');
   assert.strictEqual(inv, null);
 });
+
+// ---------------------------------------------------------------------------
+console.log('\n  prompts.md — every contract invariant has a satisfying template');
+
+test('prompts.md keeps both reviewer prompt templates', () => {
+  assert.ok(PROMPTS.includes('## Spec Compliance Reviewer Prompt'), 'spec compliance heading');
+  assert.ok(PROMPTS.includes('## Code Quality Reviewer Prompt'), 'code quality heading');
+});
+
+for (const inv of loadContract(CONTRACT).agentInvariants) {
+  test(`template for "${inv.matchPrompt}" carries every promptMustContain token`, () => {
+    let text;
+    if (inv.matchPrompt === 'Implement Task') {
+      text = buildDocumentedPrompt();
+    } else {
+      const blocks = PROMPTS.match(/```\n[\s\S]*?\n```/g) || [];
+      text = blocks.find((b) => b.includes(inv.matchPrompt));
+      assert.ok(text, `no template block in prompts.md mentions "${inv.matchPrompt}"`);
+    }
+    for (const token of inv.promptMustContain || []) {
+      assert.ok(text.includes(token), `"${inv.matchPrompt}" template missing "${token}"`);
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 console.log('\n  build CLI — --out resolution');
