@@ -12,7 +12,37 @@
  * Fail-open: any error or unexpected input → no output, exit 0.
  */
 
+const fs = require('fs');
 const { compress } = require('../lib/output-compressor');
+
+/**
+ * Hook-level allowlist: compressor pattern → the leading invocation that
+ * must actually start the command. Compressor patterns are unanchored
+ * substring regexes, so without this `cat jest.config.js` would be
+ * "compressed" by the jest pattern. git-* and docker-compose are excluded.
+ */
+const ALLOWED_INVOCATIONS = {
+  'dotnet-build': /^dotnet\s+build(\s|$)/,
+  'dotnet-test':  /^dotnet\s+test(\s|$)/,
+  'npm-install':  /^npm\s+(install|ci|i)(\s|$)/,
+  'npm-build':    /^npm\s+run\s+(build|dev|start)(\s|$)/,
+  'jest-vitest':  /^(npm\s+test|npm\s+run\s+test|npx\s+(jest|vitest)|jest|vitest)(\s|$)/,
+  'playwright':   /^(npx\s+playwright\s+test|playwright\s+test)(\s|$)/,
+  'cargo':        /^cargo\s+(build|test|check|clippy)(\s|$)/,
+};
+
+/**
+ * Normalize a command to a single simple invocation, or null when it is
+ * compound (&&, ||, ;, |, &, $(, backticks, newlines). A single trailing
+ * `2>&1` redirect is allowed.
+ * @param {string} command
+ * @returns {string|null}
+ */
+function simpleCommand(command) {
+  const cmd = command.trim().replace(/\s+2>&1$/, '');
+  if (/[;&|`\n\r]|\$\(/.test(cmd)) return null;
+  return cmd;
+}
 
 /**
  * Build the hook output for a PostToolUse event, or null to leave the
@@ -30,9 +60,13 @@ function buildOutput(event) {
   const stdout = response.stdout;
   if (typeof stdout !== 'string' || stdout.length === 0) return null;
 
-  const { compressed, savings } = compress(stdout, command);
+  const simple = simpleCommand(command);
+  if (!simple) return null;
+
+  const { compressed, savings } = compress(stdout, simple);
   const pattern = savings && savings.pattern;
-  if (!pattern || pattern.endsWith('(safeguard)')) return null;
+  const invocation = pattern && ALLOWED_INVOCATIONS[pattern];
+  if (!invocation || !invocation.test(simple)) return null;
   if (typeof compressed !== 'string' || compressed === stdout) return null;
 
   return {
@@ -44,6 +78,24 @@ function buildOutput(event) {
 }
 
 /**
+ * Write synchronously to fd 1. hook-runner calls process.exit() right after
+ * run(), which drops async pipe writes beyond the 64KB pipe buffer.
+ * @param {string} text
+ */
+function writeAllSync(text) {
+  const buf = Buffer.from(text, 'utf8');
+  let offset = 0;
+  while (offset < buf.length) {
+    try {
+      offset += fs.writeSync(1, buf, offset, buf.length - offset);
+    } catch (err) {
+      if (err && err.code === 'EAGAIN') continue;
+      throw err;
+    }
+  }
+}
+
+/**
  * Hook entry point. Called by hook-runner on PostToolUse[Bash].
  * @param {string} rawInput
  * @returns {number}
@@ -51,11 +103,11 @@ function buildOutput(event) {
 function run(rawInput) {
   try {
     const output = buildOutput(JSON.parse(rawInput));
-    if (output) process.stdout.write(JSON.stringify(output) + '\n');
+    if (output) writeAllSync(JSON.stringify(output) + '\n');
   } catch {
     // Fail-open: never block or pollute context
   }
   return 0;
 }
 
-module.exports = { run, buildOutput };
+module.exports = { run, buildOutput, simpleCommand, ALLOWED_INVOCATIONS };
