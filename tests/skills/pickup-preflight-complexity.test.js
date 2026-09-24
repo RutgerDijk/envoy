@@ -304,6 +304,105 @@ test('unknown tier or missing required params → non-zero exit', () => {
 });
 
 // ---------------------------------------------------------------------------
+console.log('\n  orderForAttention — monotonic U');
+
+function secs(n) {
+  return Array.from({ length: n }, (_, i) => ({ name: `p${10 - i}`, content: 'x', priority: 10 - i }));
+}
+
+for (let n = 3; n <= 7; n++) {
+  test(`n=${n}: highest first, second last, lowest in the middle, monotonic U`, () => {
+    const ordered = budget.orderForAttention(secs(n)).map((x) => x.priority);
+    assert.strictEqual(ordered[0], 10);
+    assert.strictEqual(ordered[n - 1], 9);
+    const lowIdx = ordered.indexOf(Math.min(...ordered));
+    assert.ok([Math.floor((n - 1) / 2), Math.ceil((n - 1) / 2)].includes(lowIdx), `lowest at ${lowIdx}: ${ordered}`);
+    for (let i = 1; i <= lowIdx; i++) assert.ok(ordered[i] < ordered[i - 1], `descending to the dip: ${ordered}`);
+    for (let i = lowIdx + 1; i < n; i++) assert.ok(ordered[i] > ordered[i - 1], `ascending after the dip: ${ordered}`);
+  });
+}
+
+test('default 6-section implementer layout: Reference (lowest) in the middle, Constraints at the end', () => {
+  const p = budget.buildAgentPrompt({
+    objective: 'o', constraints: 'c', acceptance: 'a', learnings: 'l', context: 'x', reference: 'r',
+  });
+  const order = (p.match(/^## .+$/gm) || []).map((h) => h.slice(3));
+  assert.deepStrictEqual(order, ['Objective', 'Acceptance Criteria', 'Context', 'Reference', 'Known Patterns', 'Constraints']);
+});
+
+// ---------------------------------------------------------------------------
+console.log('\n  signalsFromTask — per-file layers');
+
+test('a single file never crosses layers (src/Web/Controllers/X.cs)', () => {
+  assert.strictEqual(budget.signalsFromTask({ files: ['src/Web/Controllers/X.cs'] }).crossesLayers, false);
+});
+
+test('pure Next.js (app/api/route.ts + components/ui/button.tsx) does not cross', () => {
+  assert.strictEqual(budget.signalsFromTask({ files: ['app/api/route.ts', 'components/ui/button.tsx'] }).crossesLayers, false);
+});
+
+test('docs-only (docs/api/*.md + docs/ui/*.md) does not cross', () => {
+  assert.strictEqual(budget.signalsFromTask({ files: ['docs/api/endpoints.md', 'docs/ui/screens.md'] }).crossesLayers, false);
+});
+
+test('true positive: backend/Api/X.cs + frontend/src/App.tsx crosses', () => {
+  assert.strictEqual(budget.signalsFromTask({ files: ['backend/Api/X.cs', 'frontend/src/App.tsx'] }).crossesLayers, true);
+});
+
+// ---------------------------------------------------------------------------
+console.log('\n  build CLI — section files and --out');
+
+test('per-section *File fields are read as plain markdown (no JSON escaping)', () => {
+  const dir = makeTmpDir();
+  fs.writeFileSync(path.join(dir, 'objective.md'), 'Implement "quoted" thing\nline 2\n');
+  fs.writeFileSync(path.join(dir, 'constraints.md'), '**Test command:** npm test -- -t "{{test}}"\n');
+  fs.writeFileSync(path.join(dir, 'acceptance.md'), '- works\n');
+  fs.writeFileSync(path.join(dir, 'learnings.md'), 'LEARN\n');
+  fs.writeFileSync(path.join(dir, 'context.md'), 'CTX\n');
+  fs.writeFileSync(path.join(dir, 'reference.md'), 'REF\n');
+  fs.writeFileSync(path.join(dir, 'law.md'), '# Law\n');
+  const f = writeParams(dir, {
+    objectiveFile: 'objective.md', constraintsFiles: ['law.md'], constraintsFile: 'constraints.md',
+    acceptanceFile: 'acceptance.md', learningsFile: 'learnings.md', contextFile: 'context.md', referenceFile: 'reference.md',
+  });
+  const r = runCli(dir, ['build', f, '--tier', 'standard']);
+  assert.strictEqual(r.code, 0, r.err);
+  assert.ok(r.out.includes('Implement "quoted" thing\nline 2'), r.out);
+  assert.ok(r.out.includes('# Law\n\n**Test command:** npm test -- -t "{{test}}"'), r.out);
+  for (const m of ['LEARN', 'CTX', 'REF', '- works']) assert.ok(r.out.includes(m), m);
+});
+
+test('--out writes the final prompt to a file and stdout carries only the verdict', () => {
+  const dir = makeTmpDir();
+  const f = writeParams(dir, { objective: 'OBJ', constraints: 'CON', acceptance: 'ACC' });
+  const out = path.join(dir, 'prompt.md');
+  const r = runCli(dir, ['build', f, '--tier', 'standard', '--out', out]);
+  assert.strictEqual(r.code, 0, r.err);
+  assert.ok(/^BUDGET: within/m.test(r.out), r.out);
+  assert.ok(!r.out.includes('## Objective'), 'prompt not echoed to stdout');
+  assert.ok(r.out.includes(out), 'names the output file');
+  const written = fs.readFileSync(out, 'utf8');
+  assert.ok(written.includes('## Objective\n\nOBJ') && written.includes('## Constraints\n\nCON'), written);
+});
+
+test('missing section file → non-zero exit', () => {
+  const dir = makeTmpDir();
+  const f = writeParams(dir, { objectiveFile: 'nope.md', constraints: 'C', acceptance: 'A' });
+  assert.notStrictEqual(runCli(dir, ['build', f, '--tier', 'standard']).code, 0);
+});
+
+// ---------------------------------------------------------------------------
+console.log('\n  fitToBudget — library validation');
+
+test('fitToBudget throws when objective/constraints/acceptance are missing', () => {
+  for (const missing of ['objective', 'constraints', 'acceptance']) {
+    const p = { objective: 'o', constraints: 'c', acceptance: 'a' };
+    delete p[missing];
+    assert.throws(() => budget.fitToBudget(p, budget.COMPLEXITY.standard), new RegExp(missing));
+  }
+});
+
+// ---------------------------------------------------------------------------
 console.log('\n  prompts.md / tdd.md');
 
 const PROMPTS = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'pickup', 'steps', 'prompts.md'), 'utf8');
@@ -314,7 +413,7 @@ test('prompts.md expresses the implementer prompt as buildAgentPrompt parameters
   assert.ok(impl.includes('buildAgentPrompt'), 'names buildAgentPrompt');
   assert.ok(impl.includes('checkBudget'), 'names checkBudget');
   assert.ok(impl.includes('lib/context-budget.js build'), 'uses the build CLI');
-  for (const key of ['objective', 'constraints', 'acceptance', 'learnings', 'scratchpad', 'context', 'reference']) {
+  for (const key of ['objectiveFile', 'constraintsFiles', 'constraintsFile', 'acceptanceFile', 'learningsFile', 'contextFile', 'referenceFile']) {
     assert.ok(new RegExp(`"${key}"`).test(impl), `params include "${key}"`);
   }
   for (const inj of ['${SCOPE_LAW}', '${TDD_LAW}', '${BLOCKER_PROTOCOL}', '${TASK_GRANULARITY}',
@@ -327,10 +426,20 @@ test('prompts.md expresses the implementer prompt as buildAgentPrompt parameters
 
 test('the test command lives in a never-trimmed section (constraints), not context/reference', () => {
   const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
-  const field = (key) => (impl.match(new RegExp(`^\\s*"${key}":\\s*(".*"),?$`, 'm')) || [])[1] || '';
-  assert.ok(field('constraints').includes('${RESOLVED_TEST_COMMAND}'), 'constraints carries the test command');
-  assert.ok(!field('context').includes('${RESOLVED_TEST_COMMAND}'), 'context is trimmable');
-  assert.ok(!field('reference').includes('${RESOLVED_TEST_COMMAND}'), 'reference is trimmable');
+  const row = (file) => (impl.match(new RegExp(`^\\| \`${file}\`.*$`, 'm')) || [''])[0];
+  assert.ok(row('constraints.md').includes('${RESOLVED_TEST_COMMAND}'), 'constraints.md carries the test command');
+  assert.ok(row('context.md') && !row('context.md').includes('${RESOLVED_TEST_COMMAND}'), 'context is trimmable');
+  assert.ok(row('reference.md') && !row('reference.md').includes('${RESOLVED_TEST_COMMAND}'), 'reference is trimmable');
+});
+
+test('prompts.md gives one concrete, escape-free recipe', () => {
+  const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
+  assert.ok(impl.includes('D=$(mktemp -d)'), 'temp dir recipe');
+  assert.ok(impl.includes('${CLAUDE_SKILL_DIR}/../../contexts/discipline-tdd.md'), 'constraintsFiles via CLAUDE_SKILL_DIR');
+  assert.ok(!impl.includes('<absolute path to the plugin>'), 'no vague plugin path placeholder');
+  assert.ok(impl.includes('--out'), 'writes the prompt to a file');
+  assert.ok(impl.includes('Your full instructions are in'), 'short dispatch prompt pointing at the file');
+  assert.ok(/worktree root/i.test(impl), 'CLI runs from the worktree root');
 });
 
 test('tdd.md Step 13 item 2 points at the budgeted build', () => {
