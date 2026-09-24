@@ -19,7 +19,7 @@ const { execFileSync } = require('child_process');
 
 const CWD = process.cwd();
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
-const { validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
+const { validate, validateFile } = require(path.join(REPO_ROOT, 'lib', 'validate-schema'));
 const { extractEmbeddedBlock, ensureTasksDirIgnored } = require(path.join(REPO_ROOT, 'lib', 'tasks-embed'));
 const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
@@ -133,21 +133,29 @@ function printComplexity(taskList) {
   }
 }
 
-// ### Scratchpad — under strategy parallel, several implementers write at
-// once. Step 13 creates .envoy-scratchpad.json (lib/agent-scratchpad.js)
-// with one agent per task scoped to that task's files. registerAgent does
-// not detect overlaps, so pad creation checks each task's files against the
-// agents registered before it and posts a 'conflict' message per overlap —
-// that is what getConflicts reports. A scope matches a file exactly, or as a
-// directory containing it (never by bare name prefix: a.js ≠ a.jsx).
-function normPath(p) { return String(p).replace(/\\/g, '/').replace(/^\.\//, ''); }
+// ### Scratchpad — when Step 12 chooses parallel, several implementers write
+// at once. Step 13 creates .envoy-scratchpad.json (lib/agent-scratchpad.js)
+// with one agent per parallel task scoped to that task's files.
+// registerAgent does not detect overlaps, so pad creation checks each task's
+// files against the agents registered before it and posts a 'conflict'
+// message per overlap — that is what getConflicts reports. A scope matches a
+// file exactly, or as a directory containing it (never by bare name prefix:
+// a.js ≠ a.jsx). Comparison is on normalized, case-folded posix paths.
+const SAFE_ID = /^[A-Za-z0-9._-]+$/;
+const POST_CATEGORIES = ['discovery', 'conflict', 'dependency', 'question', 'decision'];
+const BATCH_NOTE = ' — run these tasks as batch, not parallel';
+
+function normPath(p) {
+  let n = path.posix.normalize(String(p).replace(/\\/g, '/'));
+  while (n.length > 1 && n.endsWith('/')) n = n.slice(0, -1);
+  if (n.startsWith('./')) n = n.slice(2);
+  return n.toLowerCase();
+}
 
 function scopesOverlap(a, b) {
   const x = normPath(a);
   const y = normPath(b);
-  if (x === y) return true;
-  const under = (f, d) => f.startsWith(d.endsWith('/') ? d : `${d}/`);
-  return under(x, y) || under(y, x);
+  return x === y || x.startsWith(`${y}/`) || y.startsWith(`${x}/`);
 }
 
 function buildScratchpad(taskList) {
@@ -160,7 +168,7 @@ function buildScratchpad(taskList) {
         const hit = info.scope.find((s) => scopesOverlap(f, s));
         if (hit === undefined) continue;
         const via = normPath(hit) === normPath(f) ? '' : ` (via ${hit})`;
-        sp.post(pad, t.id, 'conflict', `${otherId} and ${t.id} both touch ${f}${via} — run these tasks as batch, not parallel`, [f]);
+        sp.post(pad, t.id, 'conflict', `${otherId} and ${t.id} both touch ${f}${via}${BATCH_NOTE}`, [f]);
       }
     }
     sp.registerAgent(pad, t.id, t.title, files);
@@ -168,20 +176,22 @@ function buildScratchpad(taskList) {
   return { sp, pad };
 }
 
-// Briefing-time view: computed in memory, never written to disk.
+// Briefing-time view: computed in memory for every multi-task plan (the
+// strategy is chosen at Step 12, not here), never written to disk.
 function printScratchpad(tasks) {
-  if (tasks.strategy !== 'parallel') return;
+  const list = tasks.tasks || [];
+  if (list.length < 2) return;
   say('### Scratchpad');
   say('');
   try {
-    const { sp, pad } = buildScratchpad(tasks.tasks || []);
+    const { sp, pad } = buildScratchpad(list);
     const conflicts = sp.getConflicts(pad);
-    say('Strategy parallel — Step 13 creates .envoy-scratchpad.json first (`node ${CLAUDE_SKILL_DIR}/preflight.js --init-scratchpad`), one agent per task scoped to its files.');
+    say('Needed only if Step 12 chooses parallel: Step 13 then creates .envoy-scratchpad.json first (`node ${CLAUDE_SKILL_DIR}/preflight.js --init-scratchpad [--exclude <batched ids>]`), one agent per parallel task scoped to its files.');
     if (conflicts.length === 0) {
       say('No file overlaps between tasks — all can run in parallel.');
     } else {
-      say('Conflicts (tasks sharing a file — Step 12 must run these tasks as batch, not parallel):');
-      for (const c of conflicts) say(`- ${c.message.replace(/ — run these tasks as batch, not parallel$/, '')}`);
+      say('Conflicts (tasks sharing a file — if parallel is chosen, Step 12 must run these tasks as batch and --exclude them from the pad):');
+      for (const c of conflicts) say(`- ${c.message.endsWith(BATCH_NOTE) ? c.message.slice(0, -BATCH_NOTE.length) : c.message}`);
     }
   } catch (err) {
     say(`Scratchpad conflicts could not be computed (${err && err.message ? err.message : 'unknown error'}) — treat file boundaries as uncertain and prefer batch.`);
@@ -189,21 +199,59 @@ function printScratchpad(tasks) {
   say('');
 }
 
-// Load + validate the tasks file for the scratchpad CLI modes. Throws with a
-// human-readable reason; never writes session state.
-function loadTasksOrThrow() {
-  const issueNumber = process.env.ENVOY_ISSUE_NUMBER;
-  if (!issueNumber) throw new Error('no ENVOY_ISSUE_NUMBER in environment');
-  const tasksFile = path.join(CWD, '.envoy-tasks', `${issueNumber}.json`);
-  if (!fs.existsSync(tasksFile)) throw new Error(`tasks file not found at .envoy-tasks/${issueNumber}.json`);
-  const result = validateFile('tasks', tasksFile);
-  if (!result.valid) throw new Error(`tasks file schema validation failed: ${result.errors.join('; ')}`);
-  return JSON.parse(fs.readFileSync(tasksFile, 'utf8'));
+// Issue number for the scratchpad CLI modes: later Bash calls in Step 13 do
+// not carry ENVOY_ISSUE_NUMBER, so the session seeded by the briefing run
+// (.envoy/pickup/session.json in the worktree) wins, then the env var.
+function resolveIssueNumber() {
+  try {
+    const session = JSON.parse(fs.readFileSync(path.join(CWD, '.envoy', 'pickup', 'session.json'), 'utf8'));
+    if (session && Number.isInteger(session.issueNumber) && session.issueNumber > 0) return String(session.issueNumber);
+  } catch { /* fall through */ }
+  const env = process.env.ENVOY_ISSUE_NUMBER;
+  return env && /^\d+$/.test(env) ? env : null;
 }
 
-// `--init-scratchpad` — Step 13 under parallel: write the pad in the cwd
-// (worktree root). Sequential/batch: create nothing.
-function initScratchpad() {
+// Tasks for the scratchpad CLI modes: cwd .envoy-tasks/<N>.json, else the
+// issue's embedded block (the same source main() materializes from). Throws
+// with a human-readable reason; never writes session state or tasks files.
+function loadTasksOrThrow() {
+  const issueNumber = resolveIssueNumber();
+  if (!issueNumber) throw new Error('no issue number (no .envoy/pickup/session.json issueNumber and no ENVOY_ISSUE_NUMBER)');
+  const tasksFile = path.join(CWD, '.envoy-tasks', `${issueNumber}.json`);
+  let tasks;
+  if (fs.existsSync(tasksFile)) {
+    tasks = JSON.parse(fs.readFileSync(tasksFile, 'utf8'));
+  } else {
+    tasks = payloadFromIssue(issueNumber);
+    if (!tasks) throw new Error(`tasks file not found at .envoy-tasks/${issueNumber}.json and the issue has no embedded task block`);
+    tasks.issueNumber = Number(issueNumber);
+  }
+  const result = validate('tasks', tasks);
+  if (!result.valid) throw new Error(`tasks schema validation failed: ${result.errors.join('; ')}`);
+  return tasks;
+}
+
+function loadPadOrFail(sp) {
+  if (!fs.existsSync(path.join(CWD, sp.SCRATCHPAD_FILE))) {
+    process.stderr.write(`No scratchpad at ${sp.SCRATCHPAD_FILE} — run --init-scratchpad first (parallel strategy only).\n`);
+    return null;
+  }
+  return sp.load(CWD);
+}
+
+// Registered-agent check for a CLI-supplied id: shell-safe charset, then a
+// key lookup — a file-sourced value never reaches anything else.
+function checkAgentId(pad, agentId) {
+  if (!agentId || !SAFE_ID.test(agentId)) return `Invalid task id: ${JSON.stringify(agentId || '')} — ids must match ${SAFE_ID}.`;
+  if (!pad.agents || !Object.prototype.hasOwnProperty.call(pad.agents, agentId)) return `Unknown scratchpad agent id: ${agentId} — pass a registered task id.`;
+  return null;
+}
+
+// `--init-scratchpad [--exclude <id,...>]` — Step 13 once parallel is chosen:
+// write the pad in the cwd (worktree root) with every task except the
+// excluded (batched) ones. Unconditional: the orchestrator only calls it
+// after choosing parallel.
+function initScratchpad(exclude) {
   let tasks;
   try {
     tasks = loadTasksOrThrow();
@@ -211,15 +259,23 @@ function initScratchpad() {
     say(`Scratchpad not created: ${err.message}.`);
     return 1;
   }
-  if (tasks.strategy !== 'parallel') {
-    say(`No scratchpad: strategy is ${tasks.strategy || '(not specified)'} — only parallel uses one.`);
-    return 0;
+  const list = tasks.tasks || [];
+  const ids = new Set(list.map((t) => t.id));
+  const badIds = list.map((t) => t.id).filter((id) => !SAFE_ID.test(id));
+  if (badIds.length > 0) {
+    say(`Scratchpad not created: task ids must match ${SAFE_ID} for shell use — offending: ${badIds.map((i) => JSON.stringify(i)).join(', ')}.`);
+    return 1;
+  }
+  const unknown = exclude.filter((id) => !ids.has(id));
+  if (unknown.length > 0) {
+    say(`Scratchpad not created: --exclude names unknown task id(s): ${unknown.map((i) => JSON.stringify(i)).join(', ')}.`);
+    return 1;
   }
   try {
-    const { sp, pad } = buildScratchpad(tasks.tasks || []);
+    const { sp, pad } = buildScratchpad(list.filter((t) => !exclude.includes(t.id)));
     sp.save(pad, CWD);
     const conflicts = sp.getConflicts(pad);
-    say(`Scratchpad created: ${sp.SCRATCHPAD_FILE} (${Object.keys(pad.agents).length} agents, ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'}).`);
+    say(`Scratchpad created: ${sp.SCRATCHPAD_FILE} (${Object.keys(pad.agents).length} agents, ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'}${exclude.length ? `; excluded: ${exclude.join(', ')}` : ''}).`);
     for (const c of conflicts) say(`- ${c.message}`);
     return 0;
   } catch (err) {
@@ -229,22 +285,86 @@ function initScratchpad() {
 }
 
 // `--scratchpad-briefing <task-id>` — prints formatBriefing(pad, taskId) for
-// the implementer prompt's scratchpad section. The id must be a registered
-// agent, so a file-sourced value never reaches anything but a key lookup.
+// the implementer prompt's scratchpad section.
 function scratchpadBriefing(agentId) {
   const sp = require(path.join(REPO_ROOT, 'lib', 'agent-scratchpad'));
-  if (!fs.existsSync(path.join(CWD, sp.SCRATCHPAD_FILE))) {
-    process.stderr.write(`No scratchpad at ${sp.SCRATCHPAD_FILE} — run --init-scratchpad first (parallel strategy only).\n`);
-    return 1;
-  }
-  const pad = sp.load(CWD);
-  if (!agentId || !pad.agents || !Object.prototype.hasOwnProperty.call(pad.agents, agentId)) {
-    process.stderr.write(`Unknown scratchpad agent id: ${JSON.stringify(agentId || '')} — pass a registered task id.\n`);
-    return 1;
-  }
+  const pad = loadPadOrFail(sp);
+  if (!pad) return 1;
+  const bad = checkAgentId(pad, agentId);
+  if (bad) { process.stderr.write(`${bad}\n`); return 1; }
   const brief = sp.formatBriefing(pad, agentId);
   if (brief) say(brief);
   return 0;
+}
+
+// `--scratchpad-post <task-id> <category> <message> [files...]` — an
+// implementer records a discovery/decision that affects other agents.
+function scratchpadPost(agentId, category, message, files) {
+  const sp = require(path.join(REPO_ROOT, 'lib', 'agent-scratchpad'));
+  const pad = loadPadOrFail(sp);
+  if (!pad) return 1;
+  const bad = checkAgentId(pad, agentId);
+  if (bad) { process.stderr.write(`${bad}\n`); return 1; }
+  if (!POST_CATEGORIES.includes(category)) {
+    process.stderr.write(`Invalid category: ${JSON.stringify(category || '')} — one of ${POST_CATEGORIES.join(', ')}.\n`);
+    return 1;
+  }
+  if (!message || !String(message).trim()) {
+    process.stderr.write('Missing message: --scratchpad-post <task-id> <category> <message> [files...]\n');
+    return 1;
+  }
+  sp.post(pad, agentId, category, String(message), files);
+  sp.save(pad, CWD);
+  say(`Posted [${category}] for ${agentId}.`);
+  return 0;
+}
+
+// `--scratchpad-done <task-id>` — deregisterAgent when the implementer ends.
+function scratchpadDone(agentId) {
+  const sp = require(path.join(REPO_ROOT, 'lib', 'agent-scratchpad'));
+  const pad = loadPadOrFail(sp);
+  if (!pad) return 1;
+  const bad = checkAgentId(pad, agentId);
+  if (bad) { process.stderr.write(`${bad}\n`); return 1; }
+  sp.deregisterAgent(pad, agentId);
+  sp.save(pad, CWD);
+  say(`Marked ${agentId} done.`);
+  return 0;
+}
+
+// CLI dispatch. Any unrecognized argument exits 2 — a typo must never fall
+// through to main(), which would reset session.json mid-Step 13.
+function usageError(msg) {
+  process.stderr.write(`${msg}\nUsage: preflight.js [--init-scratchpad [--exclude <id,...>] | --scratchpad-briefing <task-id> | --scratchpad-post <task-id> <category> <message> [files...] | --scratchpad-done <task-id>]\n`);
+  return 2;
+}
+
+function cli(argv) {
+  if (argv.length === 0) { main(); return 0; }
+  const [mode, ...rest] = argv;
+  switch (mode) {
+    case '--init-scratchpad': {
+      let exclude = [];
+      for (let i = 0; i < rest.length; i++) {
+        if (rest[i] === '--exclude' && i + 1 < rest.length) {
+          exclude = exclude.concat(rest[++i].split(',').map((x) => x.trim()).filter(Boolean));
+        } else {
+          return usageError(`Unknown argument: ${rest[i]}`);
+        }
+      }
+      return initScratchpad(exclude);
+    }
+    case '--scratchpad-briefing':
+      if (rest.length !== 1) return usageError('Unknown argument: --scratchpad-briefing takes exactly one <task-id>');
+      return scratchpadBriefing(rest[0]);
+    case '--scratchpad-post':
+      return scratchpadPost(rest[0], rest[1], rest[2], rest.slice(3));
+    case '--scratchpad-done':
+      if (rest.length !== 1) return usageError('Unknown argument: --scratchpad-done takes exactly one <task-id>');
+      return scratchpadDone(rest[0]);
+    default:
+      return usageError(`Unknown argument: ${mode}`);
+  }
 }
 
 function main() {
@@ -383,11 +503,4 @@ function main() {
   say('Next: read skills/pickup/steps/worktree.md and proceed with Step 1.');
 }
 
-const argv = process.argv.slice(2);
-if (argv[0] === '--init-scratchpad') {
-  process.exitCode = initScratchpad();
-} else if (argv[0] === '--scratchpad-briefing') {
-  process.exitCode = scratchpadBriefing(argv[1]);
-} else {
-  main();
-}
+process.exitCode = cli(process.argv.slice(2));

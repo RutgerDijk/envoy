@@ -79,32 +79,40 @@ For each task, identify:
 - Critical shared state (auth, global config)
 - First time implementing this type of feature
 
-**Overlapping files force batch.** Under strategy parallel, preflight's
-`### Scratchpad` section lists every conflict — two tasks whose files
-overlap (same file, or a directory scope containing it). Those tasks MUST
-fall back to batch: run them one after another, never concurrently. Only
-tasks absent from that conflict list may run in parallel. No `### Scratchpad`
-section means the tasks file's strategy is not parallel.
+**Overlapping files force batch.** For every plan with 2+ tasks,
+preflight's `### Scratchpad` section lists each conflict — two tasks whose
+files overlap (same file, or a directory scope containing it; paths are
+normalized and compared case-insensitively). If you choose parallel, the
+tasks in that conflict list MUST fall back to batch: run them one after
+another, never concurrently, and pass their ids to `--exclude` in Step 13
+so they are not registered as active parallel agents. Only tasks absent
+from the conflict list run in parallel. The list is computed whatever
+`tasks.strategy` says — the strategy is chosen here, not in the tasks file.
 
 Choose a strategy — sequential, batch, or parallel — and state rationale before proceeding.
 
 ### Step 13: Execute Tasks
 
-**Scratchpad (parallel only).** Under strategy parallel, create the shared
-scratchpad FIRST, from the worktree root, before dispatching any
-implementer:
+**Scratchpad (parallel chosen only).** If Step 12 chose parallel, create
+the shared scratchpad FIRST, from the worktree root, before dispatching
+any implementer — excluding the tasks Step 12 moved to batch:
 
 ```bash
-node ${CLAUDE_SKILL_DIR}/preflight.js --init-scratchpad
+node ${CLAUDE_SKILL_DIR}/preflight.js --init-scratchpad --exclude '<batched-id>,<batched-id>'
 ```
 
-It writes `.envoy-scratchpad.json` (gitignored; `/envoy:cleanup` removes
-it) with one registered agent per task, id = task id, scoped to that
-task's `files`, and posts a `conflict` for every overlap (reported by
+(omit `--exclude` when nothing was batched). It initializes unconditionally
+— whatever `tasks.strategy` says — reading the issue number from
+`.envoy/pickup/session.json` (then `ENVOY_ISSUE_NUMBER`) and the tasks from
+`.envoy-tasks/<N>.json` (then the issue's embedded block). It writes
+`.envoy-scratchpad.json` (gitignored; `/envoy:cleanup` removes it) with one
+registered agent per parallel task, id = task id, scoped to that task's
+`files`, and posts a `conflict` for every remaining overlap (reported by
 `getConflicts`). Each parallel implementer's prompt then carries its
-`formatBriefing` output (see `prompts.md`).
-Under strategy sequential or batch, create no scratchpad — skip this
-entirely; the init command prints `No scratchpad` and writes nothing.
+`formatBriefing` output and the post/done commands (see `prompts.md`).
+Under strategy sequential or batch, create no scratchpad — do not run the
+init command. An unrecognized argument exits 2 without touching session
+state.
 
 For each task:
 
