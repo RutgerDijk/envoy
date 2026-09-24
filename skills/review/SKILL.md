@@ -100,7 +100,7 @@ The inline `## Briefing` at the top of this skill runs `preflight.js`, which:
 - Writes `.envoy/active-skill.json`
 - Prints the issue number, branch, diff range, and stack profiles
 - Prints `### Known patterns` (confirmed patterns + team corrections via `lib/learning-loader.js`) — fills `${KNOWN_PATTERNS}` in `layers/ai-review.md`
-- Prints `### File relevance` — the files changed in `baseSha..headSha`, scored by `lib/relevance-scorer.js` (`scoreTaskRelevance` + `formatForPrompt`, maxDepth 3, capped at 200 files) — fills `${relevanceBriefing}` in `layers/ai-review.md`. If git or the diff range is unavailable it says relevance could not be computed; the STATUS tier is unaffected
+- Prints `### File relevance` — the files changed in `baseSha..headSha` plus the files they import, scored by `lib/relevance-scorer.js` (`scoreTaskRelevance` + `formatForPrompt`; heat decays per import hop, maxDepth 3, walk capped at 200 files) — fills `${relevanceBriefing}` in `layers/ai-review.md`. Forward walk only: files that import the changed files are not discovered. If git or the diff range is unavailable it says relevance could not be computed; the STATUS tier is unaffected
 
 You do NOT need to invoke library utilities yourself — preflight is the
 single source of truth for relevance scoring, stack detection, and review
