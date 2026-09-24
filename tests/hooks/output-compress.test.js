@@ -435,6 +435,60 @@ for (const [cmd, stdout] of negativeCases.slice(-7)) {
   });
 }
 
+// Loss guard: the dotnet patterns can drop code-less MSBuild errors and report
+// a solution with one uncompilable test project as "All tests passed."
+// (captured with .NET 10.0.300, paths normalized to /home/dev/Fx).
+const hostCrash = [
+  'Test run for /home/dev/Fx/Lib.Tests/bin/Debug/net10.0/Lib.Tests.dll (.NETCoreApp,Version=v10.0)',
+  'The active test run was aborted. Reason: Test host process crashed : Stack overflow.',
+  '   at Lib.OrderService.Recurse()',
+  'Test Run Aborted with error System.Exception: One or more errors occurred.',
+  'Failed!  - Failed:     0, Passed:     4, Skipped:     0, Total:     4, Duration: 84 ms - Lib.Tests.dll (net10.0)',
+  '',
+].join('\n');
+
+const guardCases = [
+  ['dotnet test', readFixture('dotnet-test-mixed-compile-failure.log'), 'captured mixed solution (compile error + Passed!)'],
+  ['dotnet build', readFixture('dotnet-build-codeless-error.log'), 'captured code-less MSBuild error'],
+  ['dotnet test', hostCrash, 'constructed test host crash'],
+];
+
+for (const [cmd, stdout, label] of guardCases) {
+  test(`loss guard leaves output unchanged: ${label}`, () => {
+    const pre = compress(stdout, cmd);
+    assert.ok(pre.savings.pattern && !pre.savings.pattern.endsWith('(safeguard)') && pre.compressed !== stdout,
+      `precondition: raw compressor would rewrite this output (pattern=${pre.savings.pattern})`);
+    assert.ok(hook.ALLOWED_INVOCATIONS[pre.savings.pattern].test(cmd), 'precondition: command is allowlisted');
+    const { code, out } = runHook(hook, JSON.stringify(bashEvent(cmd, stdout)));
+    assert.ok(code === undefined || code === 0);
+    assert.strictEqual(out, '', `hook must leave output unchanged (${label})`);
+  });
+}
+
+test('loss guard applies to every allowlisted entry (cargo drops indented code-less error → unchanged)', () => {
+  // The cargo pattern keeps only lines that start with "error", so an
+  // indented "... error : ..." line from a build script would be lost.
+  const cmd = 'cargo build';
+  const stdout = [
+    '   Compiling calc v0.1.0 (/home/dev/calc)',
+    'error[E0425]: cannot find value `x` in this scope',
+    ' --> src/main.rs:3:5',
+    '  |',
+    '3 |     x',
+    '  |     ^ not found in this scope',
+    '',
+    'For more information about this error, try `rustc --explain E0425`.',
+    "   = note: build.rs: error : custom build step failed",
+    'error: could not compile `calc` (bin "calc") due to 1 previous error',
+    '',
+  ].join('\n');
+  const pre = compress(stdout, cmd);
+  assert.ok(pre.savings.pattern === 'cargo' && pre.compressed !== stdout, 'precondition: cargo compresses');
+  assert.ok(!pre.compressed.includes('error : custom build step failed'), 'precondition: signal line dropped');
+  const { out } = runHook(hook, JSON.stringify(bashEvent(cmd, stdout)));
+  assert.strictEqual(out, '');
+});
+
 test('allowlist: jest-vitest only for direct jest/vitest; cargo excludes test; npm/playwright removed', () => {
   const A = hook.ALLOWED_INVOCATIONS;
   assert.ok(A['jest-vitest'].test('npx jest --ci') && A['jest-vitest'].test('vitest run'));
