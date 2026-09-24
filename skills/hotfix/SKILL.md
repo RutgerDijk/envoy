@@ -96,8 +96,26 @@ that the defect is fixed and nothing regressed. No "should work" assertions.
 
 ### Step 5: Open the PR
 
-Push the branch and open a PR with `Closes #<ISSUE_NUMBER>`. It goes through the
-normal CodeRabbit + CI gates. `envoy:babysit` can shepherd it from there.
+Push the branch and open a PR with `Closes #<ISSUE_NUMBER>`. The body ends with
+the `## Envoy trail` section — the compliance trail in a fenced code block, where
+brainstorm and review show as sanctioned skips and cleanup as `pending`. With no
+ledger it prints a "Nothing recorded" section and still exits 0.
+
+```bash
+git push -u origin HEAD
+cat > /tmp/envoy-pr-body.md <<PREOF
+## Defect
+
+<one-line summary of the fix>
+
+Closes #$ISSUE_NUMBER
+PREOF
+node "${CLAUDE_SKILL_DIR}/../../lib/compliance.js" --pr-body >> /tmp/envoy-pr-body.md
+gh pr create --title "fix: <one-line defect>" --body-file /tmp/envoy-pr-body.md
+```
+
+It goes through the normal CodeRabbit + CI gates. `envoy:babysit` can shepherd
+it from there.
 
 ## Integration with Envoy
 
