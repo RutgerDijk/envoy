@@ -14,6 +14,15 @@ stacks, plus team corrections from `memory/corrections.md` and
 `formatReminders()`). Paste the section body verbatim, including
 `(none recorded)` or any "could not be read" line.
 
+`${relevanceBriefing}` is populated from preflight's `### File relevance`
+output: preflight lists the files changed in the handoff's
+`baseSha..headSha` (deleted files excluded), scores them with
+`lib/relevance-scorer.js` `scoreTaskRelevance()` (import-chain walk,
+maxDepth 3, capped at the top 200 files), and renders the list with
+`formatForPrompt()`. Paste the section body verbatim, including any
+cap line or "could not be computed" line — in the latter case the
+reviewer falls back to reading the diff directly.
+
 Spawn a fresh **Sonnet** agent with NO implementation context. The agent uses **iterative retrieval** to understand codebase context:
 
 ```
