@@ -345,6 +345,107 @@ for (const [cmd, stdout] of negativeCases) {
   });
 }
 
+// Failing runs whose compression would hide the failure (report success or
+// drop the failing item's identity). Round-2 review + allowlist audit.
+const nodeTestFail = 'not ok 1 - adds\n# fail 1\n';
+const mochaFail = '1 failing\n\n1) adds:\n AssertionError\n';
+const cargoTestFail = [
+  '   Compiling calc v0.1.0 (/home/dev/calc)',
+  '    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.52s',
+  '     Running unittests src/lib.rs (target/debug/deps/calc-1a2b3c4d5e6f7a8b)',
+  '',
+  'running 2 tests',
+  'test tests::a ... ok',
+  'test tests::b ... FAILED',
+  '',
+  'failures:',
+  '',
+  '---- tests::b stdout ----',
+  "thread 'tests::b' panicked at src/lib.rs:12:9:",
+  'assertion `left == right` failed',
+  '  left: 3',
+  ' right: 4',
+  '',
+  'failures:',
+  '    tests::b',
+  '',
+  'test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s',
+  '',
+].join('\n');
+const npm10InstallFail = [
+  'npm error code ERESOLVE',
+  'npm error ERESOLVE unable to resolve dependency tree',
+  'npm error',
+  'npm error While resolving: app@1.0.0',
+  'npm error Found: react@18.2.0',
+  'npm error A complete log of this run can be found in: /home/dev/.npm/_logs/x.log',
+  '',
+].join('\n');
+const nextBuildFail = [
+  '> app@0.1.0 build',
+  '> next build',
+  '',
+  '   ▲ Next.js 15.0.0',
+  '   Creating an optimized production build ...',
+  ' ✓ Compiled successfully',
+  '   Linting and checking validity of types ...',
+  'Failed to compile.',
+  '',
+  './app/page.tsx:5:7',
+  "Type error: Type 'string' is not assignable to type 'number'.",
+  '',
+].join('\n');
+const playwrightDotFail = [
+  'Running 3 tests using 1 worker',
+  '·F·',
+  '',
+  '  1) [chromium] › tests/a.spec.ts:8:5 › has title ──────────',
+  '',
+  '    Error: Timed out 5000ms waiting for expect(page).toHaveTitle(expected)',
+  '',
+  '    Expected pattern: /Playwright/',
+  '    Received string:  "Home"',
+  '',
+  '      at /home/dev/app/tests/a.spec.ts:10:22',
+  '',
+  '  1 failed',
+  '    [chromium] › tests/a.spec.ts:8:5 › has title ─────────────',
+  '  2 passed (8.0s)',
+  '',
+].join('\n');
+
+negativeCases.push(
+  ['npm test', nodeTestFail],
+  ['npm test', mochaFail],
+  ['npm run test', nodeTestFail],
+  ['cargo test', cargoTestFail],
+  ['npm install', npm10InstallFail],
+  ['npm run build', nextBuildFail],
+  ['npx playwright test', playwrightDotFail],
+);
+
+for (const [cmd, stdout] of negativeCases.slice(-7)) {
+  test(`hides no failure: ${JSON.stringify(cmd)} / ${JSON.stringify(stdout.split('\n')[0])}`, () => {
+    const pre = compress(stdout, cmd);
+    assert.ok(pre.savings.pattern && !pre.savings.pattern.endsWith('(safeguard)') && pre.compressed !== stdout,
+      `precondition: raw compressor would rewrite this output (pattern=${pre.savings.pattern})`);
+    const { code, out } = runHook(hook, JSON.stringify(bashEvent(cmd, stdout)));
+    assert.ok(code === undefined || code === 0);
+    assert.strictEqual(out, '', `hook must leave failing output unchanged for ${cmd}`);
+  });
+}
+
+test('allowlist: jest-vitest only for direct jest/vitest; cargo excludes test; npm/playwright removed', () => {
+  const A = hook.ALLOWED_INVOCATIONS;
+  assert.ok(A['jest-vitest'].test('npx jest --ci') && A['jest-vitest'].test('vitest run'));
+  assert.ok(!A['jest-vitest'].test('npm test') && !A['jest-vitest'].test('npm run test'));
+  assert.ok(A.cargo.test('cargo build --release') && A.cargo.test('cargo clippy'));
+  assert.ok(!A.cargo.test('cargo test'));
+  for (const removed of ['npm-install', 'npm-build', 'playwright', 'git-status', 'git-log', 'git-diff-stat', 'docker-compose']) {
+    assert.strictEqual(A[removed], undefined, `${removed} must not be allowlisted`);
+  }
+});
+
 const positiveCases = [
   ['dotnet test 2>&1', testLog],
   ['dotnet test --no-build 2>&1', testLog],
