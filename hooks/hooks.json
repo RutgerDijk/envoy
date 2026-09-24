@@ -64,6 +64,11 @@
             "type": "command",
             "command": "[ -f .envoy/finalize/state.json ] && node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" post-pr-poll || exit 0",
             "_profiles": ["standard", "strict"]
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" output-compress",
+            "_profiles": ["standard", "strict"]
           }
         ]
       },

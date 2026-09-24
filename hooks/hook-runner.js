@@ -37,6 +37,7 @@ const HOOK_PROFILES = {
   // Not a hooks.json entry: lib/tab-title.js, launched detached by
   // session-start.sh and finalize, checks this itself via shouldRun().
   'tab-title':              ['standard', 'strict'],
+  'output-compress':        ['standard', 'strict'],
 };
 
 /**
