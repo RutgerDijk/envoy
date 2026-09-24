@@ -79,11 +79,11 @@ Mapping of the existing injections onto `buildAgentPrompt` sections:
     "<absolute path to the plugin>/contexts/discipline-blocker.md",
     "<absolute path to the plugin>/contexts/discipline-task-granularity.md"
   ],
-  "constraints": "**Requirements:**\n1. Follow TDD Iron Law above — NON-NEGOTIABLE\n2. Use envoy:systematic-debugging if you encounter issues\n3. Two commits minimum: test commit BEFORE implementation commit\n4. Self-review your changes before returning",
+  "constraints": "**Requirements:**\n1. Follow TDD Iron Law above — NON-NEGOTIABLE\n2. Use envoy:systematic-debugging if you encounter issues\n3. Two commits minimum: test commit BEFORE implementation commit\n4. Self-review your changes before returning\n\n**Test command:** ${RESOLVED_TEST_COMMAND}",
   "acceptance": "<task.acceptance as a bullet list>\n\n**Return:**\n- Summary of what you implemented\n- Git log showing test commit preceded implementation commit\n- Any questions or concerns (do not reduce scope — surface blockers via Blocker Protocol)\n- List of files changed",
   "learnings": "<${KNOWN_PATTERNS} — preflight's ### Known patterns body, verbatim: avoid the patterns, follow the corrections>",
   "scratchpad": "<shared scratchpad briefing when implementers run in parallel; omit otherwise>",
-  "context": "<Brief description of where this fits in the overall plan>\n\n**Sibling tasks (context only — not in scope):**\n<${SIBLING_INDEX} — buildSiblingIndex(allTasks, taskId), id + title only, never their full specs>\n\n**Test command:** ${RESOLVED_TEST_COMMAND}",
+  "context": "<Brief description of where this fits in the overall plan>\n\n**Sibling tasks (context only — not in scope):**\n<${SIBLING_INDEX} — buildSiblingIndex(allTasks, taskId), id + title only, never their full specs>",
   "reference": "<Stack context: detected stack profiles — common mistakes and best practices>"
 }
 ```
@@ -91,11 +91,11 @@ Mapping of the existing injections onto `buildAgentPrompt` sections:
 | Section | Carries |
 |---------|---------|
 | `objective` | task title + `buildTaskSlice(task)` (intent/behavior/files/…) |
-| `constraints` | `${EXECUTION_ANNOUNCE}` `${SCOPE_LAW}` `${TDD_LAW}` `${BLOCKER_PROTOCOL}` `${TASK_GRANULARITY}` (verbatim, via `constraintsFiles` — read by the CLI, so the Iron Laws are never hand-escaped into JSON) + Requirements |
+| `constraints` | `${EXECUTION_ANNOUNCE}` `${SCOPE_LAW}` `${TDD_LAW}` `${BLOCKER_PROTOCOL}` `${TASK_GRANULARITY}` (verbatim, via `constraintsFiles` — read by the CLI, so the Iron Laws are never hand-escaped into JSON) + Requirements + `${RESOLVED_TEST_COMMAND}` |
 | `acceptance` | task acceptance + the Return list |
 | `learnings` | `${KNOWN_PATTERNS}` |
 | `scratchpad` | shared-state briefing (parallel strategy only) |
-| `context` | plan context + `${SIBLING_INDEX}` + `${RESOLVED_TEST_COMMAND}` |
+| `context` | plan context + `${SIBLING_INDEX}` |
 | `reference` | stack context |
 
 **Budget rules.**
@@ -107,7 +107,9 @@ Mapping of the existing injections onto `buildAgentPrompt` sections:
   `constraints excluded (N fixed lines)`. The budget measures everything
   else.
 - **Over budget → Reference is trimmed first**, then Context if still
-  over. Objective, constraints, acceptance, learnings and scratchpad are
+  over. `${RESOLVED_TEST_COMMAND}` therefore lives in `constraints`, not
+  `context` — the implementer must never lose the test-command
+  instruction to a trim. Objective, constraints, acceptance, learnings and scratchpad are
   never trimmed. Every trim is recorded in the ledger
   (`.envoy/ledger.jsonl`, event `prompt-budget-trimmed` with `task`,
   `tier`, `trimmed`, `lines`, `maxLines`) — the CLI writes it, the
