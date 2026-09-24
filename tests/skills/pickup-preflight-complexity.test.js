@@ -532,13 +532,27 @@ test('prompts.md keeps both reviewer prompt templates', () => {
   assert.ok(PROMPTS.includes('## Code Quality Reviewer Prompt'), 'code quality heading');
 });
 
+// Fenced code blocks, paired line by line (``` or ```lang opens, ``` closes).
+function fencedBlocks(md) {
+  const blocks = [];
+  let cur = null;
+  for (const line of md.split('\n')) {
+    if (/^```/.test(line)) {
+      if (cur === null) { cur = []; } else { blocks.push(cur.join('\n')); cur = null; }
+    } else if (cur !== null) {
+      cur.push(line);
+    }
+  }
+  return blocks;
+}
+
 for (const inv of loadContract(CONTRACT).agentInvariants) {
   test(`template for "${inv.matchPrompt}" carries every promptMustContain token`, () => {
     let text;
     if (inv.matchPrompt === 'Implement Task') {
       text = buildDocumentedPrompt();
     } else {
-      const blocks = PROMPTS.match(/```\n[\s\S]*?\n```/g) || [];
+      const blocks = fencedBlocks(PROMPTS);
       text = blocks.find((b) => b.includes(inv.matchPrompt));
       assert.ok(text, `no template block in prompts.md mentions "${inv.matchPrompt}"`);
     }
