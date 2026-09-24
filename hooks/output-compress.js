@@ -19,16 +19,21 @@ const { compress } = require('../lib/output-compressor');
  * Hook-level allowlist: compressor pattern → the leading invocation that
  * must actually start the command. Compressor patterns are unanchored
  * substring regexes, so without this `cat jest.config.js` would be
- * "compressed" by the jest pattern. git-* and docker-compose are excluded.
+ * "compressed" by the jest pattern. Runners whose compression was shown to
+ * hide failures are excluded (see comments below).
  */
 const ALLOWED_INVOCATIONS = {
   'dotnet-build': /^dotnet\s+build(\s|$)/,
   'dotnet-test':  /^dotnet\s+test(\s|$)/,
-  'npm-install':  /^npm\s+(install|ci|i)(\s|$)/,
-  'npm-build':    /^npm\s+run\s+(build|dev|start)(\s|$)/,
-  'jest-vitest':  /^(npm\s+test|npm\s+run\s+test|npx\s+(jest|vitest)|jest|vitest)(\s|$)/,
-  'playwright':   /^(npx\s+playwright\s+test|playwright\s+test)(\s|$)/,
-  'cargo':        /^cargo\s+(build|test|check|clippy)(\s|$)/,
+  // Direct jest/vitest only: `npm test` may run node:test or mocha, whose
+  // failures the jest pattern cannot see (it would report "All tests passed.").
+  'jest-vitest':  /^(npx\s+(jest|vitest)|jest|vitest)(\s|$)/,
+  // No `cargo test`: the cargo pattern drops `... FAILED` and panic lines.
+  'cargo':        /^cargo\s+(build|check|clippy)(\s|$)/,
+  // Deliberately absent (compression can hide failures): npm-install (npm 10
+  // prints `npm error`, not `npm ERR!`), npm-build (Next.js "Compiled
+  // successfully" precedes type errors), playwright (dot reporter drops the
+  // failing test name), git-*, docker-compose.
 };
 
 /**
