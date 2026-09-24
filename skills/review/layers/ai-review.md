@@ -41,7 +41,7 @@ Agent({
   - <spec-path> (acceptance criteria)
   - <stack-common-mistakes> (patterns to check)
 
-  **Known patterns (flag recurrences; do not flag code that follows a team correction):**
+  **Learnings (flag recurrences of known patterns; do not flag code that follows a team correction):**
   ${KNOWN_PATTERNS}
 
   Focus areas:
