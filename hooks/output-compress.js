@@ -47,17 +47,27 @@ const ALLOWED_INVOCATIONS = {
 const FAILURE_SIGNAL = /: error |\berror [A-Z]+\d+:|\berror :|aborted|host process crashed/i;
 
 /**
+ * Failed-test identity markers: xUnit `<name> [FAIL]` and vstest
+ * `Failed <name>`. The compressor rewrites these lines, so the guard checks
+ * that the test NAME survives rather than the verbatim line.
+ */
+const FAILED_TEST_NAME = /(?:^|\s)(\S+)\s+\[FAIL\]$|^Failed\s+(\S+)/;
+
+/**
  * @param {string} original
  * @param {string} compressed
- * @returns {boolean} true when every failure-signal line survived
+ * @returns {boolean} true when every failure-signal line and failed test name survived
  */
 function keepsFailureSignals(original, compressed) {
   const lines = new Set(original.split('\n').map(l => l.trim()).filter(Boolean));
   // Set lookup, not compressed.includes(): a substring scan per line is
   // quadratic and blew past the hook timeout on 60k-error logs.
   const kept = new Set(compressed.split('\n').map(l => l.trim()));
+  const keptTokens = new Set(compressed.split(/\s+/));
   for (const line of lines) {
     if (FAILURE_SIGNAL.test(line) && !kept.has(line)) return false;
+    const m = line.match(FAILED_TEST_NAME);
+    if (m && !keptTokens.has(m[1] || m[2])) return false;
   }
   return true;
 }

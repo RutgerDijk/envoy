@@ -1,0 +1,6 @@
+Test run for /home/dev/Fx/Lib.Tests/bin/Debug/net10.0/Lib.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.63]     Lib.Tests.OrderServiceTests.Total_MultipliesQuantityByPrice [FAIL]
+[xUnit.net 00:00:00.64]     Lib.Tests.OrderServiceTests.Total_ZeroQuantity_IsZero [FAIL]
+
+Failed!  - Failed:     2, Passed:    11, Skipped:     0, Total:    13, Duration: 184 ms - Lib.Tests.dll (net10.0)
