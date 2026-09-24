@@ -35,10 +35,12 @@ const FINALIZE_SKILL = path.join(ROOT, 'skills', 'finalize', 'SKILL.md');
 const HOTFIX_SKILL = path.join(ROOT, 'skills', 'hotfix', 'SKILL.md');
 
 /** The one copy-pasteable command both skills document. */
-const CMD = 'node "${CLAUDE_SKILL_DIR}/../../lib/compliance.js" --pr-body';
+const CMD = 'node "${CLAUDE_SKILL_DIR}/../../lib/compliance.js" --pr-body "$(git rev-parse --show-toplevel)"';
 
 function makeTmp(prefix) {
-  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  execFileSync('git', ['init', '-q', dir]);
+  return dir;
 }
 
 function writeLedger(dir, events) {
@@ -49,7 +51,7 @@ function writeLedger(dir, events) {
   );
 }
 
-/** Run CMD via sh in `cwd` with CLAUDE_SKILL_DIR pointing at the given skill. */
+/** Run CMD via sh in `cwd` (a git repo) with CLAUDE_SKILL_DIR pointing at the given skill. */
 function runCmd(cwd, skill = 'finalize') {
   const r = spawnSync('sh', ['-c', CMD], {
     cwd,
@@ -97,21 +99,38 @@ test('hotfix SKILL.md contains the exact trail command', () => {
   assert.ok(fs.readFileSync(HOTFIX_SKILL, 'utf8').includes(CMD), `missing: ${CMD}`);
 });
 
-test('finalize Step 2 creates the PR from a body file that ends with the trail', () => {
-  const md = fs.readFileSync(FINALIZE_SKILL, 'utf8');
-  const step2 = md.slice(md.indexOf('### Step 2'), md.indexOf('## Integration with Envoy'));
-  assert.ok(step2.includes(CMD), 'command lives in Step 2');
-  assert.ok(/--body-file/.test(step2), 'gh pr create uses --body-file');
-  assert.ok(step2.indexOf(CMD) < step2.indexOf('gh pr create'), 'trail appended before the PR is created');
+function stepText(file, from) {
+  const md = fs.readFileSync(file, 'utf8');
+  return md.slice(md.indexOf(from), md.indexOf('## Integration with Envoy'));
+}
+
+/** Assert the body-file flow is per-worktree, chained with &&, and never uses /tmp. */
+function assertChainedBodyFile(step, bodyPath) {
+  assert.ok(!/\/tmp\/envoy-pr-body/.test(step), 'no shared /tmp body file');
+  assert.ok(step.includes(`mkdir -p ${path.dirname(bodyPath)} &&`), `mkdir -p ${path.dirname(bodyPath)} first, chained`);
+  assert.ok(step.includes(`${CMD} >> ${bodyPath} &&`), 'trail append chained into PR creation');
+  assert.ok(step.includes(`--body-file ${bodyPath}`), `gh pr create --body-file ${bodyPath}`);
+  assert.ok(step.indexOf(CMD) < step.indexOf('gh pr create'), 'trail appended before the PR is created');
+}
+
+test('finalize Step 2 builds a per-worktree, chained body file ending with the trail', () => {
+  const step2 = stepText(FINALIZE_SKILL, '### Step 2');
+  assertChainedBodyFile(step2, '.envoy/finalize/pr-body.md');
   assert.ok(/## Envoy trail/.test(step2), 'mentions the ## Envoy trail section');
 });
 
-test('hotfix PR step appends the trail and keeps Closes #', () => {
-  const md = fs.readFileSync(HOTFIX_SKILL, 'utf8');
-  const step5 = md.slice(md.indexOf('### Step 5'), md.indexOf('## Integration with Envoy'));
-  assert.ok(step5.includes(CMD), 'command lives in Step 5');
-  assert.ok(/--body-file/.test(step5), 'gh pr create uses --body-file');
+test('hotfix Step 5 builds a per-worktree, chained body file and keeps Closes #', () => {
+  const step5 = stepText(HOTFIX_SKILL, '### Step 5');
+  assertChainedBodyFile(step5, '.envoy/hotfix/pr-body.md');
   assert.ok(/Closes #/.test(step5), 'body closes the issue');
+});
+
+test('hotfix heredoc is quoted (no command substitution from Claude-filled text)', () => {
+  const step5 = stepText(HOTFIX_SKILL, '### Step 5');
+  const heredocs = step5.match(/<<\s*['"]?\w+['"]?/g) || [];
+  assert.ok(heredocs.length > 0, 'has a heredoc');
+  for (const h of heredocs) assert.ok(/<<\s*'\w+'/.test(h), `heredoc must be quoted: ${h}`);
+  assert.ok(/printf[^\n]*Closes #%s[^\n]*"\$ISSUE_NUMBER"/.test(step5), 'issue number injected via printf');
 });
 
 section('(a) finalize ledger → ## Envoy trail, code block, cleanup pending');
@@ -141,6 +160,18 @@ test('works identically when run from the hotfix skill dir', () => {
   });
 });
 
+test('run from a subdirectory still finds the worktree ledger', () => {
+  withTmp('trail-subdir-', (dir) => {
+    writeLedger(dir, finalizeLedger());
+    const sub = path.join(dir, 'src', 'deep');
+    fs.mkdirSync(sub, { recursive: true });
+    const r = runCmd(sub);
+    assert.strictEqual(r.status, 0, r.stderr);
+    assert.ok(/✓\s+finalize/.test(r.stdout), r.stdout);
+    assert.ok(!/nothing recorded/i.test(r.stdout));
+  });
+});
+
 section('(b) hotfix ledger → brainstorm + review sanctioned skips');
 
 test('hotfix trail shows brainstorm and review as sanctioned skips', () => {
@@ -155,6 +186,8 @@ test('hotfix trail shows brainstorm and review as sanctioned skips', () => {
     assert.ok(/brainstorm\s+skipped \(sanctioned/.test(block.body), block.body);
     assert.ok(/review\s+skipped \(sanctioned/.test(block.body), block.body);
     assert.ok(/cleanup\s+pending/.test(block.body), block.body);
+    const plain = block.body.split('\n').filter((l) => /✗/.test(l) && /skipped\s*$/.test(l));
+    assert.deepStrictEqual(plain, [], 'no unsanctioned skips on a hotfix trail');
   });
 });
 
