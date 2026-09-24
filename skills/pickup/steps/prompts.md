@@ -81,7 +81,7 @@ buildSiblingIndex(allTasks, taskId). Never their full specs.>
 **Stack context:**
 <Detected stack profiles — common mistakes and best practices>
 
-**Known patterns (avoid these):**
+**Learnings (preflight's ### Known patterns — avoid the patterns, follow the corrections):**
 ${KNOWN_PATTERNS}
 
 **Test command:** ${RESOLVED_TEST_COMMAND}
