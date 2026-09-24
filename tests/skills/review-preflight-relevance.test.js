@@ -136,11 +136,10 @@ test('import chain -> seed scores full, two hops away scores skim or skip', () =
   const s = section(out);
   assert.ok(s !== null, `expected a ### File relevance section\n${out}`);
   assert.strictEqual(labelOf(s, 'src/seed.js'), 'full', `seed file must score full\n${s}`);
-  // Two hops away: either listed as skim/skip, or absent — the scorer drops
-  // non-seed scores below 0.1, which is the skip level.
+  const oneHop = labelOf(s, 'src/a.js');
+  assert.ok(oneHop === 'focused' || oneHop === 'skim', `one-hop file must be listed as focused or skim, got ${oneHop}\n${s}`);
   const twoHop = labelOf(s, 'src/b.js');
-  assert.ok(twoHop === null || twoHop === 'skim' || twoHop === 'skip',
-    `two-hop file must be skim or skip, got ${twoHop}\n${s}`);
+  assert.ok(twoHop === 'skim' || twoHop === 'skip', `two-hop file must be listed as skim or skip, got ${twoHop}\n${s}`);
   assert.ok(!/^## Relevant Files/m.test(s), 'formatForPrompt level-2 heading must not leak into the ### section');
 });
 
@@ -217,11 +216,48 @@ test('more than 200 scored files -> capped at 200 and the cap is reported with m
   assert.strictEqual(status, 'ok', out);
   const s = section(out);
   assert.ok(s !== null, 'expected a ### File relevance section');
-  assert.ok(/cap(ped)? .*200/i.test(s), `expected the 200-file cap to be reported\n${s}`);
+  assert.ok(/capped at 200 files/i.test(s), `expected the 200-file cap to be reported\n${s}`);
   assert.ok(/maxDepth\s*3/.test(s), `expected the maxDepth used to be reported\n${s}`);
   // formatForPrompt lists 15 and summarises the rest; after capping, the
   // remainder is 200 - 15.
   assert.ok(s.includes('and 185 more'), `expected results truncated to 200\n${s}`);
+});
+
+test('one seed importing 300 files -> the walk itself is capped and reported', () => {
+  const dir = makeTmpDir();
+  initRepo(dir);
+  ignoreEnvoy(dir);
+  for (let i = 0; i < 300; i++) writeFile(dir, `m/f${i}.js`, 'module.exports = 1;\n');
+  writeFile(dir, 'seed.js', 'module.exports = 0;\n');
+  const baseSha = commitAll(dir, 'base');
+  writeFile(dir, 'seed.js', Array.from({ length: 300 }, (_, i) => `require('./m/f${i}');`).join('\n') + '\n');
+  const headSha = commitAll(dir, 'seed imports 300 files');
+  writeHandoff(dir, { baseSha, headSha });
+
+  const { status, out } = runPreflight(dir);
+  assert.strictEqual(status, 'ok', out);
+  const s = section(out);
+  assert.ok(s !== null, 'expected a ### File relevance section');
+  assert.strictEqual(labelOf(s, 'seed.js'), 'full');
+  assert.ok(/capped at 200 files/i.test(s), `expected the walk cap to be reported\n${s}`);
+  assert.ok(!/stopped at maxDepth/i.test(s), `a file-count cap must not be reported as a depth stop\n${s}`);
+});
+
+test('non-ASCII file names are scored under their real path (git -z output)', () => {
+  const dir = makeTmpDir();
+  initRepo(dir);
+  ignoreEnvoy(dir);
+  writeFile(dir, 'base.js', 'module.exports = 0;\n');
+  const baseSha = commitAll(dir, 'base');
+  writeFile(dir, 'caf\u00e9 file.js', 'module.exports = 1;\n');
+  const headSha = commitAll(dir, 'special name');
+  writeHandoff(dir, { baseSha, headSha });
+
+  const { status, out } = runPreflight(dir);
+  assert.strictEqual(status, 'ok', out);
+  const s = section(out);
+  assert.ok(s !== null, 'expected a ### File relevance section');
+  assert.strictEqual(labelOf(s, 'caf\u00e9 file.js'), 'full', `expected the unquoted path\n${s}`);
 });
 
 for (const d of tmpRoots) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
