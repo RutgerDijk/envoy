@@ -362,6 +362,78 @@ test('readObserveLog missing file → []', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// Pending vs skipped (render-time phase) + hotfix brainstorm
+// ═══════════════════════════════════════════════════════════════════
+
+section('pending: steps that cannot have run yet');
+
+function preMergeLedger() {
+  return fullFlowLedger().filter((e) => !(e.type === 'skill-started' && e.skill === 'cleanup'));
+}
+
+test('buildTrail marks a not-yet-run step listed in pending as pending', () => {
+  const m = compliance.buildTrail({ ledger: preMergeLedger(), observeLog: [], pending: ['cleanup'] });
+  const c = m.steps.find((s) => s.skill === 'cleanup');
+  assert.strictEqual(c.ran, false);
+  assert.strictEqual(c.pending, true);
+});
+
+test('pending never overrides a step that did run', () => {
+  const m = compliance.buildTrail({ ledger: fullFlowLedger(), observeLog: [], pending: ['cleanup'] });
+  const c = m.steps.find((s) => s.skill === 'cleanup');
+  assert.strictEqual(c.ran, true);
+  assert.ok(!c.pending);
+});
+
+test('without a pending option, a missing cleanup stays skipped (opt-in)', () => {
+  const m = compliance.buildTrail({ ledger: preMergeLedger(), observeLog: [] });
+  assert.ok(!m.steps.find((s) => s.skill === 'cleanup').pending);
+});
+
+test('renderTrail shows pending distinctly from skipped', () => {
+  const out = compliance.renderTrail(
+    compliance.buildTrail({ ledger: preMergeLedger(), observeLog: [], pending: ['cleanup'] })
+  );
+  const line = out.split('\n').find((l) => /\bcleanup\b/.test(l));
+  assert.ok(/pending/.test(line), `cleanup line says pending: ${line}`);
+  assert.ok(!/skipped/.test(line), 'cleanup line does not say skipped');
+  assert.ok(!/✗\s+cleanup/.test(out), 'pending is not rendered with ✗');
+});
+
+test('compliance(dir, {pending}) forwards the pending option', () => {
+  const dir = makeTmp('compliance-pending-');
+  try {
+    writeLines(dir, '.envoy/ledger.jsonl', preMergeLedger());
+    const out = compliance.compliance(dir, { pending: ['cleanup'] });
+    assert.ok(/cleanup\s+pending/.test(out), out);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+section('hotfix: brainstorm shown as a sanctioned skip');
+
+test('brainstorm present + sanctionedSkip when hotfix ran without brainstorm', () => {
+  const ledger = [
+    { ts: '2026-07-22T08:00:00.000Z', branch: 'hotfix/99-crash', issue: 99, type: 'skill-started', skill: 'hotfix' },
+  ];
+  const m = compliance.buildTrail({ ledger, observeLog: [] });
+  const b = m.steps.find((s) => s.skill === 'brainstorm');
+  assert.ok(b, 'brainstorm step present under hotfix');
+  assert.strictEqual(b.ran, false);
+  assert.strictEqual(b.sanctionedSkip, true);
+});
+
+test('hotfix render lists brainstorm and review as sanctioned skips', () => {
+  const ledger = [
+    { ts: '2026-07-22T08:00:00.000Z', branch: 'hotfix/99-crash', issue: 99, type: 'skill-started', skill: 'hotfix' },
+  ];
+  const out = compliance.renderTrail(compliance.buildTrail({ ledger, observeLog: [] }));
+  assert.ok(/brainstorm\s+skipped \(sanctioned/.test(out), out);
+  assert.ok(/review\s+skipped \(sanctioned/.test(out), out);
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
 
