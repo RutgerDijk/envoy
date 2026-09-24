@@ -109,6 +109,7 @@ the issue number is added by `printf`.
 
 ```bash
 git push -u origin HEAD &&
+: "${ISSUE_NUMBER:?set ISSUE_NUMBER (Step 1) in this shell first}" &&
 mkdir -p .envoy/hotfix &&
 cat > .envoy/hotfix/pr-body.md <<'PREOF' &&
 ## Defect
