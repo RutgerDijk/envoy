@@ -98,20 +98,26 @@ that the defect is fixed and nothing regressed. No "should work" assertions.
 
 Push the branch and open a PR with `Closes #<ISSUE_NUMBER>`. The body ends with
 the `## Envoy trail` section — the compliance trail in a fenced code block, where
-brainstorm and review show as sanctioned skips and cleanup as `pending`. With no
+brainstorm, pickup, review, and finalize show as sanctioned skips (hotfix does
+the pickup and finalize jobs itself) and cleanup as `pending`. With no
 ledger it prints a "Nothing recorded" section and still exits 0.
 
+The body file is per-worktree (`.envoy/hotfix/pr-body.md`, gitignored) and the
+steps are one `&&` chain, so a failed write never ships a stale body. The
+heredoc is quoted (`<<'PREOF'`) so text you fill in is never shell-expanded;
+the issue number is added by `printf`.
+
 ```bash
-git push -u origin HEAD
-cat > /tmp/envoy-pr-body.md <<PREOF
+git push -u origin HEAD &&
+mkdir -p .envoy/hotfix &&
+cat > .envoy/hotfix/pr-body.md <<'PREOF' &&
 ## Defect
 
 <one-line summary of the fix>
-
-Closes #$ISSUE_NUMBER
 PREOF
-node "${CLAUDE_SKILL_DIR}/../../lib/compliance.js" --pr-body >> /tmp/envoy-pr-body.md
-gh pr create --title "fix: <one-line defect>" --body-file /tmp/envoy-pr-body.md
+printf '\nCloses #%s\n' "$ISSUE_NUMBER" >> .envoy/hotfix/pr-body.md &&
+node "${CLAUDE_SKILL_DIR}/../../lib/compliance.js" --pr-body "$(git rev-parse --show-toplevel)" >> .envoy/hotfix/pr-body.md &&
+gh pr create --title "fix: <one-line defect>" --body-file .envoy/hotfix/pr-body.md
 ```
 
 It goes through the normal CodeRabbit + CI gates. `envoy:babysit` can shepherd
