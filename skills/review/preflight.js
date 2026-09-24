@@ -77,7 +77,8 @@ function printKnownPatterns(stackNames) {
   if (!reminders && unreadable.length === 0) say('(none recorded)');
 }
 
-// ### File relevance — files changed in baseSha..headSha, scored by
+// ### File relevance — files changed in baseSha..headSha plus the files
+// they import (forward walk only; importers are not discovered), scored by
 // lib/relevance-scorer.js scoreTaskRelevance() and rendered by
 // formatForPrompt(). The orchestrator fills layers/ai-review.md's
 // ${relevanceBriefing} from this section. Fail-soft: any error (no git,
@@ -104,30 +105,36 @@ function printFileRelevance(handoff) {
     let names;
     try {
       root = gitOut(['rev-parse', '--show-toplevel']).trim();
-      // --diff-filter=d drops deleted files; paths are relative to the
-      // repo top level, so resolve them against it.
-      names = gitOut(['diff', '--name-only', '--diff-filter=d', `${baseSha}..${headSha}`]);
+      // -z: NUL-separated, unquoted paths (core.quotepath would otherwise
+      // escape non-ASCII names). --diff-filter=d drops deleted files. Paths
+      // are relative to the repo top level, so resolve them against it.
+      names = gitOut(['diff', '-z', '--name-only', '--diff-filter=d', `${baseSha}..${headSha}`]);
     } catch {
       throw new Error('git unavailable or diff range unknown');
     }
-    const changed = names.split('\n').map((l) => l.trim()).filter(Boolean).map((rel) => path.join(root, rel));
+    const changed = names.split('\0').filter(Boolean).map((rel) => path.join(root, rel));
     if (changed.length === 0) throw new Error('no changed files in diff range');
 
     const { scoreTaskRelevance, formatForPrompt } = require(path.join(REPO_ROOT, 'lib', 'relevance-scorer'));
-    let results = scoreTaskRelevance(changed, root, { maxDepth: RELEVANCE_MAX_DEPTH });
-    const total = results.length;
-    if (total > RELEVANCE_FILE_CAP) results = results.slice(0, RELEVANCE_FILE_CAP);
+    const results = scoreTaskRelevance(changed, root, { maxDepth: RELEVANCE_MAX_DEPTH, maxFiles: RELEVANCE_FILE_CAP });
     // formatForPrompt opens with a level-2 "## Relevant Files" heading;
     // this section already has its own heading, so drop it.
     const body = formatForPrompt(results).replace(/^## Relevant Files\n?/, '');
     if (!body) throw new Error('scorer returned no files');
     say(body);
-    if (total > RELEVANCE_FILE_CAP) {
-      say(`Graph walk stopped at maxDepth ${RELEVANCE_MAX_DEPTH}; ${total} files scored, capped at the top ${RELEVANCE_FILE_CAP}.`);
+    if (results.walk && results.walk.capped) {
+      say(`Import walk capped at ${results.walk.maxFiles} files (maxDepth ${results.walk.maxDepth}) — files beyond the cap were not scored.`);
     }
   } catch (err) {
     say(`File relevance could not be computed: ${err && err.message ? err.message : String(err)} — review the diff directly.`);
   }
+}
+
+// Print the ### File relevance section and the orchestrator instruction.
+function printRelevanceBriefing(handoff) {
+  printFileRelevance(handoff);
+  say('');
+  say('Fill ${relevanceBriefing} in layers/ai-review.md with this section verbatim.');
 }
 
 function isGitRepo() {
@@ -140,8 +147,11 @@ function isGitRepo() {
 }
 
 function gitHasSha(sha) {
+  // The SHA comes from the handoff file: validate it and pass it as an
+  // argument, never through a shell string.
+  if (!SHA_RE.test(String(sha))) return false;
   try {
-    execSync(`git cat-file -e ${sha}`, { cwd: CWD, stdio: 'ignore' });
+    execFileSync('git', ['cat-file', '-e', sha], { cwd: CWD, stdio: 'ignore' });
     return true;
   } catch {
     return false;
@@ -218,9 +228,7 @@ function main() {
       say('');
       say('Give the Layer 1 reviewer this section verbatim as its **Known patterns** block (see layers/ai-review.md).');
       say('');
-      printFileRelevance(handoff);
-      say('');
-      say('Fill ${relevanceBriefing} in layers/ai-review.md with this section verbatim.');
+      printRelevanceBriefing(handoff);
     }
     return;
   }
@@ -243,9 +251,7 @@ function main() {
   say('');
   say('Give the Layer 1 reviewer this section verbatim as its **Known patterns** block (see layers/ai-review.md).');
   say('');
-  printFileRelevance(handoff);
-  say('');
-  say('Fill ${relevanceBriefing} in layers/ai-review.md with this section verbatim.');
+  printRelevanceBriefing(handoff);
   say('');
   say('Next: run pre-review setup from skills/review/SKILL.md, then proceed layer by layer (layers/lint.md, layers/cleanup.md, …).');
 }

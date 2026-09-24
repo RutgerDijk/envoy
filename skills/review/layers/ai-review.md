@@ -16,12 +16,15 @@ stacks, plus team corrections from `memory/corrections.md` and
 
 `${relevanceBriefing}` is populated from preflight's `### File relevance`
 output: preflight lists the files changed in the handoff's
-`baseSha..headSha` (deleted files excluded), scores them with
-`lib/relevance-scorer.js` `scoreTaskRelevance()` (import-chain walk,
-maxDepth 3, capped at the top 200 files), and renders the list with
-`formatForPrompt()`. Paste the section body verbatim, including any
-cap line or "could not be computed" line — in the latter case the
-reviewer falls back to reading the diff directly.
+`baseSha..headSha` (deleted files excluded) and scores them with
+`lib/relevance-scorer.js` `scoreTaskRelevance()` — changed files are
+`full`, and heat decays per hop along the forward import chain
+(1 hop ≈ focused, 2 ≈ skim, 3 ≈ skip; maxDepth 3, walk capped at 200
+files) — then renders the list with `formatForPrompt()`. Limitation:
+the walk only follows what the changed files import; files that import
+the changed files are NOT discovered. Paste the section body verbatim,
+including any cap line or "could not be computed" line — in the latter
+case the reviewer falls back to reading the diff directly.
 
 Spawn a fresh **Sonnet** agent with NO implementation context. The agent uses **iterative retrieval** to understand codebase context:
 
