@@ -264,7 +264,7 @@ Override individual hooks: `ENVOY_DISABLED_HOOKS=cost-tracker,learning-extractor
 
 The `output-compress` hook (`hooks/output-compress.js`, `standard` and `strict` profiles) runs `lib/output-compressor.js` over Bash output. It only compresses simple `dotnet build`/`test`, direct `jest`/`vitest` and `cargo build`/`check`/`clippy` commands, and passes the original through whenever a failure line would be lost. Disable it with `ENVOY_DISABLED_HOOKS=output-compress`.
 
-The other context-efficiency modules are wired through skill preflights: pickup prints known patterns, task complexity and (for parallel work) a shared scratchpad; review prints known patterns and file relevance; finalize and hotfix append an Envoy trail to the PR body. See the Context Efficiency wiki page for details.
+The other context-efficiency modules are wired through skill preflights and CLI steps: pickup preflight prints known patterns, task complexity and (for parallel work) a shared scratchpad; review preflight prints known patterns and file relevance; finalize and hotfix run `lib/compliance.js --pr-body` to append an Envoy trail to the PR body. See the Context Efficiency wiki page for details.
 
 ## Self-Learning System
 
