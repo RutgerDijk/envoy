@@ -108,6 +108,31 @@ function printKnownPatterns(stackNames) {
   if (!reminders && unreadable.length === 0) say('(none recorded)');
 }
 
+// ### Complexity — per-task tier from lib/context-budget.js classifyComplexity,
+// with signals (files count, behavior count, backend/frontend crossing)
+// derived by signalsFromTask. The model tier is advisory text for the
+// orchestrator; it never selects the Agent model automatically. Fail-soft:
+// the module is required inside the try so a load or classification error
+// prints a note and never touches the STATUS banner.
+function printComplexity(taskList) {
+  say('### Complexity');
+  say('');
+  try {
+    const budget = require(path.join(REPO_ROOT, 'lib', 'context-budget'));
+    const rows = taskList.map((t) => {
+      const tier = budget.classifyComplexity(budget.signalsFromTask(t));
+      return `| ${t.id} | ${tier.label} | ${tier.modelTier} |`;
+    });
+    say('| Task | Tier | Model tier |');
+    say('|------|------|------------|');
+    for (const r of rows) say(r);
+    say('');
+    say('Model tier is advisory. Pass each task\'s tier as --tier to `lib/context-budget.js build` when assembling its implementer prompt (see prompts.md).');
+  } catch (err) {
+    say(`Tasks could not be classified (${err && err.message ? err.message : 'unknown error'}) — build implementer prompts with --tier standard.`);
+  }
+}
+
 function main() {
   const issueNumber = process.env.ENVOY_ISSUE_NUMBER;
 
@@ -202,6 +227,8 @@ function main() {
   say('');
   say('Tasks:');
   for (const t of tasks.tasks) say(`  - ${t.id}: ${t.title}`);
+  say('');
+  printComplexity(tasks.tasks);
   say('');
   say('### Test Command');
   say('');

@@ -313,7 +313,7 @@ test('prompts.md expresses the implementer prompt as buildAgentPrompt parameters
   const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
   assert.ok(impl.includes('buildAgentPrompt'), 'names buildAgentPrompt');
   assert.ok(impl.includes('checkBudget'), 'names checkBudget');
-  assert.ok(impl.includes('node lib/context-budget.js build'), 'uses the build CLI');
+  assert.ok(impl.includes('lib/context-budget.js build'), 'uses the build CLI');
   for (const key of ['objective', 'constraints', 'acceptance', 'learnings', 'scratchpad', 'context', 'reference']) {
     assert.ok(new RegExp(`"${key}"`).test(impl), `params include "${key}"`);
   }

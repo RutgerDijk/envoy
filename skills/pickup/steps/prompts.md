@@ -16,7 +16,7 @@ ever injecting another task's full spec.
 
 ## Implementer Agent Prompt
 
-Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`, `${SIBLING_INDEX}`, `${RESOLVED_TEST_COMMAND}`, `${KNOWN_PATTERNS}`
+Built with `buildAgentPrompt` + `checkBudget` (see below). Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`, `${SIBLING_INDEX}`, `${RESOLVED_TEST_COMMAND}`, `${KNOWN_PATTERNS}`
 
 `${RESOLVED_TEST_COMMAND}` is populated from preflight's `### Test
 Command` output (preflight.js resolves it once via
@@ -49,55 +49,79 @@ section body verbatim: its `**Known patterns (avoid these):**` and
 exists, and any "could not be read" line naming an unreadable learnings
 file (the task proceeds either way — the STATUS banner is unaffected).
 
+### Assembled with `buildAgentPrompt` and budget-checked
+
+The implementer prompt is NOT hand-assembled. Write its sections as
+`buildAgentPrompt` parameters (`lib/context-budget.js`) to a params file
+in the scratchpad / a temp dir (never the repo's `.envoy/`), then build
+it with the task's tier from preflight's `### Complexity` table:
+
+```bash
+node ${CLAUDE_SKILL_DIR}/../../lib/context-budget.js build <params.json> --tier <tier> --task <task-id> --issue <issue>
+```
+
+The CLI builds the prompt with `buildAgentPrompt(params)` (LITM-ordered
+sections), checks it with `checkBudget` for that tier, and prints a
+`BUDGET: within|over (...)` verdict followed by the final prompt after
+`===== PROMPT =====`. Pass everything after that line to the Agent call
+unchanged. The file is read with `fs` — no shell interpolation of any
+field.
+
+Mapping of the existing injections onto `buildAgentPrompt` sections:
+
+```json
+{
+  "objective": "Implement Task N: <task title>\n\n**Full task specification:**\n<buildTaskSlice(task) — intent, behavior, files, acceptance, contracts, outOfScope for THIS task only>",
+  "constraintsFiles": [
+    "<absolute path to the plugin>/contexts/execution-announce.md",
+    "<absolute path to the plugin>/contexts/discipline-scope.md",
+    "<absolute path to the plugin>/contexts/discipline-tdd.md",
+    "<absolute path to the plugin>/contexts/discipline-blocker.md",
+    "<absolute path to the plugin>/contexts/discipline-task-granularity.md"
+  ],
+  "constraints": "**Requirements:**\n1. Follow TDD Iron Law above — NON-NEGOTIABLE\n2. Use envoy:systematic-debugging if you encounter issues\n3. Two commits minimum: test commit BEFORE implementation commit\n4. Self-review your changes before returning",
+  "acceptance": "<task.acceptance as a bullet list>\n\n**Return:**\n- Summary of what you implemented\n- Git log showing test commit preceded implementation commit\n- Any questions or concerns (do not reduce scope — surface blockers via Blocker Protocol)\n- List of files changed",
+  "learnings": "<${KNOWN_PATTERNS} — preflight's ### Known patterns body, verbatim: avoid the patterns, follow the corrections>",
+  "scratchpad": "<shared scratchpad briefing when implementers run in parallel; omit otherwise>",
+  "context": "<Brief description of where this fits in the overall plan>\n\n**Sibling tasks (context only — not in scope):**\n<${SIBLING_INDEX} — buildSiblingIndex(allTasks, taskId), id + title only, never their full specs>\n\n**Test command:** ${RESOLVED_TEST_COMMAND}",
+  "reference": "<Stack context: detected stack profiles — common mistakes and best practices>"
+}
+```
+
+| Section | Carries |
+|---------|---------|
+| `objective` | task title + `buildTaskSlice(task)` (intent/behavior/files/…) |
+| `constraints` | `${EXECUTION_ANNOUNCE}` `${SCOPE_LAW}` `${TDD_LAW}` `${BLOCKER_PROTOCOL}` `${TASK_GRANULARITY}` (verbatim, via `constraintsFiles` — read by the CLI, so the Iron Laws are never hand-escaped into JSON) + Requirements |
+| `acceptance` | task acceptance + the Return list |
+| `learnings` | `${KNOWN_PATTERNS}` |
+| `scratchpad` | shared-state briefing (parallel strategy only) |
+| `context` | plan context + `${SIBLING_INDEX}` + `${RESOLVED_TEST_COMMAND}` |
+| `reference` | stack context |
+
+**Budget rules.**
+
+- The Iron Laws in `constraints` are fixed, mandatory overhead (SKILL.md
+  injects them verbatim) — about 118 lines, which alone would put every
+  prompt over the `standard` 120-line budget. They are therefore
+  **excluded from the budgeted count**; the verdict line states
+  `constraints excluded (N fixed lines)`. The budget measures everything
+  else.
+- **Over budget → Reference is trimmed first**, then Context if still
+  over. Objective, constraints, acceptance, learnings and scratchpad are
+  never trimmed. Every trim is recorded in the ledger
+  (`.envoy/ledger.jsonl`, event `prompt-budget-trimmed` with `task`,
+  `tier`, `trimmed`, `lines`, `maxLines`) — the CLI writes it, the
+  dispatcher does not hand-edit the ledger.
+- A prompt still over budget after both trims is dispatched as-is with
+  the `BUDGET: over` verdict noted; the tier is advisory.
+- The model tier (haiku/sonnet/opus) is **advisory text only** — it does
+  not change the Agent tool's model.
+
 ```
 Agent({
   subagent_type: "general-purpose",
   description: "Implement Task N",
-  prompt: `${EXECUTION_ANNOUNCE}
-
-${SCOPE_LAW}
-
-${TDD_LAW}
-
-${BLOCKER_PROTOCOL}
-
-${TASK_GRANULARITY}
-
----
-
-Implement Task N: <task title>
-
-**Context:**
-<Brief description of where this fits in the overall plan>
-
-**Full task specification:**
-<Built with lib/task-payload.js buildTaskSlice(task) — intent, behavior,
-files, acceptance, contracts, outOfScope for THIS task only>
-
-**Sibling tasks (context only — not in scope):**
-<${SIBLING_INDEX} — one line per other task, id + title only, via
-buildSiblingIndex(allTasks, taskId). Never their full specs.>
-
-**Stack context:**
-<Detected stack profiles — common mistakes and best practices>
-
-**Learnings (preflight's ### Known patterns — avoid the patterns, follow the corrections):**
-${KNOWN_PATTERNS}
-
-**Test command:** ${RESOLVED_TEST_COMMAND}
-
-**Requirements:**
-1. Follow TDD Iron Law above — NON-NEGOTIABLE
-2. Use envoy:systematic-debugging if you encounter issues
-3. Two commits minimum: test commit BEFORE implementation commit
-4. Self-review your changes before returning
-
-**Return:**
-- Summary of what you implemented
-- Git log showing test commit preceded implementation commit
-- Any questions or concerns (do not reduce scope — surface blockers via Blocker Protocol)
-- List of files changed
-`
+  prompt: `<everything after ===== PROMPT ===== from the build CLI>`
 })
 ```
 

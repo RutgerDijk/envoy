@@ -96,7 +96,14 @@ For each task:
    from preflight's `### Test Command` output — the concrete filtered
    command when resolved, or the explicit "determine and report the
    narrowest command yourself" instruction when not; never default to
-   the full suite.
+   the full suite. Assemble the prompt with `buildAgentPrompt` — write
+   the sections as params (mapping in `prompts.md`) and run
+   `node ${CLAUDE_SKILL_DIR}/../../lib/context-budget.js build <params.json> --tier <tier> --task <id> --issue <n>`
+   with the task's tier from preflight's `### Complexity` table. It runs
+   `checkBudget` (Iron Laws excluded as fixed overhead); over budget, it
+   trims Reference first, then Context, and records the trim in the
+   ledger. Dispatch the prompt it prints. The model tier is advisory
+   only.
 3. Once the implementer completes, dispatch BOTH reviewers — spec
    compliance and code quality — **in the same message/turn**, so they
    run concurrently. Both are read-only (review-only prompts, no
