@@ -79,9 +79,32 @@ For each task, identify:
 - Critical shared state (auth, global config)
 - First time implementing this type of feature
 
+**Overlapping files force batch.** Under strategy parallel, preflight's
+`### Scratchpad` section lists every conflict — two tasks whose files
+overlap (same file, or a directory scope containing it). Those tasks MUST
+fall back to batch: run them one after another, never concurrently. Only
+tasks absent from that conflict list may run in parallel. No `### Scratchpad`
+section means the tasks file's strategy is not parallel.
+
 Choose a strategy — sequential, batch, or parallel — and state rationale before proceeding.
 
 ### Step 13: Execute Tasks
+
+**Scratchpad (parallel only).** Under strategy parallel, create the shared
+scratchpad FIRST, from the worktree root, before dispatching any
+implementer:
+
+```bash
+node ${CLAUDE_SKILL_DIR}/preflight.js --init-scratchpad
+```
+
+It writes `.envoy-scratchpad.json` (gitignored; `/envoy:cleanup` removes
+it) with one registered agent per task, id = task id, scoped to that
+task's `files`, and posts a `conflict` for every overlap (reported by
+`getConflicts`). Each parallel implementer's prompt then carries its
+`formatBriefing` output (see `prompts.md`).
+Under strategy sequential or batch, create no scratchpad — skip this
+entirely; the init command prints `No scratchpad` and writes nothing.
 
 For each task:
 
