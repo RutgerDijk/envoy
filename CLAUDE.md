@@ -159,7 +159,8 @@ into real pass/fail once the script exists.
 - `lib/agent-scratchpad.js` — Multi-agent coordination via `.envoy-scratchpad.json`; agents register, post findings, check file ownership
 - `lib/context-budget.js` — LITM-aware prompt structuring; classifies complexity (mechanical→architectural), orders sections for U-curve attention
 - `lib/relevance-scorer.js` — Task-aware file scoring via import chain heat diffusion; recommends read depth (full/focused/skim/skip)
-- `lib/output-compressor.js` — Shell output compression (patterns: dotnet, npm, jest, playwright, cargo, git, docker); safeguard ratio prevents over-compression
+- `lib/output-compressor.js` — Shell output compression; safeguard ratio prevents over-compression. Applied by the `hooks/output-compress.js` PostToolUse[Bash] hook only to allowlisted simple commands (`dotnet build`/`test`, direct `jest`/`vitest`, `cargo build`/`check`/`clippy`) — never git, docker, npm, playwright or `cargo test` — with a loss guard that keeps the original when a failure line would be dropped
+- `lib/compliance.js` — Renders the per-PR Envoy trail (rigid steps run/skipped, gate overrides, sanctioned hotfix skips); finalize and hotfix append it to the PR body via `--pr-body`
 - `lib/cost-reporter.js` — Token usage analytics from Claude Code session JSONL logs; per-model/branch/session breakdown
 
 Preflight scripts own the plumbing — rigid SKILL.md files do NOT tell

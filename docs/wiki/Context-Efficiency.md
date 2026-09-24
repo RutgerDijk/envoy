@@ -6,12 +6,14 @@ Libraries inspired by [lean-ctx](https://github.com/yvgude/lean-ctx) that reduce
 
 | Library | Purpose | Used By |
 |---------|---------|---------|
-| `lib/session-state.js` | Cross-session task continuity | pickup, finalize |
-| `lib/agent-scratchpad.js` | Multi-agent coordination | envoy-authoring (dispatching-parallel-agents step), finalize |
-| `lib/context-budget.js` | LITM-aware prompt structuring | envoy-authoring (dispatching-parallel-agents step), pickup |
-| `lib/relevance-scorer.js` | Task-aware file scoring | pickup, review |
-| `lib/output-compressor.js` | Shell output compression | review |
-| `lib/cost-reporter.js` | Token usage analytics | costs skill |
+| `lib/session-state.js` | Cross-session task continuity | `hooks/session-start.sh` (surfaces state); pickup `steps/tdd.md`, `steps/verify.md` |
+| `lib/agent-scratchpad.js` | Multi-agent coordination | `skills/pickup/preflight.js` (`### Scratchpad`, `--init-scratchpad`, `--scratchpad-briefing/-post/-done`; parallel strategy only) |
+| `lib/context-budget.js` | LITM-aware prompt structuring | `skills/pickup/preflight.js` (`### Complexity`); `lib/context-budget.js build` CLI run from pickup `steps/prompts.md` / `steps/tdd.md` |
+| `lib/relevance-scorer.js` | Task-aware file scoring | `skills/review/preflight.js` (`### File relevance`) |
+| `lib/learning-loader.js` | Known patterns and corrections | `skills/pickup/preflight.js`, `skills/review/preflight.js` (`### Known patterns`) |
+| `lib/output-compressor.js` | Shell output compression | `hooks/output-compress.js` (PostToolUse Bash) |
+| `lib/compliance.js` | Envoy trail in the PR body | `skills/finalize/SKILL.md` Step 2, `skills/hotfix/SKILL.md` Step 5 |
+| `lib/cost-reporter.js` | Token usage analytics | costs skill, `hooks/cost-summary-export.js` |
 
 ## Session State
 
@@ -28,7 +30,7 @@ Persists between context compactions and session restarts:
 **Lifecycle:**
 1. `pickup` creates/updates state during execution
 2. `session-start.sh` detects and surfaces state on session startup (~300-500 tokens)
-3. `finalize` clears state when the branch ships
+3. `cleanup` removes the file along with the worktree's other runtime state
 
 ```javascript
 const session = require('../../lib/session-state');
@@ -62,19 +64,25 @@ scratchpad.save(pad);
 const conflicts = scratchpad.getConflicts(pad);
 ```
 
+**Wiring:** `skills/pickup/preflight.js` prints a `### Scratchpad` section listing tasks whose file scopes overlap, and exposes `--init-scratchpad [--exclude ids]`, `--scratchpad-briefing <id>`, `--scratchpad-post <id> <category> <msg> [files]` and `--scratchpad-done <id>`. Pickup uses them only when Step 12 chooses the parallel strategy.
+
 ## LITM-Aware Prompts
 
 Based on "Lost in the Middle" (Liu et al., 2023). LLMs attend most to the beginning and end of context, with a U-shaped dip in the middle.
 
 **Claude attention profile:** begin=0.92, middle=0.50, end=0.88
 
-`buildAgentPrompt()` orders sections for this curve:
+`buildAgentPrompt()` orders sections by priority into a monotonic U — the highest-priority sections at the two ends, the lowest in the middle:
 
 | Position | Attention | Content |
 |----------|-----------|---------|
-| Beginning | 0.92 | Objective, constraints |
-| Middle | 0.50 | Reference material, stack profiles, scratchpad |
-| End | 0.88 | Acceptance criteria, known patterns |
+| Beginning | 0.92 | Objective, acceptance criteria, shared state (scratchpad) |
+| Middle | 0.50 | Reference material (stack profiles), context |
+| End | 0.88 | Known patterns, constraints (last) |
+
+With all seven sections present the order is Objective, Acceptance, Shared State, Reference, Context, Known Patterns, Constraints. `fitToBudget` excludes the fixed Constraints (Iron Laws) from the line count; when a prompt is over budget it drops Reference first, then Context, and never trims the other sections. The `build` CLI appends a `prompt-budget-trimmed` event to `.envoy/ledger.jsonl` when it trims.
+
+**Wiring:** `skills/pickup/preflight.js` prints a `### Complexity` table with each task's tier (the model tier is advisory). Pickup then builds each implementer prompt with `node lib/context-budget.js build <params.json> --tier <tier>` (see pickup `steps/prompts.md`).
 
 **Task complexity classification** determines prompt budget and model tier:
 
@@ -99,15 +107,21 @@ const prompt = buildAgentPrompt({
 });
 ```
 
+## Known Patterns
+
+`lib/learning-loader.js` loads confirmed review/CodeRabbit patterns and team corrections. `skills/pickup/preflight.js` and `skills/review/preflight.js` each print a `### Known patterns` section, which fills `${KNOWN_PATTERNS}` in pickup's `steps/prompts.md` and the review AI-review layer.
+
 ## Relevance Scoring
 
-Walks import/dependency chains from changed files and scores related files via heat diffusion.
+Walks import chains forward from changed files and scores related files via heat diffusion.
 
 **Algorithm:**
 1. Parse imports from changed files (supports TS, JS, C#, Python)
-2. Resolve to absolute paths, build dependency graph (max 3 hops)
-3. Run heat diffusion (4 iterations, alpha=0.5) from seed files
-4. Score accumulates through import edges
+2. Resolve to absolute paths and build the dependency graph by walking imports forward (seed → what it imports), max 3 hops, capped at 200 files (`maxFiles`; the cap is reported when hit)
+3. Run heat diffusion (4 iterations, alpha=0.5) from seed files; both `imports` and `importedBy` edges are kept
+4. Heat decays per hop rather than accumulating — along an import chain, seed files read `full`, one hop away `focused`, two hops `skim`, three hops `skip`
+
+**Limits:** the walk is forward-only — files that import the changed files are not discovered. Requires built at runtime (e.g. `require(path.join(...))`) are not followed.
 
 **Read depth recommendations:**
 
@@ -125,33 +139,57 @@ const briefing = formatForPrompt(results);
 // Include `briefing` in reviewer/agent prompts
 ```
 
-Used by `review` (pre-scored guidance for iterative retrieval) and `pickup` (agent context).
+**Wiring:** `skills/review/preflight.js` prints a `### File relevance` section for the files changed in `baseSha..headSha` plus the files they import, which fills `${relevanceBriefing}` in the AI-review layer. Pickup does not use the scorer.
 
 ## Output Compression
 
-Pattern-based compression for verbose CLI output. 11 patterns:
+Pattern-based compression for verbose CLI output. `lib/output-compressor.js` has 11 patterns:
 
-| Pattern | Compresses |
-|---------|-----------|
-| `dotnet-build` | Build output → success line + errors/warnings |
-| `dotnet-test` | Test output → failures + summary counts |
-| `npm-install` | Install output → "added N packages" + audit |
-| `npm-build` | Build output → compiled line + errors |
-| `jest-vitest` | Test output → FAIL blocks + summary |
-| `git-status` | Status → strip verbose headers |
-| `git-log` | Log → compact commit + message lines |
-| `docker-compose` | Strip pull progress bars and layer output |
-| `playwright` | Test output → failures + summary |
-| `cargo` | Build/test → errors + summary |
+| Pattern | Compresses | Applied by the hook |
+|---------|-----------|---------------------|
+| `dotnet-build` | Build output → success line + errors/warnings | yes (`dotnet build`) |
+| `dotnet-test` | Test output → failures + summary counts | yes (`dotnet test`) |
+| `npm-install` | Install output → "added N packages" + audit | no |
+| `npm-build` | Build output → compiled line + errors | no |
+| `jest-vitest` | Test output → FAIL blocks + summary | yes (direct `jest`/`vitest`, `npx jest`/`npx vitest`) |
+| `git-status` | Status → strip verbose headers | no |
+| `git-diff-stat` | Pass-through (already compact) | no |
+| `git-log` | Log → compact commit + message lines | no |
+| `docker-compose` | Strip pull progress bars and layer output | no |
+| `playwright` | Test output → failures + summary | no |
+| `cargo` | Build/test → errors + summary | yes (`cargo build`/`check`/`clippy`; not `cargo test`) |
 
-**Safeguard ratio:** If compression removes >85% of content, returns the original to prevent information loss.
+**Safeguard ratio:** If compression removes more than 95% of the content, the original is returned to prevent information loss.
 
 ```javascript
 const { compress } = require('../../lib/output-compressor');
 const result = compress(rawOutput, 'dotnet test');
 // result.compressed — noise stripped
-// result.savings — { ratio: 85, pattern: 'dotnet-test' }
+// result.savings — { original, compressed, ratio, pattern }
 ```
+
+### `output-compress` hook
+
+`hooks/output-compress.js` runs on every Bash call (PostToolUse, `standard` and `strict` profiles) and replaces the tool output with the compressed version via `updatedToolOutput`. It is conservative by design:
+
+- **Allowlist:** only a simple (non-compound) command whose leading tool is `dotnet build`/`test`, direct `jest`/`vitest`, or `cargo build`/`check`/`clippy` is compressed. `git`, `docker`, `npm install`/`build`/`test`, `playwright` and `cargo test` are deliberately left alone because their patterns could hide failures. Commands with `&&`, `||`, `;`, `|`, `&`, `$(`, backticks or newlines are never compressed (a single trailing `2>&1` is allowed).
+- **Loss guard:** if any line carrying a failure signal (`: error `, `error CODE:`, `error :`, `aborted`, `host process crashed`) would be dropped, the original output is passed through.
+- **Fail-open:** any error or unexpected input leaves the output unchanged. `stderr` is never touched.
+- **Cost:** one extra node process per Bash call (about 35 ms).
+
+Disable it with `ENVOY_DISABLED_HOOKS=output-compress`.
+
+## Compliance Trail
+
+`lib/compliance.js` reads the worktree's `.envoy/ledger.jsonl` and `.envoy/observe-log.jsonl` and reports which rigid steps (pickup → review → finalize → cleanup) ran or were skipped, the handoffs, and gate overrides.
+
+`skills/finalize/SKILL.md` Step 2 and `skills/hotfix/SKILL.md` Step 5 append an `## Envoy trail` section to the PR body:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/../../lib/compliance.js" --pr-body "$(git rev-parse --show-toplevel)"
+```
+
+Before merge, `cleanup` shows as pending rather than skipped. Under a hotfix, the brainstorm, pickup, review and finalize skips are shown as sanctioned rather than flagged. `--pr-body` always exits 0, so a trail failure never blocks PR creation.
 
 ## Cost Reporter
 
