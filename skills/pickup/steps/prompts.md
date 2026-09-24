@@ -145,6 +145,9 @@ share its git index. Run every command below from the worktree root.
   fails on the index lock, wait and retry.
 - When your task is finished, mark yourself done:
   node ${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-done '<task-id>'
+- If a --scratchpad-post or --scratchpad-done command fails (another agent
+  writing at the same moment), wait a few seconds and retry it once or
+  twice; never skip reporting — if it still fails, say so in your return.
 ```
 
 Under sequential or batch there is no scratchpad: omit both the
