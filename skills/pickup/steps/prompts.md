@@ -112,24 +112,43 @@ substitute for pasting the prompt into the dispatch.
 | `context.md` | `context` | where this fits in the overall plan + `**Sibling tasks (context only — not in scope):**` `${SIBLING_INDEX}` (`buildSiblingIndex(allTasks, taskId)`, id + title only, never their full specs) |
 | `reference.md` | `reference` | stack context: detected stack profiles — common mistakes and best practices |
 
-**Parallel implementers.** Under strategy parallel, Step 13 has already
-created `.envoy-scratchpad.json` with `--init-scratchpad` (agent id = task
-id). For each implementer, from the worktree root, write its briefing
+**Parallel implementers.** When Step 12 chose parallel, Step 13 has
+already created `.envoy-scratchpad.json` with `--init-scratchpad` (agent
+id = task id; ids are restricted to `[A-Za-z0-9._-]`, so single-quoting is
+safe). For each implementer, from the worktree root, write its briefing
 straight into the section file — the command prints
 `formatBriefing(pad, taskId)` from `lib/agent-scratchpad.js` and rejects
-any id that is not a registered agent (single-quote the id):
+any id that is not a registered agent:
 
 ```bash
 node ${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-briefing '<task-id>' > "$D/scratchpad.md"
 ```
 
 and add `"scratchpadFile": "scratchpad.md"` to `params.json` (it lands in
-the prompt's Shared State section, never trimmed). Also append to
-`constraints.md`: `Other implementers are working in this worktree at the
-same time. Stage only your own files (git add <your files>,
-never git add -A or git add .) and commit serially — if a commit fails on
-the index lock, wait and retry; never commit another task's files.` Under
-sequential or batch there is no scratchpad: omit both.
+the prompt's Shared State section, never trimmed). Also append the block
+below to `constraints.md`, with `${CLAUDE_SKILL_DIR}` replaced by its
+resolved absolute path (the implementer's shell does not set it) and
+`<task-id>` by the task's id:
+
+```
+Other implementers are working in this worktree at the same time and
+share its git index. Run every command below from the worktree root.
+- Record anything that affects other tasks (a renamed/moved symbol, a new
+  shared dependency, an interface change, a decision) as you go:
+  node ${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-post '<task-id>' <discovery|decision|dependency|question|conflict> '<message>' [files...]
+- Re-read the shared state before each commit and adapt to what others posted:
+  node ${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-briefing '<task-id>'
+- Commit only your own files with pathspecs, so another agent's staged
+  changes never land in your commit:
+  git add -- <your files> && git commit -m "<message>" -- <your files>
+  never git add -A or git add ., never a bare git commit. If the commit
+  fails on the index lock, wait and retry.
+- When your task is finished, mark yourself done:
+  node ${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-done '<task-id>'
+```
+
+Under sequential or batch there is no scratchpad: omit both the
+scratchpad section and this block.
 
 **Budget rules.**
 
