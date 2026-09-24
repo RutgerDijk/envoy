@@ -53,8 +53,11 @@ const FAILURE_SIGNAL = /: error |\berror [A-Z]+\d+:|\berror :|aborted|host proce
  */
 function keepsFailureSignals(original, compressed) {
   const lines = new Set(original.split('\n').map(l => l.trim()).filter(Boolean));
+  // Set lookup, not compressed.includes(): a substring scan per line is
+  // quadratic and blew past the hook timeout on 60k-error logs.
+  const kept = new Set(compressed.split('\n').map(l => l.trim()));
   for (const line of lines) {
-    if (FAILURE_SIGNAL.test(line) && !compressed.includes(line)) return false;
+    if (FAILURE_SIGNAL.test(line) && !kept.has(line)) return false;
   }
   return true;
 }
