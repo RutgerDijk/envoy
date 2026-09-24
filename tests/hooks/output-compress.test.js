@@ -65,14 +65,24 @@ function runHook(hook, rawInput) {
   const chunks = [];
   const origWrite = process.stdout.write.bind(process.stdout);
   const origLog = console.log;
+  const origWriteSync = fs.writeSync;
   process.stdout.write = (chunk) => { chunks.push(String(chunk)); return true; };
   console.log = (...args) => { chunks.push(args.join(' ') + '\n'); };
+  fs.writeSync = (fd, data, ...rest) => {
+    if (fd !== 1) return origWriteSync(fd, data, ...rest);
+    const buf = Buffer.isBuffer(data) ? data : Buffer.from(String(data));
+    const offset = typeof rest[0] === 'number' ? rest[0] : 0;
+    const length = typeof rest[1] === 'number' ? rest[1] : buf.length - offset;
+    chunks.push(buf.subarray(offset, offset + length).toString());
+    return length;
+  };
   let code;
   try {
     code = hook.run(rawInput);
   } finally {
     process.stdout.write = origWrite;
     console.log = origLog;
+    fs.writeSync = origWriteSync;
   }
   return { code, out: chunks.join('') };
 }
@@ -241,6 +251,114 @@ test('malformed stdin via runner → exit 0, no output', () => {
   assert.strictEqual(r.status, 0);
   assert.strictEqual(r.stdout, '');
 });
+
+test('large output (>64KB) is written completely before runner exits', () => {
+  const errLines = [];
+  for (let i = 0; i < 2000; i++) {
+    errLines.push(`/home/dev/Fx/Lib/File${i}.cs(${i},1): error CS0103: The name 'symbol${i}' does not exist in the current context [/home/dev/Fx/Lib/Lib.csproj]`);
+  }
+  const bigLog = '  Determining projects to restore...\n' + errLines.join('\n') + '\n\nBuild FAILED.\n    0 Warning(s)\n    2000 Error(s)\n';
+  const bigStderr = 'x'.repeat(200 * 1024);
+  const r = runViaRunner(JSON.stringify(bashEvent('dotnet build', bigLog, { stderr: bigStderr })));
+  assert.strictEqual(r.status, 0, r.stderr);
+  let parsed;
+  assert.doesNotThrow(() => { parsed = JSON.parse(r.stdout); }, `stdout must be complete JSON (got ${r.stdout.length} bytes)`);
+  assert.ok(r.stdout.length > 64 * 1024, `output should exceed 64KB, got ${r.stdout.length}`);
+  const u = parsed.hookSpecificOutput.updatedToolOutput;
+  assert.strictEqual(u.stderr, bigStderr);
+  assert.ok(u.stdout.includes(errLines[1999]), 'last error line must survive');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// False-positive guards: only simple build/test runner invocations
+// ═══════════════════════════════════════════════════════════════════
+
+section('output-compress: false-positive guards');
+
+const jestConfig = [
+  "/** @type {import('jest').Config} */",
+  'module.exports = {',
+  "  testEnvironment: 'node',",
+  "  // Tests: 3 passed, 3 total",
+  "  roots: ['<rootDir>/src'],",
+  "  collectCoverageFrom: ['src/**/*.js'],",
+  '};',
+  '',
+].join('\n');
+
+const gitLogP = [
+  'commit 1091050abcdef1234567890abcdef12345678901',
+  'Author: Dev <dev@example.com>',
+  'Date:   Mon Sep 21 10:00:00 2026 +0200',
+  '',
+  '    fix(stacks): bound detection scans',
+  '',
+  'diff --git a/lib/stack-loader.js b/lib/stack-loader.js',
+  'index 1111111..2222222 100644',
+  '--- a/lib/stack-loader.js',
+  '+++ b/lib/stack-loader.js',
+  '@@ -10,7 +10,7 @@ const MAX_DEPTH = 4;',
+  '-const LIMIT = 10000;',
+  '+const LIMIT = 2000;',
+  "+const DETECTION_EXCLUDES = ['node_modules', 'bin', 'obj', '.git', 'dist', 'build', 'coverage', '.next', 'target', 'vendor', 'packages', '.venv', '__pycache__', '.gradle', '.idea'];",
+  ' function scan() {',
+  '',
+].join('\n');
+
+const statusAndDiff = [
+  'On branch feature/x',
+  "Your branch is ahead of 'origin/feature/x' by 2 commits.",
+  '  (use "git push" to publish your local commits)',
+  '',
+  'Changes not staged for commit:',
+  '\tmodified:   hooks/output-compress.js',
+  '',
+  'diff --git a/hooks/output-compress.js b/hooks/output-compress.js',
+  '--- a/hooks/output-compress.js',
+  '+++ b/hooks/output-compress.js',
+  '@@ -1,3 +1,3 @@',
+  '-old line',
+  '+new line',
+  '',
+].join('\n');
+
+const negativeCases = [
+  ['cat jest.config.js', jestConfig],
+  ['git log -p -1', gitLogP],
+  ['git status && git diff', statusAndDiff],
+  ['dotnet test | tail -20', testLog],
+  ['dotnet build; echo done', buildLog],
+  ['dotnet build $(echo -c Release)', buildLog],
+  ['echo `date` && dotnet test', testLog],
+  ['dotnet test\nrm -rf x', testLog],
+  ['dotnet test &', testLog],
+];
+
+for (const [cmd, stdout] of negativeCases) {
+  test(`does not compress: ${JSON.stringify(cmd)}`, () => {
+    const pre = compress(stdout, cmd);
+    assert.ok(pre.savings.pattern && pre.compressed !== stdout,
+      `precondition: raw compressor would rewrite this output (pattern=${pre.savings.pattern})`);
+    const { code, out } = runHook(hook, JSON.stringify(bashEvent(cmd, stdout)));
+    assert.ok(code === undefined || code === 0);
+    assert.strictEqual(out, '', `hook must leave output unchanged for ${cmd}`);
+  });
+}
+
+const positiveCases = [
+  ['dotnet test 2>&1', testLog],
+  ['dotnet test --no-build 2>&1', testLog],
+  ['  dotnet build -c Release', buildLog],
+];
+
+for (const [cmd, stdout] of positiveCases) {
+  test(`still compresses: ${JSON.stringify(cmd)}`, () => {
+    const { out } = runHook(hook, JSON.stringify(bashEvent(cmd, stdout)));
+    assert.ok(out.length > 0, `expected compression for ${cmd}`);
+    const u = JSON.parse(out).hookSpecificOutput.updatedToolOutput;
+    assert.ok(u.stdout.length < stdout.length);
+  });
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // Registration
