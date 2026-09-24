@@ -155,7 +155,22 @@ function normPath(p) {
 function scopesOverlap(a, b) {
   const x = normPath(a);
   const y = normPath(b);
+  // `.` (or `./`) is the repo root: it contains every path.
+  if (x === '.' || y === '.') return true;
   return x === y || x.startsWith(`${y}/`) || y.startsWith(`${x}/`);
+}
+
+// Persist a pad for the post/done modes; a failed write (e.g. a concurrent
+// writer or an unwritable worktree) is a one-line message + exit 1, never a
+// stack trace.
+function trySave(sp, pad) {
+  try {
+    sp.save(pad, CWD);
+    return true;
+  } catch (err) {
+    process.stderr.write(`Could not save ${sp.SCRATCHPAD_FILE}: ${err && err.code ? err.code : (err && err.message) || 'unknown error'} — retry shortly.\n`);
+    return false;
+  }
 }
 
 function buildScratchpad(taskList) {
@@ -314,7 +329,7 @@ function scratchpadPost(agentId, category, message, files) {
     return 1;
   }
   sp.post(pad, agentId, category, String(message), files);
-  sp.save(pad, CWD);
+  if (!trySave(sp, pad)) return 1;
   say(`Posted [${category}] for ${agentId}.`);
   return 0;
 }
@@ -327,7 +342,7 @@ function scratchpadDone(agentId) {
   const bad = checkAgentId(pad, agentId);
   if (bad) { process.stderr.write(`${bad}\n`); return 1; }
   sp.deregisterAgent(pad, agentId);
-  sp.save(pad, CWD);
+  if (!trySave(sp, pad)) return 1;
   say(`Marked ${agentId} done.`);
   return 0;
 }

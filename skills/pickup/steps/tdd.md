@@ -85,8 +85,10 @@ files overlap (same file, or a directory scope containing it; paths are
 normalized and compared case-insensitively). If you choose parallel, the
 tasks in that conflict list MUST fall back to batch: run them one after
 another, never concurrently, and pass their ids to `--exclude` in Step 13
-so they are not registered as active parallel agents. Only tasks absent
-from the conflict list run in parallel. The list is computed whatever
+so they are not registered as active parallel agents. Those batched tasks
+run after the parallel wave completes, one after another —
+never alongside the parallel group. Only tasks absent from the conflict
+list run in parallel. The list is computed whatever
 `tasks.strategy` says — the strategy is chosen here, not in the tasks file.
 
 Choose a strategy — sequential, batch, or parallel — and state rationale before proceeding.
@@ -110,6 +112,8 @@ registered agent per parallel task, id = task id, scoped to that task's
 `files`, and posts a `conflict` for every remaining overlap (reported by
 `getConflicts`). Each parallel implementer's prompt then carries its
 `formatBriefing` output and the post/done commands (see `prompts.md`).
+The excluded (batched) tasks run after the parallel wave completes, one
+after another, never alongside the parallel group.
 Under strategy sequential or batch, create no scratchpad — do not run the
 init command. An unrecognized argument exits 2 without touching session
 state.
