@@ -94,27 +94,29 @@ New costs: ~100 tokens per loaded pattern, ~200 tokens per Haiku correction clas
 
 Based on "Lost in the Middle" (Liu et al., 2023), LLMs attend most to the beginning and end of context. `buildAgentPrompt()` orders sections for Claude's attention curve (begin=0.92, middle=0.50, end=0.88):
 
-- **Beginning (high attention):** Objective, constraints
-- **Middle (low attention):** Reference material, stack profiles, examples
-- **End (high attention):** Acceptance criteria, known patterns
+- **Beginning (high attention):** Objective, acceptance criteria, shared state
+- **Middle (low attention):** Reference material (stack profiles), context
+- **End (high attention):** Known patterns, constraints (last)
 
-Used by `envoy-authoring` (dispatching-parallel-agents step) and `pickup`.
+Over budget, `fitToBudget` trims Reference first, then Context; the fixed constraints are never trimmed or counted.
+
+`skills/pickup/preflight.js` prints a `### Complexity` table per task, and pickup builds each implementer prompt with `node lib/context-budget.js build <params.json> --tier <tier>`. The `envoy-authoring` parallel-agents guidance also describes it.
 
 ### 12. Shell Output Compression
 
 **Lib:** `lib/output-compressor.js`
 
-Strips noise from verbose CLI output before it enters context. 11 command patterns (dotnet build/test, npm, jest, playwright, cargo, git, docker). A safeguard ratio prevents over-compression (if compressed < 15% of original, returns original).
+Strips noise from verbose CLI output before it enters context. The library has 11 command patterns (dotnet build/test, npm, jest, playwright, cargo, git, docker). A safeguard ratio prevents over-compression: if the compressed output is under 5% of the original, the original is returned.
 
-Used by `review` during build/test verification.
+Applied automatically by the `hooks/output-compress.js` PostToolUse hook on Bash calls (`standard` and `strict` profiles). The hook compresses only simple, non-compound `dotnet build`/`test`, direct `jest`/`vitest`, and `cargo build`/`check`/`clippy` commands. `git`, `docker`, `npm`, `playwright` and `cargo test` output is never compressed. A loss guard passes the original through when any failure-signal line would be dropped. Disable it with `ENVOY_DISABLED_HOOKS=output-compress`. See [[Context Efficiency]] for details.
 
 ### 13. Task-Aware File Relevance
 
 **Lib:** `lib/relevance-scorer.js`
 
-Walks import chains from changed files and scores dependencies via heat diffusion. Recommends read depth (full/focused/skim/skip) so reviewers and agents read deeply what matters and skip what doesn't.
+Walks import chains forward from changed files (max 3 hops, capped at 200 files) and scores dependencies via heat diffusion, with heat decaying per hop. Recommends read depth (full/focused/skim/skip) so reviewers read deeply what matters and skip what doesn't. Files that import the changed files are not discovered.
 
-Used by `pickup` (agent context) and `review` (reviewer guidance).
+`skills/review/preflight.js` prints the `### File relevance` section for the AI-review layer.
 
 ## Measuring Token Usage
 

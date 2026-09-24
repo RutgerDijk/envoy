@@ -79,9 +79,44 @@ For each task, identify:
 - Critical shared state (auth, global config)
 - First time implementing this type of feature
 
+**Overlapping files force batch.** For every plan with 2+ tasks,
+preflight's `### Scratchpad` section lists each conflict — two tasks whose
+files overlap (same file, or a directory scope containing it; paths are
+normalized and compared case-insensitively). If you choose parallel, the
+tasks in that conflict list MUST fall back to batch: run them one after
+another, never concurrently, and pass their ids to `--exclude` in Step 13
+so they are not registered as active parallel agents. Those batched tasks
+run after the parallel wave completes, one after another —
+never alongside the parallel group. Only tasks absent from the conflict
+list run in parallel. The list is computed whatever
+`tasks.strategy` says — the strategy is chosen here, not in the tasks file.
+
 Choose a strategy — sequential, batch, or parallel — and state rationale before proceeding.
 
 ### Step 13: Execute Tasks
+
+**Scratchpad (parallel chosen only).** If Step 12 chose parallel, create
+the shared scratchpad FIRST, from the worktree root, before dispatching
+any implementer — excluding the tasks Step 12 moved to batch:
+
+```bash
+node ${CLAUDE_SKILL_DIR}/preflight.js --init-scratchpad --exclude '<batched-id>,<batched-id>'
+```
+
+(omit `--exclude` when nothing was batched). It initializes unconditionally
+— whatever `tasks.strategy` says — reading the issue number from
+`.envoy/pickup/session.json` (then `ENVOY_ISSUE_NUMBER`) and the tasks from
+`.envoy-tasks/<N>.json` (then the issue's embedded block). It writes
+`.envoy-scratchpad.json` (gitignored; `/envoy:cleanup` removes it) with one
+registered agent per parallel task, id = task id, scoped to that task's
+`files`, and posts a `conflict` for every remaining overlap (reported by
+`getConflicts`). Each parallel implementer's prompt then carries its
+`formatBriefing` output and the post/done commands (see `prompts.md`).
+The excluded (batched) tasks run after the parallel wave completes, one
+after another, never alongside the parallel group.
+Under strategy sequential or batch, create no scratchpad — do not run the
+init command. An unrecognized argument exits 2 without touching session
+state.
 
 For each task:
 
@@ -96,7 +131,14 @@ For each task:
    from preflight's `### Test Command` output — the concrete filtered
    command when resolved, or the explicit "determine and report the
    narrowest command yourself" instruction when not; never default to
-   the full suite.
+   the full suite. Assemble the prompt with `buildAgentPrompt` — write
+   the sections as params (mapping in `prompts.md`) and run
+   `node ${CLAUDE_SKILL_DIR}/../../lib/context-budget.js build <params.json> --tier <tier> --task <id> --issue <n>`
+   with the task's tier from preflight's `### Complexity` table. It runs
+   `checkBudget` (Iron Laws excluded as fixed overhead); over budget, it
+   trims Reference first, then Context, and records the trim in the
+   ledger. Write each section as a plain markdown file in `D=$(mktemp -d)` (recipe in `prompts.md`) and dispatch the implementer with everything the CLI prints after `===== PROMPT =====`, pasted unchanged — never a pointer-only prompt, which bypasses `contract.json`'s Iron-Law invariant. The model tier is advisory
+   only.
 3. Once the implementer completes, dispatch BOTH reviewers — spec
    compliance and code quality — **in the same message/turn**, so they
    run concurrently. Both are read-only (review-only prompts, no

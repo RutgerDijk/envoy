@@ -16,7 +16,7 @@ ever injecting another task's full spec.
 
 ## Implementer Agent Prompt
 
-Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`, `${SIBLING_INDEX}`, `${RESOLVED_TEST_COMMAND}`
+Built with `buildAgentPrompt` + `checkBudget` (see below). Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`, `${SIBLING_INDEX}`, `${RESOLVED_TEST_COMMAND}`, `${KNOWN_PATTERNS}`
 
 `${RESOLVED_TEST_COMMAND}` is populated from preflight's `### Test
 Command` output (preflight.js resolves it once via
@@ -38,57 +38,159 @@ that heading). Two cases:
   narrowest command that runs just your new/changed test(s) yourself,
   and report what you used.`
 
+`${KNOWN_PATTERNS}` is populated from preflight's `### Known patterns`
+output (preflight.js loads it once via `lib/learning-loader.js` —
+`loadConfirmedPatterns()` filtered to the detected stacks,
+`loadCorrections()` for `memory/corrections.md` and
+`~/.claude/learnings/corrections.md` — renders it with
+`formatReminders()`, and prints it under that heading). Paste the
+section body verbatim: its `**Known patterns (avoid these):**` and
+`**Team corrections:**` subsections, `(none recorded)` when nothing
+exists, and any "could not be read" line naming an unreadable learnings
+file (the task proceeds either way — the STATUS banner is unaffected).
+
+### Assembled with `buildAgentPrompt` and budget-checked
+
+The implementer prompt is NOT hand-assembled. Its sections are
+`buildAgentPrompt` parameters (`lib/context-budget.js`), each written as
+a **plain markdown file** — no JSON escaping of multi-line text or
+quotes. The build CLI reads them with `fs` (no shell interpolation of any
+field), runs `checkBudget` for the task's tier from preflight's
+`### Complexity` table, and prints the final prompt.
+
+**Recipe** — run from the **worktree root**: a trim's ledger event is
+appended to `.envoy/ledger.jsonl` under the current directory, so the
+cwd must be the worktree root.
+
+```bash
+D=$(mktemp -d)
+# 1. Write one markdown file per section into "$D" with the Write tool
+#    (see the table below): objective.md, constraints.md, acceptance.md,
+#    learnings.md, context.md, reference.md (+ scratchpad.md when parallel).
+# 2. Point params.json at them. The Iron Laws come straight from the plugin.
+cat > "$D/params.json" <<JSON
+{
+  "objectiveFile": "objective.md",
+  "constraintsFiles": [
+    "${CLAUDE_SKILL_DIR}/../../contexts/execution-announce.md",
+    "${CLAUDE_SKILL_DIR}/../../contexts/discipline-scope.md",
+    "${CLAUDE_SKILL_DIR}/../../contexts/discipline-tdd.md",
+    "${CLAUDE_SKILL_DIR}/../../contexts/discipline-blocker.md",
+    "${CLAUDE_SKILL_DIR}/../../contexts/discipline-task-granularity.md"
+  ],
+  "constraintsFile": "constraints.md",
+  "acceptanceFile": "acceptance.md",
+  "learningsFile": "learnings.md",
+  "contextFile": "context.md",
+  "referenceFile": "reference.md"
+}
+JSON
+# 3. Build and budget-check; the prompt is printed after ===== PROMPT =====.
+node ${CLAUDE_SKILL_DIR}/../../lib/context-budget.js build "$D/params.json" \
+  --tier <tier> --task <task-id> --issue <issue>
+# 4. After the Agent call is dispatched, clean up.
+rm -rf "$D"
+```
+
+Relative paths in `params.json` resolve against `$D`. Add
+`"scratchpadFile": "scratchpad.md"` only when implementers run in
+parallel (see **Parallel implementers** below). The CLI prints
+`BUDGET: within|over (...)`, a `Trimmed: …` line when it dropped a section, then `===== PROMPT =====` and the
+prompt. Constraints are assembled in order: the Iron Laws
+(`constraintsFiles`), then `constraints.md`. `--out <file>` is an
+optional convenience for inspecting the built prompt on disk (relative
+paths resolve against `$D`; parent dirs are created) — it is never a
+substitute for pasting the prompt into the dispatch.
+
+| File | Section | Carries |
+|------|---------|---------|
+| `objective.md` | `objective` | `Implement Task N: <task title>` + `**Full task specification:**` from `buildTaskSlice(task)` (intent, behavior, files, acceptance, contracts, outOfScope for THIS task only) |
+| `constraints.md` | `constraints` | follows the Iron Laws (`${EXECUTION_ANNOUNCE}` `${SCOPE_LAW}` `${TDD_LAW}` `${BLOCKER_PROTOCOL}` `${TASK_GRANULARITY}`, verbatim via `constraintsFiles`): the **Requirements** list (1. Follow TDD Iron Law above — NON-NEGOTIABLE; 2. Use envoy:systematic-debugging if you encounter issues; 3. Two commits minimum: test commit BEFORE implementation commit; 4. Self-review your changes before returning) + `**Test command:** ${RESOLVED_TEST_COMMAND}` |
+| `acceptance.md` | `acceptance` | task acceptance as bullets + the **Return** list (summary of what you implemented; git log showing test commit preceded implementation commit; questions or concerns — do not reduce scope, surface blockers via Blocker Protocol; list of files changed) |
+| `learnings.md` | `learnings` | `${KNOWN_PATTERNS}` — preflight's `### Known patterns` body, verbatim: avoid the patterns, follow the corrections |
+| `scratchpad.md` | `scratchpad` | shared-state briefing — `formatBriefing(pad, taskId)` from `--scratchpad-briefing` (parallel strategy only; omit otherwise) |
+| `context.md` | `context` | where this fits in the overall plan + `**Sibling tasks (context only — not in scope):**` `${SIBLING_INDEX}` (`buildSiblingIndex(allTasks, taskId)`, id + title only, never their full specs) |
+| `reference.md` | `reference` | stack context: detected stack profiles — common mistakes and best practices |
+
+**Parallel implementers.** When Step 12 chose parallel, Step 13 has
+already created `.envoy-scratchpad.json` with `--init-scratchpad` (agent
+id = task id; ids are restricted to `[A-Za-z0-9._-]`, so single-quoting is
+safe). For each implementer, from the worktree root, write its briefing
+straight into the section file — the command prints
+`formatBriefing(pad, taskId)` from `lib/agent-scratchpad.js` and rejects
+any id that is not a registered agent:
+
+```bash
+node ${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-briefing '<task-id>' > "$D/scratchpad.md"
+```
+
+and add `"scratchpadFile": "scratchpad.md"` to `params.json` (it lands in
+the prompt's Shared State section, never trimmed). Also append the block
+below to `constraints.md`, with `${CLAUDE_SKILL_DIR}` replaced by its
+resolved absolute path (the implementer's shell does not set it) and
+`<task-id>` by the task's id:
+
+```
+Other implementers are working in this worktree at the same time and
+share its git index. Run every command below from the worktree root.
+- Record anything that affects other tasks (a renamed/moved symbol, a new
+  shared dependency, an interface change, a decision) as you go:
+  node ${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-post '<task-id>' <discovery|decision|dependency|question|conflict> '<message>' [files...]
+- Re-read the shared state before each commit and adapt to what others posted:
+  node ${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-briefing '<task-id>'
+- Commit only your own files with pathspecs, so another agent's staged
+  changes never land in your commit:
+  git add -- <your files> && git commit -m "<message>" -- <your files>
+  never git add -A or git add ., never a bare git commit. If the commit
+  fails on the index lock, wait and retry.
+- When your task is finished, mark yourself done:
+  node ${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-done '<task-id>'
+- If a --scratchpad-post or --scratchpad-done command fails (another agent
+  writing at the same moment), wait a few seconds and retry it once or
+  twice; never skip reporting — if it still fails, say so in your return.
+```
+
+Under sequential or batch there is no scratchpad: omit both the
+scratchpad section and this block.
+
+**Budget rules.**
+
+- The Iron Laws are fixed, mandatory overhead (SKILL.md injects them
+  verbatim) — about 118 lines, which alone would put every prompt over
+  the `standard` 120-line budget. They are therefore **excluded from the
+  budgeted count**; the verdict line states `constraints excluded (N
+  fixed lines)`. The budget measures everything else.
+- **Over budget → Reference is trimmed first**, then Context if still
+  over. Objective, constraints, acceptance, learnings and scratchpad are
+  never trimmed. `${RESOLVED_TEST_COMMAND}` therefore lives in
+  `constraints.md`, not `context.md` — the implementer must never lose
+  the test-command instruction to a trim. Every trim is recorded in the
+  ledger (`.envoy/ledger.jsonl`, event `prompt-budget-trimmed` with
+  `task`, `tier`, `trimmed`, `lines`, `maxLines`) — the CLI writes it;
+  the dispatcher does not hand-edit the ledger.
+- A prompt still over budget after both trims is dispatched as-is with
+  the `BUDGET: over` verdict noted; the tier is advisory.
+- The model tier (haiku/sonnet/opus) is **advisory text only** — it does
+  not change the Agent tool's model.
+
+**Dispatch — paste the printed prompt.** Pass everything after the
+`===== PROMPT =====` line to the Agent call unchanged:
+
 ```
 Agent({
   subagent_type: "general-purpose",
   description: "Implement Task N",
-  prompt: `${EXECUTION_ANNOUNCE}
-
-${SCOPE_LAW}
-
-${TDD_LAW}
-
-${BLOCKER_PROTOCOL}
-
-${TASK_GRANULARITY}
-
----
-
-Implement Task N: <task title>
-
-**Context:**
-<Brief description of where this fits in the overall plan>
-
-**Full task specification:**
-<Built with lib/task-payload.js buildTaskSlice(task) — intent, behavior,
-files, acceptance, contracts, outOfScope for THIS task only>
-
-**Sibling tasks (context only — not in scope):**
-<${SIBLING_INDEX} — one line per other task, id + title only, via
-buildSiblingIndex(allTasks, taskId). Never their full specs.>
-
-**Stack context:**
-<Detected stack profiles — common mistakes and best practices>
-
-**Known patterns (avoid these):**
-<Confirmed patterns and team corrections from learning-loader>
-
-**Test command:** ${RESOLVED_TEST_COMMAND}
-
-**Requirements:**
-1. Follow TDD Iron Law above — NON-NEGOTIABLE
-2. Use envoy:systematic-debugging if you encounter issues
-3. Two commits minimum: test commit BEFORE implementation commit
-4. Self-review your changes before returning
-
-**Return:**
-- Summary of what you implemented
-- Git log showing test commit preceded implementation commit
-- Any questions or concerns (do not reduce scope — surface blockers via Blocker Protocol)
-- List of files changed
-`
+  prompt: `<everything after ===== PROMPT ===== from the build CLI>`
 })
 ```
+
+Do NOT dispatch with a pointer-only prompt (e.g. "your instructions are
+in <file>"). `skills/pickup/contract.json`'s agent invariant matches
+prompts containing `Implement Task` and requires the `TDD Iron Law` and
+`Scope Iron Law` text in the prompt itself; a pointer prompt never
+matches, so it silently bypasses the plugin's only Iron-Law check (and a
+temp-dir file may also trigger Read permission prompts for the
+subagent).
 
 ---
 

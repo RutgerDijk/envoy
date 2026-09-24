@@ -149,6 +149,30 @@ test('Resolves relative import when file exists', () => {
   assert(result === null || typeof result === 'string'); // May or may not find .js
 });
 
+{
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-root-'));
+  const root = path.join(outer, 'proj');
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'a.js'), '');
+  fs.writeFileSync(path.join(root, 'src', 'b.js'), '');
+  fs.writeFileSync(path.join(outer, 'secret.js'), '');
+  const from = path.join(root, 'src', 'a.js');
+
+  test('Resolves an in-root relative import', () => {
+    assert.strictEqual(relevance.resolveImport('./b', from, root), path.join(root, 'src', 'b.js'));
+  });
+
+  test('Rejects a ../ import that escapes the project root', () => {
+    assert.strictEqual(relevance.resolveImport('../../secret', from, root), null);
+  });
+
+  test('Rejects an absolute import outside the project root', () => {
+    assert.strictEqual(relevance.resolveImport(path.join(outer, 'secret.js'), from, root), null);
+  });
+
+  fs.rmSync(outer, { recursive: true, force: true });
+}
+
 section('relevance-scorer: recommendDepth');
 
 test('Seed files always get full', () => {
@@ -180,6 +204,93 @@ test('Formats results as markdown list', () => {
   const r = relevance.formatForPrompt([{ relPath: 'src/foo.ts', score: 0.8, depth: { label: 'focused' } }]);
   assert(r.includes('src/foo.ts'));
   assert(r.includes('focused'));
+});
+
+test('Overflow line does not claim the remainder is skim/skip (it may be seeds)', () => {
+  const many = Array.from({ length: 20 }, (_, i) => ({ relPath: `s${i}.js`, score: 1, depth: { label: 'full' } }));
+  const r = relevance.formatForPrompt(many);
+  assert(r.includes('... and 5 more'), r);
+  assert(!/skim\/skip/.test(r), 'remaining entries are full seeds, not skim/skip');
+});
+
+// Graph walk + scoring on a real on-disk import chain.
+function relevanceFixture(files) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-relevance-'));
+  for (const [rel, content] of Object.entries(files)) {
+    const full = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, content);
+  }
+  return dir;
+}
+
+section('relevance-scorer: buildDependencyGraph / scoreTaskRelevance');
+
+test('buildDependencyGraph keeps importedBy edges when a placeholder is visited', () => {
+  const dir = relevanceFixture({
+    'seed.js': "require('./a');\n",
+    'a.js': "require('./b');\n",
+    'b.js': "require('./c');\n",
+    'c.js': 'module.exports = 1;\n',
+  });
+  try {
+    const p = (f) => path.join(dir, f);
+    const g = relevance.buildDependencyGraph([p('seed.js')], dir, 3);
+    assert.deepStrictEqual(g.get(p('a.js')).importedBy, [p('seed.js')]);
+    assert.deepStrictEqual(g.get(p('b.js')).importedBy, [p('a.js')]);
+    assert.deepStrictEqual(g.get(p('c.js')).importedBy, [p('b.js')]);
+    assert.deepStrictEqual(g.get(p('a.js')).imports, [p('b.js')]);
+    assert.strictEqual(g.get(p('b.js')).depth, 2);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('buildDependencyGraph does not add nodes beyond maxDepth', () => {
+  const dir = relevanceFixture({
+    'seed.js': "require('./a');\n",
+    'a.js': "require('./b');\n",
+    'b.js': 'module.exports = 1;\n',
+  });
+  try {
+    const g = relevance.buildDependencyGraph([path.join(dir, 'seed.js')], dir, 1);
+    assert(g.has(path.join(dir, 'a.js')));
+    assert(!g.has(path.join(dir, 'b.js')), 'b.js is 2 hops away — beyond maxDepth 1');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('scoreTaskRelevance decays with hop distance: seed full, 1 hop focused, 2 hops skim, 3 hops skip', () => {
+  const dir = relevanceFixture({
+    'seed.js': "require('./a');\n",
+    'a.js': "require('./b');\n",
+    'b.js': "require('./c');\n",
+    'c.js': 'module.exports = 1;\n',
+  });
+  try {
+    const results = relevance.scoreTaskRelevance([path.join(dir, 'seed.js')], dir);
+    const label = (f) => { const r = results.find((x) => x.relPath === f); return r ? r.depth.label : null; };
+    const score = (f) => results.find((x) => x.relPath === f).score;
+    assert.strictEqual(label('seed.js'), 'full');
+    assert.strictEqual(label('a.js'), 'focused');
+    assert.strictEqual(label('b.js'), 'skim');
+    assert(label('c.js') === 'skip' || label('c.js') === null, `c.js: ${label('c.js')}`);
+    assert(score('seed.js') > score('a.js') && score('a.js') > score('b.js'), 'scores must decrease with distance');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('scoreTaskRelevance caps the walk at 200 files and reports it', () => {
+  const files = { 'seed.js': Array.from({ length: 300 }, (_, i) => `require('./m/f${i}');`).join('\n') + '\n' };
+  for (let i = 0; i < 300; i++) files[`m/f${i}.js`] = 'module.exports = 1;\n';
+  const dir = relevanceFixture(files);
+  try {
+    const results = relevance.scoreTaskRelevance([path.join(dir, 'seed.js')], dir);
+    assert(results.length <= 200, `expected at most 200 results, got ${results.length}`);
+    assert(results.walk, 'expected a walk summary on the results');
+    assert.strictEqual(results.walk.capped, true);
+    assert.strictEqual(results.walk.maxFiles, 200);
+    assert.strictEqual(results.walk.filesWalked, 200);
+    assert(!Object.keys(results).includes('walk'), 'walk summary must be non-enumerable (array shape unchanged)');
+    const small = relevance.scoreTaskRelevance([path.join(dir, 'm/f0.js')], dir);
+    assert.strictEqual(small.walk.capped, false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 // ═══════════════════════════════════════════════════════════════════

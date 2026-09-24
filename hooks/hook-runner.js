@@ -33,6 +33,7 @@ const HOOK_PROFILES = {
   'coderabbit-aggregator':  ['standard', 'strict'],
   'correction-detector':    ['standard', 'strict'],
   'cost-summary-export':    ['standard', 'strict'],
+  'output-compress':        ['standard', 'strict'],
 };
 
 /**
