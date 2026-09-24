@@ -35,6 +35,48 @@ function writeJson(rel, data) {
 
 function nowIso() { return new Date().toISOString(); }
 
+// ### Known patterns — confirmed review/CodeRabbit patterns plus team
+// corrections from lib/learning-loader.js, rendered by formatReminders().
+// Fail-soft: any loader error is reported inside the section and never
+// touches the STATUS banner. The loader swallows parse errors, so a file
+// that exists but cannot be read (or carries an unparseable DATA block) is
+// detected here and named explicitly.
+function printKnownPatterns(stackNames) {
+  say('### Known patterns');
+  say('');
+  const unreadable = [];
+  let reminders = '';
+  try {
+    const loader = require(path.join(REPO_ROOT, 'lib', 'learning-loader'));
+    const readable = (full) => {
+      if (!fs.existsSync(full)) return null;
+      try { return fs.readFileSync(full, 'utf8'); } catch { return false; }
+    };
+    for (const rel of ['memory/review-learnings.md', 'memory/coderabbit-patterns.md']) {
+      const content = readable(path.join(CWD, rel));
+      if (content === false || (content && /<!--\s*DATA:/.test(content) && loader.loadDataFromFile(path.join(CWD, rel)) === null)) {
+        unreadable.push(rel);
+      }
+    }
+    const userCorrections = path.join(process.env.HOME || process.env.USERPROFILE || '~', '.claude', 'learnings', 'corrections.md');
+    if (readable(path.join(CWD, 'memory', 'corrections.md')) === false) unreadable.push('memory/corrections.md');
+    if (readable(userCorrections) === false) unreadable.push('~/.claude/learnings/corrections.md');
+
+    let patterns = [];
+    let corrections = [];
+    try { patterns = loader.loadConfirmedPatterns(stackNames); } catch { unreadable.push('confirmed patterns (loader error)'); }
+    try { corrections = loader.loadCorrections(CWD); } catch { unreadable.push('team corrections (loader error)'); }
+    reminders = loader.formatReminders(patterns, corrections);
+  } catch {
+    unreadable.push('lib/learning-loader.js (loader error)');
+  }
+  if (reminders) say(reminders);
+  for (const f of [...new Set(unreadable)]) {
+    say(`Learnings could not be read from ${f} (corrupt or unreadable) — skipped.`);
+  }
+  if (!reminders && unreadable.length === 0) say('(none recorded)');
+}
+
 function isGitRepo() {
   try {
     execSync('git rev-parse --git-dir', { cwd: CWD, stdio: 'ignore' });
@@ -115,6 +157,14 @@ function main() {
     for (const w of warnings) say(`  - ${w}`);
     say('');
     say('Proceeding, but the diff walk may be incomplete. If strict mode is needed, rerun pickup to refresh the handoff.');
+    // Degraded review still proceeds, so the reviewer still needs the
+    // learned patterns; a strict-promoted fatal stops here instead.
+    if (tier !== 'fatal') {
+      say('');
+      printKnownPatterns(detectedStacks);
+      say('');
+      say('Give the Layer 1 reviewer this section verbatim as its **Known patterns** block (see layers/ai-review.md).');
+    }
     return;
   }
 
@@ -131,6 +181,10 @@ function main() {
     say('');
     say(`Frontend stack detected in diff (${detectedStacks.filter((s) => ['react', 'shadcn-radix', 'react-query', 'react-hook-form', 'tailwind'].includes(s)).join(', ')}) — Layer 2 (visual) is REQUIRED regardless of complexity tier.`);
   }
+  say('');
+  printKnownPatterns(detectedStacks);
+  say('');
+  say('Give the Layer 1 reviewer this section verbatim as its **Known patterns** block (see layers/ai-review.md).');
   say('');
   say('Next: run pre-review setup from skills/review/SKILL.md, then proceed layer by layer (layers/lint.md, layers/cleanup.md, …).');
 }

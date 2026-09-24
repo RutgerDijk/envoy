@@ -16,7 +16,7 @@ ever injecting another task's full spec.
 
 ## Implementer Agent Prompt
 
-Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`, `${SIBLING_INDEX}`, `${RESOLVED_TEST_COMMAND}`
+Injects: `${EXECUTION_ANNOUNCE}`, `${SCOPE_LAW}`, `${TDD_LAW}`, `${BLOCKER_PROTOCOL}`, `${TASK_GRANULARITY}`, `${SIBLING_INDEX}`, `${RESOLVED_TEST_COMMAND}`, `${KNOWN_PATTERNS}`
 
 `${RESOLVED_TEST_COMMAND}` is populated from preflight's `### Test
 Command` output (preflight.js resolves it once via
@@ -37,6 +37,17 @@ that heading). Two cases:
   `No test command was resolved for this repo. Determine the
   narrowest command that runs just your new/changed test(s) yourself,
   and report what you used.`
+
+`${KNOWN_PATTERNS}` is populated from preflight's `### Known patterns`
+output (preflight.js loads it once via `lib/learning-loader.js` —
+`loadConfirmedPatterns()` filtered to the detected stacks,
+`loadCorrections()` for `memory/corrections.md` and
+`~/.claude/learnings/corrections.md` — renders it with
+`formatReminders()`, and prints it under that heading). Paste the
+section body verbatim: its `**Known patterns (avoid these):**` and
+`**Team corrections:**` subsections, `(none recorded)` when nothing
+exists, and any "could not be read" line naming an unreadable learnings
+file (the task proceeds either way — the STATUS banner is unaffected).
 
 ```
 Agent({
@@ -71,7 +82,7 @@ buildSiblingIndex(allTasks, taskId). Never their full specs.>
 <Detected stack profiles — common mistakes and best practices>
 
 **Known patterns (avoid these):**
-<Confirmed patterns and team corrections from learning-loader>
+${KNOWN_PATTERNS}
 
 **Test command:** ${RESOLVED_TEST_COMMAND}
 
