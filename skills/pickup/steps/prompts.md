@@ -94,8 +94,8 @@ rm -rf "$D"
 
 Relative paths in `params.json` resolve against `$D`. Add
 `"scratchpadFile": "scratchpad.md"` only when implementers run in
-parallel. The CLI prints `BUDGET: within|over (...)`, a `Trimmed: …`
-line when it dropped a section, then `===== PROMPT =====` and the
+parallel (see **Parallel implementers** below). The CLI prints
+`BUDGET: within|over (...)`, a `Trimmed: …` line when it dropped a section, then `===== PROMPT =====` and the
 prompt. Constraints are assembled in order: the Iron Laws
 (`constraintsFiles`), then `constraints.md`. `--out <file>` is an
 optional convenience for inspecting the built prompt on disk (relative
@@ -108,9 +108,28 @@ substitute for pasting the prompt into the dispatch.
 | `constraints.md` | `constraints` | follows the Iron Laws (`${EXECUTION_ANNOUNCE}` `${SCOPE_LAW}` `${TDD_LAW}` `${BLOCKER_PROTOCOL}` `${TASK_GRANULARITY}`, verbatim via `constraintsFiles`): the **Requirements** list (1. Follow TDD Iron Law above — NON-NEGOTIABLE; 2. Use envoy:systematic-debugging if you encounter issues; 3. Two commits minimum: test commit BEFORE implementation commit; 4. Self-review your changes before returning) + `**Test command:** ${RESOLVED_TEST_COMMAND}` |
 | `acceptance.md` | `acceptance` | task acceptance as bullets + the **Return** list (summary of what you implemented; git log showing test commit preceded implementation commit; questions or concerns — do not reduce scope, surface blockers via Blocker Protocol; list of files changed) |
 | `learnings.md` | `learnings` | `${KNOWN_PATTERNS}` — preflight's `### Known patterns` body, verbatim: avoid the patterns, follow the corrections |
-| `scratchpad.md` | `scratchpad` | shared-state briefing (parallel strategy only; omit otherwise) |
+| `scratchpad.md` | `scratchpad` | shared-state briefing — `formatBriefing(pad, taskId)` from `--scratchpad-briefing` (parallel strategy only; omit otherwise) |
 | `context.md` | `context` | where this fits in the overall plan + `**Sibling tasks (context only — not in scope):**` `${SIBLING_INDEX}` (`buildSiblingIndex(allTasks, taskId)`, id + title only, never their full specs) |
 | `reference.md` | `reference` | stack context: detected stack profiles — common mistakes and best practices |
+
+**Parallel implementers.** Under strategy parallel, Step 13 has already
+created `.envoy-scratchpad.json` with `--init-scratchpad` (agent id = task
+id). For each implementer, from the worktree root, write its briefing
+straight into the section file — the command prints
+`formatBriefing(pad, taskId)` from `lib/agent-scratchpad.js` and rejects
+any id that is not a registered agent (single-quote the id):
+
+```bash
+node ${CLAUDE_SKILL_DIR}/preflight.js --scratchpad-briefing '<task-id>' > "$D/scratchpad.md"
+```
+
+and add `"scratchpadFile": "scratchpad.md"` to `params.json` (it lands in
+the prompt's Shared State section, never trimmed). Also append to
+`constraints.md`: `Other implementers are working in this worktree at the
+same time. Stage only your own files (git add <your files>,
+never git add -A or git add .) and commit serially — if a commit fails on
+the index lock, wait and retry; never commit another task's files.` Under
+sequential or batch there is no scratchpad: omit both.
 
 **Budget rules.**
 
