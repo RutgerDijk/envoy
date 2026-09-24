@@ -325,6 +325,14 @@ test('prompts.md expresses the implementer prompt as buildAgentPrompt parameters
   assert.ok(/advisory/i.test(impl), 'model tier is advisory');
 });
 
+test('the test command lives in a never-trimmed section (constraints), not context/reference', () => {
+  const impl = PROMPTS.split('## Spec Compliance Reviewer Prompt')[0];
+  const field = (key) => (impl.match(new RegExp(`^\\s*"${key}":\\s*(".*"),?$`, 'm')) || [])[1] || '';
+  assert.ok(field('constraints').includes('${RESOLVED_TEST_COMMAND}'), 'constraints carries the test command');
+  assert.ok(!field('context').includes('${RESOLVED_TEST_COMMAND}'), 'context is trimmable');
+  assert.ok(!field('reference').includes('${RESOLVED_TEST_COMMAND}'), 'reference is trimmable');
+});
+
 test('tdd.md Step 13 item 2 points at the budgeted build', () => {
   const step13 = TDD.split('### Step 13')[1] || '';
   assert.ok(step13.includes('buildAgentPrompt') && step13.includes('context-budget.js build'), step13.slice(0, 400));
