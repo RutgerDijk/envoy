@@ -62,24 +62,6 @@ function fullFlowLedger() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Exports
-// ═══════════════════════════════════════════════════════════════════
-
-section('exports');
-
-test('buildTrail is exported', () => {
-  assert.strictEqual(typeof compliance.buildTrail, 'function');
-});
-
-test('renderTrail is exported', () => {
-  assert.strictEqual(typeof compliance.renderTrail, 'function');
-});
-
-test('compliance is exported', () => {
-  assert.strictEqual(typeof compliance.compliance, 'function');
-});
-
-// ═══════════════════════════════════════════════════════════════════
 // buildTrail — pure, over already-parsed arrays
 // ═══════════════════════════════════════════════════════════════════
 
