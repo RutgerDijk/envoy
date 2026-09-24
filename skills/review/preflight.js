@@ -11,7 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 const CWD = process.cwd();
 const REPO_ROOT = process.env.ENVOY_REPO_ROOT || path.resolve(__dirname, '..', '..');
@@ -75,6 +75,59 @@ function printKnownPatterns(stackNames) {
     say(`Learnings could not be read from ${f} (corrupt or unreadable) — skipped.`);
   }
   if (!reminders && unreadable.length === 0) say('(none recorded)');
+}
+
+// ### File relevance — files changed in baseSha..headSha, scored by
+// lib/relevance-scorer.js scoreTaskRelevance() and rendered by
+// formatForPrompt(). The orchestrator fills layers/ai-review.md's
+// ${relevanceBriefing} from this section. Fail-soft: any error (no git,
+// unknown SHA, empty diff, scorer failure) is reported inside the section
+// and never touches the STATUS banner.
+const RELEVANCE_MAX_DEPTH = 3;
+const RELEVANCE_FILE_CAP = 200;
+const SHA_RE = /^[0-9a-f]{4,64}$/i;
+
+function printFileRelevance(handoff) {
+  say('### File relevance');
+  say('');
+  try {
+    const { baseSha, headSha } = handoff;
+    // SHAs come from a file: validate before handing them to git so a
+    // value like "--output=x" can never be read as an option.
+    if (!SHA_RE.test(String(baseSha)) || !SHA_RE.test(String(headSha))) {
+      throw new Error('baseSha/headSha are not hex commit SHAs');
+    }
+    const gitOut = (args) => execFileSync('git', args, {
+      cwd: CWD, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024,
+    });
+    let root;
+    let names;
+    try {
+      root = gitOut(['rev-parse', '--show-toplevel']).trim();
+      // --diff-filter=d drops deleted files; paths are relative to the
+      // repo top level, so resolve them against it.
+      names = gitOut(['diff', '--name-only', '--diff-filter=d', `${baseSha}..${headSha}`]);
+    } catch {
+      throw new Error('git unavailable or diff range unknown');
+    }
+    const changed = names.split('\n').map((l) => l.trim()).filter(Boolean).map((rel) => path.join(root, rel));
+    if (changed.length === 0) throw new Error('no changed files in diff range');
+
+    const { scoreTaskRelevance, formatForPrompt } = require(path.join(REPO_ROOT, 'lib', 'relevance-scorer'));
+    let results = scoreTaskRelevance(changed, root, { maxDepth: RELEVANCE_MAX_DEPTH });
+    const total = results.length;
+    if (total > RELEVANCE_FILE_CAP) results = results.slice(0, RELEVANCE_FILE_CAP);
+    // formatForPrompt opens with a level-2 "## Relevant Files" heading;
+    // this section already has its own heading, so drop it.
+    const body = formatForPrompt(results).replace(/^## Relevant Files\n?/, '');
+    if (!body) throw new Error('scorer returned no files');
+    say(body);
+    if (total > RELEVANCE_FILE_CAP) {
+      say(`Graph walk stopped at maxDepth ${RELEVANCE_MAX_DEPTH}; ${total} files scored, capped at the top ${RELEVANCE_FILE_CAP}.`);
+    }
+  } catch (err) {
+    say(`File relevance could not be computed: ${err && err.message ? err.message : String(err)} — review the diff directly.`);
+  }
 }
 
 function isGitRepo() {
@@ -164,6 +217,10 @@ function main() {
       printKnownPatterns(detectedStacks);
       say('');
       say('Give the Layer 1 reviewer this section verbatim as its **Known patterns** block (see layers/ai-review.md).');
+      say('');
+      printFileRelevance(handoff);
+      say('');
+      say('Fill ${relevanceBriefing} in layers/ai-review.md with this section verbatim.');
     }
     return;
   }
@@ -185,6 +242,10 @@ function main() {
   printKnownPatterns(detectedStacks);
   say('');
   say('Give the Layer 1 reviewer this section verbatim as its **Known patterns** block (see layers/ai-review.md).');
+  say('');
+  printFileRelevance(handoff);
+  say('');
+  say('Fill ${relevanceBriefing} in layers/ai-review.md with this section verbatim.');
   say('');
   say('Next: run pre-review setup from skills/review/SKILL.md, then proceed layer by layer (layers/lint.md, layers/cleanup.md, …).');
 }

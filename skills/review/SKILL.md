@@ -99,10 +99,12 @@ The inline `## Briefing` at the top of this skill runs `preflight.js`, which:
 - Validates the pickup handoff at `.envoy/pickup/handoff-to-review.json`
 - Writes `.envoy/active-skill.json`
 - Prints the issue number, branch, diff range, and stack profiles
+- Prints `### Known patterns` (confirmed patterns + team corrections via `lib/learning-loader.js`) — fills `${KNOWN_PATTERNS}` in `layers/ai-review.md`
+- Prints `### File relevance` — the files changed in `baseSha..headSha`, scored by `lib/relevance-scorer.js` (`scoreTaskRelevance` + `formatForPrompt`, maxDepth 3, capped at 200 files) — fills `${relevanceBriefing}` in `layers/ai-review.md`. If git or the diff range is unavailable it says relevance could not be computed; the STATUS tier is unaffected
 
 You do NOT need to invoke library utilities yourself — preflight is the
-single source of truth for relevance scoring, stack detection, review
-learnings, and output compression. Consume its briefing; treat
+single source of truth for relevance scoring, stack detection, and review
+learnings. Consume its briefing; treat
 `.envoy/pickup/handoff-to-review.json` as the contract.
 
 ### 5. Load Discipline Contexts
