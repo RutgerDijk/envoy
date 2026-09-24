@@ -51,81 +51,96 @@ file (the task proceeds either way — the STATUS banner is unaffected).
 
 ### Assembled with `buildAgentPrompt` and budget-checked
 
-The implementer prompt is NOT hand-assembled. Write its sections as
-`buildAgentPrompt` parameters (`lib/context-budget.js`) to a params file
-in the scratchpad / a temp dir (never the repo's `.envoy/`), then build
-it with the task's tier from preflight's `### Complexity` table:
+The implementer prompt is NOT hand-assembled. Its sections are
+`buildAgentPrompt` parameters (`lib/context-budget.js`), each written as
+a **plain markdown file** — no JSON escaping of multi-line text or
+quotes. The build CLI reads them with `fs` (no shell interpolation of any
+field), runs `checkBudget` for the task's tier from preflight's
+`### Complexity` table, and writes the final prompt to a file.
+
+**Recipe** — run from the **worktree root**: a trim's ledger event is
+appended to `.envoy/ledger.jsonl` under the current directory, so the
+cwd must be the worktree root.
 
 ```bash
-node ${CLAUDE_SKILL_DIR}/../../lib/context-budget.js build <params.json> --tier <tier> --task <task-id> --issue <issue>
-```
-
-The CLI builds the prompt with `buildAgentPrompt(params)` (LITM-ordered
-sections), checks it with `checkBudget` for that tier, and prints a
-`BUDGET: within|over (...)` verdict followed by the final prompt after
-`===== PROMPT =====`. Pass everything after that line to the Agent call
-unchanged. The file is read with `fs` — no shell interpolation of any
-field.
-
-Mapping of the existing injections onto `buildAgentPrompt` sections:
-
-```json
+D=$(mktemp -d)
+# 1. Write one markdown file per section into "$D" with the Write tool
+#    (see the table below): objective.md, constraints.md, acceptance.md,
+#    learnings.md, context.md, reference.md (+ scratchpad.md when parallel).
+# 2. Point params.json at them. The Iron Laws come straight from the plugin.
+cat > "$D/params.json" <<JSON
 {
-  "objective": "Implement Task N: <task title>\n\n**Full task specification:**\n<buildTaskSlice(task) — intent, behavior, files, acceptance, contracts, outOfScope for THIS task only>",
+  "objectiveFile": "objective.md",
   "constraintsFiles": [
-    "<absolute path to the plugin>/contexts/execution-announce.md",
-    "<absolute path to the plugin>/contexts/discipline-scope.md",
-    "<absolute path to the plugin>/contexts/discipline-tdd.md",
-    "<absolute path to the plugin>/contexts/discipline-blocker.md",
-    "<absolute path to the plugin>/contexts/discipline-task-granularity.md"
+    "${CLAUDE_SKILL_DIR}/../../contexts/execution-announce.md",
+    "${CLAUDE_SKILL_DIR}/../../contexts/discipline-scope.md",
+    "${CLAUDE_SKILL_DIR}/../../contexts/discipline-tdd.md",
+    "${CLAUDE_SKILL_DIR}/../../contexts/discipline-blocker.md",
+    "${CLAUDE_SKILL_DIR}/../../contexts/discipline-task-granularity.md"
   ],
-  "constraints": "**Requirements:**\n1. Follow TDD Iron Law above — NON-NEGOTIABLE\n2. Use envoy:systematic-debugging if you encounter issues\n3. Two commits minimum: test commit BEFORE implementation commit\n4. Self-review your changes before returning\n\n**Test command:** ${RESOLVED_TEST_COMMAND}",
-  "acceptance": "<task.acceptance as a bullet list>\n\n**Return:**\n- Summary of what you implemented\n- Git log showing test commit preceded implementation commit\n- Any questions or concerns (do not reduce scope — surface blockers via Blocker Protocol)\n- List of files changed",
-  "learnings": "<${KNOWN_PATTERNS} — preflight's ### Known patterns body, verbatim: avoid the patterns, follow the corrections>",
-  "scratchpad": "<shared scratchpad briefing when implementers run in parallel; omit otherwise>",
-  "context": "<Brief description of where this fits in the overall plan>\n\n**Sibling tasks (context only — not in scope):**\n<${SIBLING_INDEX} — buildSiblingIndex(allTasks, taskId), id + title only, never their full specs>",
-  "reference": "<Stack context: detected stack profiles — common mistakes and best practices>"
+  "constraintsFile": "constraints.md",
+  "acceptanceFile": "acceptance.md",
+  "learningsFile": "learnings.md",
+  "contextFile": "context.md",
+  "referenceFile": "reference.md"
 }
+JSON
+# 3. Build, budget-check, and write the prompt to a file.
+node ${CLAUDE_SKILL_DIR}/../../lib/context-budget.js build "$D/params.json" \
+  --tier <tier> --task <task-id> --issue <issue> --out "$D/prompt.md"
 ```
 
-| Section | Carries |
-|---------|---------|
-| `objective` | task title + `buildTaskSlice(task)` (intent/behavior/files/…) |
-| `constraints` | `${EXECUTION_ANNOUNCE}` `${SCOPE_LAW}` `${TDD_LAW}` `${BLOCKER_PROTOCOL}` `${TASK_GRANULARITY}` (verbatim, via `constraintsFiles` — read by the CLI, so the Iron Laws are never hand-escaped into JSON) + Requirements + `${RESOLVED_TEST_COMMAND}` |
-| `acceptance` | task acceptance + the Return list |
-| `learnings` | `${KNOWN_PATTERNS}` |
-| `scratchpad` | shared-state briefing (parallel strategy only) |
-| `context` | plan context + `${SIBLING_INDEX}` |
-| `reference` | stack context |
+Relative paths in `params.json` resolve against `$D`. Add
+`"scratchpadFile": "scratchpad.md"` only when implementers run in
+parallel. The CLI prints `BUDGET: within|over (...)`, a `Trimmed: …`
+line when it dropped a section, and `Prompt written to $D/prompt.md`.
+Constraints are assembled in order: the Iron Laws (`constraintsFiles`),
+then `constraints.md`.
+
+| File | Section | Carries |
+|------|---------|---------|
+| `objective.md` | `objective` | `Implement Task N: <task title>` + `**Full task specification:**` from `buildTaskSlice(task)` (intent, behavior, files, acceptance, contracts, outOfScope for THIS task only) |
+| `constraints.md` | `constraints` | follows the Iron Laws (`${EXECUTION_ANNOUNCE}` `${SCOPE_LAW}` `${TDD_LAW}` `${BLOCKER_PROTOCOL}` `${TASK_GRANULARITY}`, verbatim via `constraintsFiles`): the **Requirements** list (1. Follow TDD Iron Law above — NON-NEGOTIABLE; 2. Use envoy:systematic-debugging if you encounter issues; 3. Two commits minimum: test commit BEFORE implementation commit; 4. Self-review your changes before returning) + `**Test command:** ${RESOLVED_TEST_COMMAND}` |
+| `acceptance.md` | `acceptance` | task acceptance as bullets + the **Return** list (summary of what you implemented; git log showing test commit preceded implementation commit; questions or concerns — do not reduce scope, surface blockers via Blocker Protocol; list of files changed) |
+| `learnings.md` | `learnings` | `${KNOWN_PATTERNS}` — preflight's `### Known patterns` body, verbatim: avoid the patterns, follow the corrections |
+| `scratchpad.md` | `scratchpad` | shared-state briefing (parallel strategy only; omit otherwise) |
+| `context.md` | `context` | where this fits in the overall plan + `**Sibling tasks (context only — not in scope):**` `${SIBLING_INDEX}` (`buildSiblingIndex(allTasks, taskId)`, id + title only, never their full specs) |
+| `reference.md` | `reference` | stack context: detected stack profiles — common mistakes and best practices |
 
 **Budget rules.**
 
-- The Iron Laws in `constraints` are fixed, mandatory overhead (SKILL.md
-  injects them verbatim) — about 118 lines, which alone would put every
-  prompt over the `standard` 120-line budget. They are therefore
-  **excluded from the budgeted count**; the verdict line states
-  `constraints excluded (N fixed lines)`. The budget measures everything
-  else.
+- The Iron Laws are fixed, mandatory overhead (SKILL.md injects them
+  verbatim) — about 118 lines, which alone would put every prompt over
+  the `standard` 120-line budget. They are therefore **excluded from the
+  budgeted count**; the verdict line states `constraints excluded (N
+  fixed lines)`. The budget measures everything else.
 - **Over budget → Reference is trimmed first**, then Context if still
-  over. `${RESOLVED_TEST_COMMAND}` therefore lives in `constraints`, not
-  `context` — the implementer must never lose the test-command
-  instruction to a trim. Objective, constraints, acceptance, learnings and scratchpad are
-  never trimmed. Every trim is recorded in the ledger
-  (`.envoy/ledger.jsonl`, event `prompt-budget-trimmed` with `task`,
-  `tier`, `trimmed`, `lines`, `maxLines`) — the CLI writes it, the
-  dispatcher does not hand-edit the ledger.
+  over. Objective, constraints, acceptance, learnings and scratchpad are
+  never trimmed. `${RESOLVED_TEST_COMMAND}` therefore lives in
+  `constraints.md`, not `context.md` — the implementer must never lose
+  the test-command instruction to a trim. Every trim is recorded in the
+  ledger (`.envoy/ledger.jsonl`, event `prompt-budget-trimmed` with
+  `task`, `tier`, `trimmed`, `lines`, `maxLines`) — the CLI writes it;
+  the dispatcher does not hand-edit the ledger.
 - A prompt still over budget after both trims is dispatched as-is with
   the `BUDGET: over` verdict noted; the tier is advisory.
 - The model tier (haiku/sonnet/opus) is **advisory text only** — it does
   not change the Agent tool's model.
 
+**Dispatch.** Recommended: point the implementer at the file, so the
+prompt is never re-typed:
+
 ```
 Agent({
   subagent_type: "general-purpose",
   description: "Implement Task N",
-  prompt: `<everything after ===== PROMPT ===== from the build CLI>`
+  prompt: "Your full instructions are in <$D/prompt.md, as an absolute path>. Read it completely before doing anything, then follow it."
 })
 ```
+
+Alternative: omit `--out`. The CLI then prints the prompt after a
+`===== PROMPT =====` line; paste everything after that line into
+`prompt` unchanged.
 
 ---
 
