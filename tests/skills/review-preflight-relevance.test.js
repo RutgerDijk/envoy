@@ -260,6 +260,19 @@ test('non-ASCII file names are scored under their real path (git -z output)', ()
   assert.strictEqual(labelOf(s, 'caf\u00e9 file.js'), 'full', `expected the unquoted path\n${s}`);
 });
 
+test('a shell payload in baseSha never reaches a shell (stack detection skipped)', () => {
+  const dir = makeTmpDir();
+  initRepo(dir);
+  ignoreEnvoy(dir);
+  writeFile(dir, 'base.js', 'module.exports = 0;\n');
+  const headSha = commitAll(dir, 'base');
+  const marker = path.join(dir, 'pwned');
+  writeHandoff(dir, { baseSha: `$(touch ${marker})`, headSha });
+
+  runPreflight(dir);
+  assert.ok(!fs.existsSync(marker), 'baseSha was interpolated into a shell command');
+});
+
 for (const d of tmpRoots) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);

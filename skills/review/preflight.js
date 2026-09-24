@@ -194,7 +194,10 @@ function main() {
   let frontendDetected = false;
   let detectedStacks = [];
   try {
-    detectedStacks = detectStacksFromDiff(handoff.baseSha, CWD);
+    // detectStacksFromDiff interpolates its argument into a shell string.
+    if (SHA_RE.test(String(handoff.baseSha))) {
+      detectedStacks = detectStacksFromDiff(handoff.baseSha, CWD);
+    }
     frontendDetected = anyFrontendStack(detectedStacks);
   } catch {
     frontendDetected = false;

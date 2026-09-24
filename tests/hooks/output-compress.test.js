@@ -179,6 +179,13 @@ test('every failed test name survives compression and output is shorter', () => 
   assert.strictEqual(u.stderr, 'some stderr');
 });
 
+test('xUnit [FAIL] lines with only a Failed! summary → original passes through (test names would be lost)', () => {
+  const log = readFixture('dotnet-test-xunit-fail-only.log');
+  const { code, out } = runHook(hook, JSON.stringify(bashEvent('dotnet test', log)));
+  assert.ok(code === undefined || code === 0);
+  assert.strictEqual(out, '', `expected passthrough, got: ${out}`);
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // Pass-through cases
 // ═══════════════════════════════════════════════════════════════════
