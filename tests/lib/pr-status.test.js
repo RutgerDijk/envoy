@@ -750,6 +750,13 @@ test('without rateLimitCommentAt the relative cooldown still falls back to now',
   assert.strictEqual(snap.coderabbit.rateLimit.resetsAt, '2026-07-15T12:10:00.000Z');
 });
 
+test('summarizeChecks: STALE and STARTUP_FAILURE conclusions are not green', () => {
+  for (const conclusion of ['STALE', 'STARTUP_FAILURE']) {
+    const r = prStatus.summarizeChecks([{ __typename: 'CheckRun', name: 'build', conclusion }]);
+    assert.strictEqual(r.ci.state, 'FAILURE', conclusion);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════

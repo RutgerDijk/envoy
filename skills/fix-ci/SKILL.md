@@ -64,9 +64,11 @@ REPO=$(gh repo view --json name -q '.name')
 BRANCH=$(git branch --show-current)
 
 # Get latest check runs. `gh pr checks` has no `conclusion` field: use `bucket`
-# (pass|fail|pending|skipping|cancel). It exits 8 while checks are pending/failing
-# but still prints the JSON; any other failure prints nothing => treat as "unknown", not "no failures".
-CHECKS=$(gh pr checks "$PR_NUMBER" --json name,state,bucket) || [ "$?" -eq 8 ] || CHECKS=""
+# (pass|fail|pending|skipping|cancel). It exits non-zero (8 pending, 1 failing) yet still
+# prints valid JSON, so keep stdout whenever it is a JSON array; only missing/malformed
+# output is "unknown", not "no failures".
+CHECKS=$(gh pr checks "$PR_NUMBER" --json name,state,bucket 2>/dev/null || true)
+echo "$CHECKS" | jq -e 'type == "array"' >/dev/null 2>&1 || CHECKS=""
 [ -n "$CHECKS" ] || echo "Cannot read CI checks (gh pr checks failed) - result unknown, not green"
 ```
 
@@ -79,7 +81,7 @@ intervals = [30s, 60s, 120s, 240s]
 timeout = 15 minutes
 
 For each interval:
-  - Query: gh pr checks $PR_NUMBER --json name,state,bucket   (exit 8 = pending/failing, JSON still valid; any other error = unknown, not green)
+  - Query: gh pr checks $PR_NUMBER --json name,state,bucket   (non-zero exit with valid JSON array = still usable; missing/malformed output = unknown, not green)
   - Failed = bucket "fail" or "cancel" (a cancelled check is not green); pending = bucket "pending"
   - If no check is pending: break
   - If still running: report progress, sleep, continue

@@ -433,6 +433,15 @@ test('blocked at maxCycles: code 2, no rerun, no label changes', () => {
   assert.ok(!/\breset\b/.test(res.message));
 });
 
+test('at maxCycles but not ready: code 3 (re-poll), not code 2', () => {
+  const cwd = tmp();
+  for (let i = 0; i < fullCi.MAX_CYCLES; i++) go({ pr: 7, gh: fakeGh(), cwd });
+  const gh = fakeGh();
+  const res = go({ pr: 7, gh, cwd, snapshot: () => snap({ threads: { unresolved: 2 } }) });
+  assert.strictEqual(res.code, 3);
+  assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
+});
+
 test('failed attempt (no gate) does not consume a cycle', () => {
   const cwd = tmp();
   go({ pr: 7, gh: fakeGh({ rollup: [] }), cwd });
