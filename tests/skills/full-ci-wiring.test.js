@@ -91,7 +91,7 @@ check('fix-ci Step 8 state machine routes fullSuiteSkipped to a remediation stat
 });
 check('finalize checks fullSuiteSkipped in a bash block BEFORE computing FAILED', () => {
   const b = read(FILES[0]);
-  const skipped = b.indexOf('FULL_SUITE_SKIPPED=$(');
+  const skipped = b.indexOf('SUITE_NOT_RUN=$(');
   const failedAt = b.indexOf('FAILED=$(');
   assert.ok(skipped >= 0 && failedAt >= 0 && skipped < failedAt);
   assert.ok(b.includes('PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"'));
