@@ -621,7 +621,7 @@ test('reads check runs and combined status for the SHA and merges into nodes', (
   const seen = [];
   const nodes = prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
     fetchCheckRuns: (repo, s) => { seen.push(['runs', s]); return [run()]; },
-    fetchStatus: (repo, s) => { seen.push(['status', s]); return { statuses: [{ context: 'CodeRabbit', state: 'success' }] }; },
+    fetchStatus: (repo, s) => { seen.push(['status', s]); return { total_count: 1, statuses: [{ context: 'CodeRabbit', state: 'success' }] }; },
   });
   assert.deepStrictEqual(seen, [['runs', sha], ['status', sha]]);
   assert.strictEqual(nodes.length, 2);
@@ -645,11 +645,38 @@ test('combined status with matching total_count is accepted', () => {
   assert.strictEqual(nodes.length, 1);
 });
 
+test('combined status with missing or non-numeric total_count throws (fail closed)', () => {
+  const sha = 'e'.repeat(40);
+  for (const bad of [undefined, null, '1', NaN, Infinity]) {
+    assert.throws(() => prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
+      fetchCheckRuns: () => [],
+      fetchStatus: () => ({ total_count: bad, statuses: [{ context: 'x', state: 'success' }] }),
+    }), /total_count/, `total_count=${String(bad)}`);
+  }
+  assert.throws(() => prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
+    fetchCheckRuns: () => [],
+    fetchStatus: () => ({ statuses: [] }),
+  }), /total_count/);
+  assert.throws(() => prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
+    fetchCheckRuns: () => [],
+    fetchStatus: () => null,
+  }), /total_count/);
+});
+
+test('total_count 0 with an empty statuses list is accepted', () => {
+  const sha = 'f'.repeat(40);
+  const nodes = prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
+    fetchCheckRuns: () => [],
+    fetchStatus: () => ({ total_count: 0, statuses: [] }),
+  });
+  assert.deepStrictEqual(nodes, []);
+});
+
 test('a fetcher error propagates (caller fails closed)', () => {
   const sha = 'b'.repeat(40);
   assert.throws(() => prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
     fetchCheckRuns: () => { throw new Error('boom'); },
-    fetchStatus: () => ({ statuses: [] }),
+    fetchStatus: () => ({ total_count: 0, statuses: [] }),
   }), /boom/);
 });
 
