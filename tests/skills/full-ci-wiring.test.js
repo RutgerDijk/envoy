@@ -253,6 +253,13 @@ check('ci.md fails closed: an unreadable gh query yields "unknown", not 0', () =
   assert.ok(!/CHECKS=\$\(gh pr checks[^\n]*2>\/dev\/null\)\s*$/m.test(b), 'bare gh query with hidden stderr');
 });
 
+for (const rel of CALLERS) {
+  check(`${rel} says exit 3 takes precedence and exit 2 only applies once ready`, () => {
+    const b = read(rel);
+    assert.ok(/exit 3[^\n]*takes precedence[^\n]*exit 2/i.test(b) || /exit 2[^\n]*only once[^\n]*ready/i.test(b));
+  });
+}
+
 const { spawnSync } = require('child_process');
 const jqOk = spawnSync('jq', ['--version']).status === 0;
 function filterFromCiMd(name) {
@@ -295,6 +302,43 @@ if (!jqOk) {
     assert.strictEqual(runJq(f, '[{"name":"a","bucket":"pass"},{"name":"b","bucket":"skipping"}]', a), '0');
     assert.strictEqual(runJq(f, '[]', a), '0');
   });
+}
+
+
+// ── gh pr checks capture: run the real snippets from the markdown with a fake gh ──
+{
+  const os = require('os');
+  const bashOk = spawnSync('bash', ['--version']).status === 0;
+  function snippetFromFixCi() {
+    const b = read('skills/fix-ci/SKILL.md');
+    const m = /^(CHECKS=\$\(gh pr checks[^\n]*\n(?:[^\n]*CHECKS[^\n]*\n)+)/m.exec(b);
+    assert.ok(m, 'fix-ci SKILL.md must contain the CHECKS=$(gh pr checks ...) capture');
+    return m[1];
+  }
+  function runSnippet(snippet, stdout, exitCode) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fakegh-'));
+    fs.writeFileSync(path.join(dir, 'gh'), `#!/bin/bash\nprintf '%s' '${stdout}'\nexit ${exitCode}\n`, { mode: 0o755 });
+    const r = spawnSync('bash', ['-c', `PR_NUMBER=1\n${snippet}\nprintf 'CHECKS=<%s>' "$CHECKS"`], {
+      encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+    });
+    fs.rmSync(dir, { recursive: true, force: true });
+    return r.stdout;
+  }
+  const ARR = '[{"name":"t","state":"FAILURE","bucket":"fail"}]';
+  if (!bashOk || !jqOk) {
+    console.log('  SKIP gh pr checks capture tests: bash/jq missing');
+  } else {
+    check('fix-ci capture keeps valid JSON array when gh exits 1 (failing checks)', () =>
+      assert.ok(runSnippet(snippetFromFixCi(), ARR, 1).includes(`CHECKS=<${ARR}>`)));
+    check('fix-ci capture keeps valid JSON array when gh exits 8 (pending)', () =>
+      assert.ok(runSnippet(snippetFromFixCi(), ARR, 8).includes(`CHECKS=<${ARR}>`)));
+    check('fix-ci capture: empty output is unknown (CHECKS empty), any exit', () => {
+      for (const code of [0, 1, 8]) assert.ok(runSnippet(snippetFromFixCi(), '', code).includes('CHECKS=<>'), `exit ${code}`);
+    });
+    check('fix-ci capture: non-JSON output is unknown (CHECKS empty), any exit', () => {
+      for (const code of [0, 1, 8]) assert.ok(runSnippet(snippetFromFixCi(), 'error: boom', code).includes('CHECKS=<>'), `exit ${code}`);
+    });
+  }
 }
 
 process.exit(failed ? 1 : 0);

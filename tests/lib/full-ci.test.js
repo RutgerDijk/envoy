@@ -433,13 +433,27 @@ test('blocked at maxCycles: code 2, no rerun, no label changes', () => {
   assert.ok(!/\breset\b/.test(res.message));
 });
 
-test('at maxCycles but not ready: code 3 (re-poll), not code 2', () => {
+test('ready PR at cyclesSeen >= MAX_CYCLES: exit 2, no writes, no new cycle', () => {
+  const cwd = tmp();
+  for (let i = 0; i < fullCi.MAX_CYCLES; i++) go({ pr: 7, gh: fakeGh(), cwd });
+  const before = loops.loadState('full-ci-7', cwd).cyclesSeen;
+  const gh = fakeGh();
+  const res = go({ pr: 7, gh, cwd, snapshot: () => snap() });
+  assert.strictEqual(res.code, 2);
+  assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
+  assert.strictEqual(has(gh, 'pr', 'edit').length, 0);
+  assert.strictEqual(loops.loadState('full-ci-7', cwd).cyclesSeen, before);
+});
+
+test('not-ready PR at cyclesSeen >= MAX_CYCLES: exit 3 (re-poll), never exit 2, no writes, no new cycle', () => {
   const cwd = tmp();
   for (let i = 0; i < fullCi.MAX_CYCLES; i++) go({ pr: 7, gh: fakeGh(), cwd });
   const gh = fakeGh();
   const res = go({ pr: 7, gh, cwd, snapshot: () => snap({ threads: { unresolved: 2 } }) });
   assert.strictEqual(res.code, 3);
   assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
+  assert.strictEqual(has(gh, 'pr', 'edit').length, 0);
+  assert.strictEqual(loops.loadState('full-ci-7', cwd).cyclesSeen, fullCi.MAX_CYCLES);
 });
 
 test('failed attempt (no gate) does not consume a cycle', () => {

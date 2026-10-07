@@ -750,12 +750,39 @@ test('without rateLimitCommentAt the relative cooldown still falls back to now',
   assert.strictEqual(snap.coderabbit.rateLimit.resetsAt, '2026-07-15T12:10:00.000Z');
 });
 
-test('summarizeChecks: STALE and STARTUP_FAILURE conclusions are not green', () => {
-  for (const conclusion of ['STALE', 'STARTUP_FAILURE']) {
+section('STALE / STARTUP_FAILURE are non-green in every reducer');
+
+for (const conclusion of ['STALE', 'STARTUP_FAILURE', 'stale', 'startup_failure']) {
+  test(`summarizeChecks state reducer: ${conclusion} check run is FAILURE`, () => {
     const r = prStatus.summarizeChecks([{ __typename: 'CheckRun', name: 'build', conclusion }]);
-    assert.strictEqual(r.ci.state, 'FAILURE', conclusion);
-  }
-});
+    assert.strictEqual(r.ci.state, 'FAILURE');
+  });
+
+  test(`onlyGateFailing: marker gate + ${conclusion} non-gate check is not owed, state FAILURE`, () => {
+    const { ci, summary } = ciFor([run(), { name: 'check', status: 'completed', conclusion }]);
+    assert.strictEqual(summary.onlyGateFailing, false);
+    assert.strictEqual(ci.fullSuiteOwed, false);
+    assert.strictEqual(ci.state, 'FAILURE');
+  });
+
+  test(`latest ${conclusion} ci-gate run supersedes older marker failure: not owed, state FAILURE`, () => {
+    const latest = run({ conclusion, started_at: '2026-10-07T12:00:00Z', completed_at: '2026-10-07T12:05:00Z', details_url: 'https://github.com/o/r/actions/runs/555/job/666' });
+    const { ci } = ciFor([run(), latest]);
+    assert.strictEqual(ci.fullSuiteOwed, false);
+    assert.strictEqual(ci.state, 'FAILURE');
+  });
+
+  test(`normalizePinnedNodes (REST check-runs) -> buildSnapshot: ${conclusion} gives ci FAILURE and fullSuiteOwed false`, () => {
+    const nodes = prStatus.normalizePinnedNodes(
+      [run(), { name: 'check', status: 'completed', conclusion, started_at: '2026-10-07T10:00:00Z', completed_at: '2026-10-07T10:01:00Z' }],
+      { statuses: [] }
+    );
+    const ci = prStatus.deriveCi(prStatus.summarizeChecks(nodes), markerFetch);
+    const snap = prStatus.buildSnapshot({ ...rawInputs, ci });
+    assert.strictEqual(snap.ci.state, 'FAILURE');
+    assert.strictEqual(snap.ci.fullSuiteOwed, false);
+  });
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // Summary

@@ -27,6 +27,15 @@ test('mentions lib/full-ci.js', () => has('lib/full-ci.js'));
 for (const n of ['ci-gate', 'ENVOY_CI_GATE_CHECK', 'gh pr view', '--json labels', 'needs.changes.outputs.full', 'gh run rerun', '--failed', 'annotation', '/FULL SUITE NOT RUN/i', '::error::FULL SUITE NOT RUN']) {
   test(`mentions ${n}`, () => has(n));
 }
+test('exit 3 precedence over exit 2 is documented', () => {
+  assert.ok(/exit 3[^\n]*takes precedence[^\n]*exit 2/i.test(doc), 'doc must say exit 3 takes precedence over exit 2');
+  assert.ok(/exit 2[^\n]*only once[^\n]*ready/i.test(doc), 'doc must say exit 2 applies only once the PR is otherwise ready');
+});
+test('doc stays under the 80-line cap', () => assert.ok(doc.split('\n').length < 80, `lines: ${doc.split('\n').length}`));
+test('lib/full-ci.js header documents exit 3 precedence over exit 2', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'full-ci.js'), 'utf8').split('const { execFileSync }')[0];
+  assert.ok(/exit 3[^\n]*precedence[^\n]*exit 2|exit 2[^\n]*only once[^\n]*ready/i.test(src));
+});
 test('no labeled trigger example', () => assert.ok(!/types:.*labeled/.test(doc)));
 test('no SKIPPED markers text', () => assert.ok(!/skipped markers/i.test(doc)));
 test('doc under 80 lines', () => assert.ok(doc.split('\n').length < 80));
