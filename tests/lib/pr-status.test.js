@@ -476,12 +476,42 @@ test('older failed ci-gate run is superseded by a newer green run (API snake_cas
   assert.strictEqual(ci.fullSuiteOwed, false);
 });
 
-test('dedupe is order-independent and case-insensitive on name; handles gh camelCase timestamps', () => {
-  const oldFail = { name: 'CI-Gate', conclusion: 'FAILURE', startedAt: '2026-10-07T10:00:00Z', completedAt: '2026-10-07T10:05:00Z', detailsUrl: 'u/job/1' };
-  const newGreen = { name: 'ci-gate', conclusion: 'SUCCESS', startedAt: '2026-10-07T11:00:00Z', completedAt: '2026-10-07T11:05:00Z' };
+test('dedupe is order-independent and handles gh camelCase timestamps', () => {
+  const oldFail = { name: 'ci-gate', workflowName: 'CI', conclusion: 'FAILURE', startedAt: '2026-10-07T10:00:00Z', completedAt: '2026-10-07T10:05:00Z', detailsUrl: 'u/job/1' };
+  const newGreen = { name: 'ci-gate', workflowName: 'CI', conclusion: 'SUCCESS', startedAt: '2026-10-07T11:00:00Z', completedAt: '2026-10-07T11:05:00Z' };
   const r = prStatus.summarizeChecks([newGreen, oldFail]);
   assert.strictEqual(r.ci.checks.length, 1);
   assert.strictEqual(r.ci.state, 'SUCCESS');
+});
+
+test('same name from two different apps is not collapsed: the failure is kept, not owed', () => {
+  const nodes = [
+    green({ app: { slug: 'github-actions' } }),
+    run({ name: 'check', app: { slug: 'other-app' }, started_at: '2026-10-07T09:00:00Z', completed_at: '2026-10-07T09:01:00Z' }),
+    { name: 'check', status: 'completed', conclusion: 'success', app: { slug: 'github-actions' }, completed_at: '2026-10-07T12:00:00Z' },
+  ];
+  const { summary, ci } = ciFor(nodes);
+  assert.strictEqual(summary.ci.checks.length, 3);
+  assert.strictEqual(summary.ci.state, 'FAILURE');
+  assert.strictEqual(ci.fullSuiteOwed, false);
+});
+
+test('same name from two different workflows (gh rollup workflowName) is not collapsed', () => {
+  const r = prStatus.summarizeChecks([
+    { name: 'test', workflowName: 'A', conclusion: 'FAILURE', completedAt: '2026-10-07T10:00:00Z' },
+    { name: 'test', workflowName: 'B', conclusion: 'SUCCESS', completedAt: '2026-10-07T11:00:00Z' },
+  ]);
+  assert.strictEqual(r.ci.checks.length, 2);
+  assert.strictEqual(r.ci.state, 'FAILURE');
+});
+
+test('case-differing names are not merged (GitHub check names are case-sensitive)', () => {
+  const r = prStatus.summarizeChecks([
+    { name: 'Build', conclusion: 'FAILURE', completedAt: '2026-10-07T10:00:00Z' },
+    { name: 'build', conclusion: 'SUCCESS', completedAt: '2026-10-07T11:00:00Z' },
+  ]);
+  assert.strictEqual(r.ci.checks.length, 2);
+  assert.strictEqual(r.ci.state, 'FAILURE');
 });
 
 test('a newer in-progress rerun supersedes an older failed run (not owed)', () => {
@@ -596,6 +626,23 @@ test('reads check runs and combined status for the SHA and merges into nodes', (
   assert.deepStrictEqual(seen, [['runs', sha], ['status', sha]]);
   assert.strictEqual(nodes.length, 2);
   assert.ok(nodes.some((n) => n.context === 'CodeRabbit' && n.__typename === 'StatusContext'));
+});
+
+test('combined status with total_count > statuses.length throws (fail closed, no silent truncation)', () => {
+  const sha = 'c'.repeat(40);
+  assert.throws(() => prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
+    fetchCheckRuns: () => [],
+    fetchStatus: () => ({ total_count: 150, statuses: new Array(100).fill({ context: 'x', state: 'success' }) }),
+  }), /truncated|total_count/);
+});
+
+test('combined status with matching total_count is accepted', () => {
+  const sha = 'd'.repeat(40);
+  const nodes = prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
+    fetchCheckRuns: () => [],
+    fetchStatus: () => ({ total_count: 1, statuses: [{ context: 'x', state: 'success' }] }),
+  });
+  assert.strictEqual(nodes.length, 1);
 });
 
 test('a fetcher error propagates (caller fails closed)', () => {
