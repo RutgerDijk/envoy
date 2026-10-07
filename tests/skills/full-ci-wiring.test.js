@@ -33,7 +33,7 @@ check('lib/full-ci.js exists', () => assert.ok(fs.existsSync(path.join(ROOT, 'li
 
 for (const rel of FILES) {
   const body = read(rel);
-  for (const needle of ['FULL SUITE NOT RUN', 'lib/full-ci.js', 'SKIPPED', 'report only, do not loop']) {
+  for (const needle of ['FULL SUITE NOT RUN', 'lib/full-ci.js', 'report only, do not loop']) {
     check(`${rel} mentions ${needle}`, () => assert.ok(body.includes(needle)));
   }
 }
@@ -59,11 +59,22 @@ check('babysit snapshot uses plugin-root pr-status.js', () => {
 });
 check('babysit mentions fullSuiteSkipped', () =>
   assert.ok(read(FILES[2]).includes('fullSuiteSkipped')));
-check('babysit marker row comes after failing-ci row', () => {
+check('babysit marker row comes BEFORE failing-ci row', () => {
   const b = read(FILES[2]);
   const fail = b.indexOf('| `ci.state` is failing');
   const marker = b.indexOf('| `ci.fullSuiteSkipped`');
-  assert.ok(fail >= 0 && marker >= 0 && marker > fail);
+  assert.ok(fail >= 0 && marker >= 0 && marker < fail);
+});
+for (const rel of FILES) {
+  check(`${rel} drops name/SKIPPED/latest-per-name wording`, () => {
+    const b = read(rel);
+    assert.ok(!/SKIPPED|NEUTRAL|latest per name|name matches/.test(b));
+    assert.ok(/gate/i.test(b) && /annotation/i.test(b));
+  });
+}
+check('fix-ci checks fullSuiteSkipped before classifying failures', () => {
+  const b = read(FILES[1]);
+  assert.ok(b.indexOf('fullSuiteSkipped') < b.indexOf('### Step 3: Classify'));
 });
 for (const rel of FILES.filter((f) => f.endsWith('SKILL.md'))) {
   check(`${rel} under 500 lines`, () => assert.ok(read(rel).split('\n').length < 500));

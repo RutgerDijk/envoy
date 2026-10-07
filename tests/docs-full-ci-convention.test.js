@@ -24,13 +24,15 @@ const has = (s) => assert.ok(doc.includes(s), `missing: ${s}`);
 test('mentions marker FULL SUITE NOT RUN', () => has('FULL SUITE NOT RUN'));
 test('mentions label full-ci', () => has('full-ci'));
 test('mentions lib/full-ci.js', () => has('lib/full-ci.js'));
-test('example sets name: FULL SUITE NOT RUN', () => has('name: FULL SUITE NOT RUN'));
-test('example uses labeled trigger', () => has('labeled'));
-test('states the matching regex', () => has('/FULL SUITE NOT RUN/i'));
+for (const n of ['ci-gate', 'ENVOY_CI_GATE_CHECK', 'gh pr view', '--json labels', 'needs.changes.outputs.full', 'gh run rerun', '--failed', 'annotation', '/FULL SUITE NOT RUN/i', '::error::FULL SUITE NOT RUN']) {
+  test(`mentions ${n}`, () => has(n));
+}
+test('no labeled trigger example', () => assert.ok(!/types:.*labeled/.test(doc)));
+test('no SKIPPED markers text', () => assert.ok(!/skipped markers/i.test(doc)));
+test('doc under 80 lines', () => assert.ok(doc.split('\n').length < 80));
 test('documents loop-safeguards cleanup', () => has('loop-safeguards.js cleanup full-ci-'));
 test('does not use consumer-relative node lib/ paths', () => assert.ok(!/node lib\//.test(doc)));
 test('documents the 3 cycle cap', () => has('3 cycles'));
-test('documents skipped marker is ignored', () => assert.ok(/skipped/i.test(doc)));
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
