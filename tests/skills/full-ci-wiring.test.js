@@ -168,7 +168,7 @@ check('ci.md bash snippet has a distinct 3) case separate from 1)', () => {
 check('ci.md last-step guard enforces FAILED == 0 and no unpushed work, failing closed', () => {
   const sn = lastStepBash();
   const guard = sn.slice(0, sn.indexOf('full-ci.js'));
-  assert.ok(/"\$FAILED" -eq 0/.test(guard));
+  assert.ok(/"\$FAILED" = "0"/.test(guard), 'FAILED must be compared as the string "0" so unknown fails closed');
   assert.ok(guard.includes('git status --porcelain'));
   assert.ok(guard.includes('git rev-list --count @{u}..HEAD'));
   assert.ok(sn.includes('not the last step yet'));
@@ -203,4 +203,78 @@ check('babysit Step 4 surfaces a persistent NOT READY reason as information', ()
 for (const rel of FILES.filter((f) => f.endsWith('SKILL.md'))) {
   check(`${rel} under 500 lines`, () => assert.ok(read(rel).split('\n').length < 500));
 }
+
+// ---- Issue #87 follow-up: `gh pr checks` has no `conclusion` field; use `bucket` ----
+const CHECKS_FILES = [
+  'skills/finalize/steps/ci.md',
+  'skills/finalize/steps/verify.md',
+  'skills/finalize/steps/coderabbit.md',
+  'skills/fix-ci/SKILL.md',
+  'docs/plans/2026-04-04-auto-fix-ci.md',
+];
+for (const rel of CHECKS_FILES) {
+  check(`${rel}: every gh pr checks --json asks for bucket, never conclusion`, () => {
+    const lines = read(rel).split('\n').filter((l) => /gh pr checks[^\n]*--json/.test(l));
+    assert.ok(lines.length > 0, 'expected at least one gh pr checks --json line');
+    for (const l of lines) {
+      assert.ok(!/--json[^\n]*conclusion/.test(l), `requests conclusion: ${l.trim()}`);
+      assert.ok(/--json[^\n]*bucket/.test(l), `does not request bucket: ${l.trim()}`);
+    }
+  });
+}
+check('ci.md / fix-ci / verify.md jq filters do not key on .conclusion', () => {
+  for (const rel of ['skills/finalize/steps/ci.md', 'skills/finalize/steps/verify.md', 'skills/fix-ci/SKILL.md']) {
+    assert.ok(!/\.conclusion/.test(read(rel)), `${rel} still selects on .conclusion`);
+  }
+});
+check('ci.md fails closed: an unreadable gh query yields "unknown", not 0', () => {
+  const b = ciMd();
+  assert.ok(b.includes('unknown'), 'unknown state for a failed gh query');
+  assert.ok(!/CHECKS=\$\(gh pr checks[^\n]*2>\/dev\/null\)\s*$/m.test(b), 'bare gh query with hidden stderr');
+});
+
+const { spawnSync } = require('child_process');
+const jqOk = spawnSync('jq', ['--version']).status === 0;
+function filterFromCiMd(name) {
+  const m = new RegExp(`^${name}='([^']*)'$`, 'm').exec(ciMd());
+  assert.ok(m, `ci.md must define ${name}='...' (single-quoted) so tests can run it`);
+  return m[1];
+}
+function runJq(filter, json, args = []) {
+  const r = spawnSync('jq', [...args, filter], { input: json, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, `jq failed: ${r.stderr}`);
+  return r.stdout.trim();
+}
+const FIXTURE = JSON.stringify([
+  { name: 'lint', state: 'FAILURE', bucket: 'fail' },
+  { name: 'unit', state: 'IN_PROGRESS', bucket: 'pending' },
+  { name: 'build', state: 'SUCCESS', bucket: 'pass' },
+  { name: 'docs', state: 'SKIPPED', bucket: 'skipping' },
+  { name: 'e2e', state: 'CANCELLED', bucket: 'cancel' },
+  { name: 'CI-Gate', state: 'FAILURE', bucket: 'fail' },
+  { state: 'FAILURE' },
+]);
+if (!jqOk) {
+  console.log('  SKIP jq filter behaviour tests: jq is not installed');
+} else {
+  check('PENDING_JQ counts only bucket "pending"', () => {
+    assert.strictEqual(runJq(filterFromCiMd('PENDING_JQ'), FIXTURE), '1');
+  });
+  check('FAILED_JQ counts fail + cancel, null-safe on missing fields', () => {
+    // lint(fail) + e2e(cancel) + CI-Gate(fail) = 3; the nameless entry has no bucket
+    assert.strictEqual(runJq(filterFromCiMd('FAILED_JQ'), FIXTURE, ['--arg', 'skip', 'false', '--arg', 'gate', 'ci-gate']), '3');
+  });
+  check('FAILED_JQ excludes a marker-red ci-gate case-insensitively when skip is true', () => {
+    const f = filterFromCiMd('FAILED_JQ');
+    assert.strictEqual(runJq(f, FIXTURE, ['--arg', 'skip', 'true', '--arg', 'gate', 'ci-gate']), '2');
+    assert.strictEqual(runJq(f, FIXTURE, ['--arg', 'skip', 'true', '--arg', 'gate', 'CI-GATE']), '2');
+  });
+  check('FAILED_JQ is 0 for all-green and empty arrays', () => {
+    const f = filterFromCiMd('FAILED_JQ');
+    const a = ['--arg', 'skip', 'false', '--arg', 'gate', 'ci-gate'];
+    assert.strictEqual(runJq(f, '[{"name":"a","bucket":"pass"},{"name":"b","bucket":"skipping"}]', a), '0');
+    assert.strictEqual(runJq(f, '[]', a), '0');
+  });
+}
+
 process.exit(failed ? 1 : 0);
