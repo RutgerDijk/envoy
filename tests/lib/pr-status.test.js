@@ -264,6 +264,25 @@ test('no CodeRabbit check yields null coderabbitCheckState', () => {
   assert.strictEqual(result.coderabbitCheckState, null);
 });
 
+test('FULL SUITE NOT RUN check (any case) sets ci.fullSuiteSkipped true', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'build', conclusion: 'SUCCESS' },
+    { name: 'Full Suite Not Run', conclusion: 'SUCCESS' },
+  ]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+});
+
+test('rollup without FULL SUITE NOT RUN yields ci.fullSuiteSkipped false', () => {
+  const result = prStatus.summarizeChecks([{ name: 'build', conclusion: 'SUCCESS' }]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, false);
+});
+
+test('buildSnapshot passes ci.fullSuiteSkipped through, defaulting to false', () => {
+  const on = prStatus.buildSnapshot({ ...rawInputs, ci: { state: 'SUCCESS', checks: [], fullSuiteSkipped: true } });
+  assert.strictEqual(on.ci.fullSuiteSkipped, true);
+  assert.strictEqual(prStatus.buildSnapshot(rawInputs).ci.fullSuiteSkipped, false);
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // countUnresolvedTotal
 // ═══════════════════════════════════════════════════════════════════
