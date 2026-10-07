@@ -111,6 +111,13 @@ check('fix-ci with marker plus real failures still classifies them (owed false)'
   assert.ok(b.includes('fullSuiteSkipped'));
   assert.ok(/fullSuiteOwed[^\n]*false/.test(b));
 });
+check('fix-ci: owed false with no other failing check (e.g. unpinned read) re-polls instead of diagnosing', () => {
+  const b = read(FILES[1]);
+  const line = b.split('\n').find((l) => l.includes('`fullSuiteSkipped` is `true` but `fullSuiteOwed` is `false`'));
+  assert.ok(line, 'marker-plus-failure clause missing');
+  assert.ok(/`pinned` is `false`/.test(line), 'must name the unpinned-read case');
+  assert.ok(/cannot confirm[^\n]*re-poll/i.test(line), 'must report cannot-confirm and re-poll');
+});
 check('fix-ci passes the Step 1 $PR_NUMBER (not unset $PR) to pr-status.js', () => {
   const b = read(FILES[1]);
   assert.ok(b.includes('pr-status.js "$PR_NUMBER"'));
