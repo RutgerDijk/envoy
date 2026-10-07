@@ -277,6 +277,19 @@ test('rollup without FULL SUITE NOT RUN yields ci.fullSuiteSkipped false', () =>
   assert.strictEqual(result.ci.fullSuiteSkipped, false);
 });
 
+test('prefixed/suffixed FULL SUITE NOT RUN name still matches', () => {
+  const result = prStatus.summarizeChecks([{ name: 'CI / FULL SUITE NOT RUN (skipped)', conclusion: 'SUCCESS' }]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+});
+
+test('empty or null rollup yields fullSuiteSkipped false and state NONE', () => {
+  for (const input of [[], null]) {
+    const result = prStatus.summarizeChecks(input);
+    assert.strictEqual(result.ci.fullSuiteSkipped, false);
+    assert.strictEqual(result.ci.state, 'NONE');
+  }
+});
+
 test('buildSnapshot passes ci.fullSuiteSkipped through, defaulting to false', () => {
   const on = prStatus.buildSnapshot({ ...rawInputs, ci: { state: 'SUCCESS', checks: [], fullSuiteSkipped: true } });
   assert.strictEqual(on.ci.fullSuiteSkipped, true);
