@@ -34,5 +34,10 @@ test('documents loop-safeguards cleanup', () => has('loop-safeguards.js cleanup 
 test('does not use consumer-relative node lib/ paths', () => assert.ok(!/node lib\//.test(doc)));
 test('documents the 3 cycle cap', () => has('3 cycles'));
 
+test('example gate fails when the changes job did not succeed', () => has('needs.changes.result'));
+test('documents that the gate check name must match exactly', () => assert.ok(/exact/i.test(doc) && /ci-gate/.test(doc)));
+test('documents that the helper reruns the run owning the failed gate job', () => assert.ok(/run that owns the failed .?ci-gate.? job/i.test(doc)));
+test('documents per-PR cycle lifetime', () => assert.ok(/per PR/i.test(doc)));
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

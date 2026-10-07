@@ -76,6 +76,31 @@ check('fix-ci checks fullSuiteSkipped before classifying failures', () => {
   const b = read(FILES[1]);
   assert.ok(b.indexOf('fullSuiteSkipped') < b.indexOf('### Step 3: Classify'));
 });
+check('fix-ci passes the Step 1 $PR_NUMBER (not unset $PR) to pr-status.js', () => {
+  const b = read(FILES[1]);
+  assert.ok(b.includes('pr-status.js "$PR_NUMBER"'));
+  assert.ok(!/pr-status\.js "\$PR"/.test(b));
+});
+check('fix-ci Step 8 state machine routes fullSuiteSkipped to a remediation state before FIX', () => {
+  const b = read(FILES[1]);
+  const step8 = b.slice(b.indexOf('### Step 8'));
+  const remediate = step8.indexOf('REMEDIATE_FULL_CI');
+  const fix = step8.indexOf('state = FIX');
+  assert.ok(remediate >= 0 && fix >= 0 && remediate < fix);
+  assert.ok(/REMEDIATE_FULL_CI:[\s\S]*full-ci\.js[\s\S]*not increment FIX_CYCLE/i.test(step8));
+});
+check('finalize checks fullSuiteSkipped in a bash block BEFORE computing FAILED', () => {
+  const b = read(FILES[0]);
+  const skipped = b.indexOf('FULL_SUITE_SKIPPED=$(');
+  const failedAt = b.indexOf('FAILED=$(');
+  assert.ok(skipped >= 0 && failedAt >= 0 && skipped < failedAt);
+  assert.ok(b.includes('PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"'));
+});
+check('babysit snapshot shape lists .ci.fullSuiteSkipped', () => {
+  const b = read(FILES[2]);
+  const shape = b.slice(b.indexOf('The snapshot shape'), b.indexOf('### Step 3'));
+  assert.ok(shape.includes('.ci.fullSuiteSkipped'));
+});
 for (const rel of FILES.filter((f) => f.endsWith('SKILL.md'))) {
   check(`${rel} under 500 lines`, () => assert.ok(read(rel).split('\n').length < 500));
 }
