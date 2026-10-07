@@ -29,7 +29,7 @@ for (const n of ['ci-gate', 'ENVOY_CI_GATE_CHECK', 'gh pr view', '--json labels'
 }
 test('no labeled trigger example', () => assert.ok(!/types:.*labeled/.test(doc)));
 test('no SKIPPED markers text', () => assert.ok(!/skipped markers/i.test(doc)));
-test('doc under 80 lines', () => assert.ok(doc.split('\n').length < 80));
+test('doc under 120 lines', () => assert.ok(doc.split('\n').length < 120));
 test('documents loop-safeguards cleanup', () => has('loop-safeguards.js cleanup full-ci-'));
 test('does not use consumer-relative node lib/ paths', () => assert.ok(!/node lib\//.test(doc)));
 test('documents the 3 cycle cap', () => has('3 cycles'));
@@ -38,6 +38,21 @@ test('example gate fails when the changes job did not succeed', () => has('needs
 test('documents that the gate check name must match exactly', () => assert.ok(/exact/i.test(doc) && /ci-gate/.test(doc)));
 test('documents that the helper reruns the run owning the failed gate job', () => assert.ok(/run that owns the failed .?ci-gate.? job/i.test(doc)));
 test('documents per-PR cycle lifetime', () => assert.ok(/per PR/i.test(doc)));
+
+// Issue #87: the label goes on LAST, once the PR is ready.
+test('documents the owed state', () => assert.ok(/fast run green, full run owed/i.test(doc) && /fullSuiteOwed/.test(doc)));
+test('documents that a marker-red ci-gate is not a failure', () => assert.ok(/not a failure/i.test(doc)));
+test('documents that a real failure or other non-success check keeps it not owed', () => assert.ok(/real job failure/i.test(doc) && /commit status/i.test(doc)));
+test('documents last-step timing', () => assert.ok(/last step/i.test(doc) && /no more pushes/i.test(doc)));
+test('documents readiness: unresolved threads and rate limit', () => assert.ok(/unresolved review threads/i.test(doc) && /rate.?limit/i.test(doc)));
+test('documents readiness: CodeRabbit status success, absent is not done', () => assert.ok(/statusState/.test(doc) && /absent/i.test(doc)));
+test('documents exit 3 as re-poll, not a failure or escalation', () => assert.ok(/\b3\b[^\n]*(re-poll|NOT READY)/i.test(doc) && /no writes/i.test(doc) && /never a failure or escalation/i.test(doc)));
+test('documents ENVOY_CODERABBIT on|off|auto', () => assert.ok(/ENVOY_CODERABBIT/.test(doc) && /on\|off\|auto/.test(doc)));
+test('documents .coderabbit.yaml/.yml auto-detection', () => assert.ok(/\.coderabbit\.yaml/.test(doc) && /\.coderabbit\.yml/.test(doc)));
+test('documents SHA-pinned reads', () => assert.ok(/head SHA/i.test(doc) && /latest check run per name/i.test(doc)));
+test('documents a push after the label is fine and the label is never removed', () => assert.ok(/push after the label/i.test(doc) && /never removes the label/i.test(doc)));
+test('documents head SHA re-read before writes', () => assert.ok(/re-read/i.test(doc)));
+test('no stale "On ci.fullSuiteSkipped" trigger', () => assert.ok(!/On `ci\.fullSuiteSkipped`/.test(doc)));
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
