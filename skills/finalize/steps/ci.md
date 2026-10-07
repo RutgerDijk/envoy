@@ -36,15 +36,7 @@ done
 # Check the FULL SUITE NOT RUN marker BEFORE treating CI as failed or passed.
 PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
 SUITE_NOT_RUN=$($PR_STATUS "$PR_NUMBER" | jq -r '.ci.fullSuiteSkipped')
-if [ "$SUITE_NOT_RUN" = "true" ]; then
-  FULL_CI_RC=0
-  node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js "$PR_NUMBER" || FULL_CI_RC=$?   # label + rerun
-  case "$FULL_CI_RC" in
-    0) echo "full-ci rerun triggered — restart the CI polling loop above; do NOT compute FAILED from the stale CHECKS."; return 0 2>/dev/null || true ;;
-    1) echo "full-ci helper: report only (run in progress / no run / gh error). Report it and stop this CI step; retry on the next poll."; return 0 2>/dev/null || true ;;
-    2) echo "full-ci blocked after 3 cycles — STOP and escalate to the user."; return 0 2>/dev/null || true ;;
-  esac
-fi
+SUITE_OWED=$($PR_STATUS "$PR_NUMBER" | jq -r '.ci.fullSuiteOwed')
 
 # A marker-red ci-gate is not a code failure: exclude it from FAILED.
 GATE="${ENVOY_CI_GATE_CHECK:-ci-gate}"
@@ -55,9 +47,33 @@ FAILED=$(echo "$CHECKS" | jq --arg skip "$SUITE_NOT_RUN" --arg gate "$GATE" \
 
 `fullSuiteSkipped` = `true` means the CI gate failed with a `FULL SUITE NOT RUN` annotation:
 CI is RED because the full suite was not run, not because of a code failure. Do not diagnose
-it as a failure (the red `ci-gate` is excluded from `FAILED` above); remedy
-it by label + rerun via `lib/full-ci.js`, then re-poll.
-Exit 0 = rerun triggered (re-poll CI), 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass, 2 = blocked after 3 cycles — stop and surface to the user (unblock: `node ${CLAUDE_SKILL_DIR}/../../lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`).
+it as a failure (the red `ci-gate` is excluded from `FAILED` above) and do NOT label or rerun
+on first sight: the `full-ci` label is the LAST step before merge (see below). Any other real
+failure still lands in `FAILED` and is fixed first.
+
+### Last Step: Full-Suite Run (only when `fullSuiteOwed`)
+
+`fullSuiteOwed` = `true` means the marker is the ONLY red or pending thing on the head SHA
+(the fast run is green, the full run is owed). Run this step only when ALL of these hold:
+CodeRabbit is resolved (the Step 8 completion signal in `steps/coderabbit.md`), `FAILED` is 0,
+and no fix commit or push is pending from the CodeRabbit/CI loops. Otherwise skip it; finish
+those first.
+
+```bash
+if [ "$SUITE_OWED" = "true" ]; then
+  FULL_CI_RC=0
+  node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js "$PR_NUMBER" || FULL_CI_RC=$?   # label + rerun
+  case "$FULL_CI_RC" in
+    0) echo "full-ci rerun triggered — restart the CI polling loop above (the rerun is a whole run); do NOT compute FAILED from the stale CHECKS." ;;
+    1) echo "full-ci helper: report only, do not loop (run in progress / no run / gh error). Report it and stop this CI step; retry on the next poll." ;;
+    2) echo "full-ci blocked after 3 cycles — STOP and surface to the user." ;;
+    3) echo "NOT READY — re-poll on the next pass. Not a failure, not an escalation." ;;
+  esac
+fi
+```
+
+Exit codes: 0 = rerun triggered (re-poll CI); 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass; 2 = blocked after 3 cycles — stop and surface to the user (unblock: `node ${CLAUDE_SKILL_DIR}/../../lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`); exit 3 = `NOT READY: <reason>` (CodeRabbit not yet resolved or the gate is not marker-only) — re-poll on the next pass, never a failure and never an escalation (no writes, no cycle consumed).
+If a push happens after the label is on, that is fine: it simply runs the full suite. Never remove the label.
 
 **If all checks pass** (and the flag is false): no CI failures to add to this cycle's combined fix list.
 

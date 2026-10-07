@@ -326,6 +326,10 @@ gh pr checks $PR_NUMBER --json name,state,conclusion
 Step 3 collect phase — go back to Step 3 with the remaining items. Reset the
 CodeRabbit completion counter.
 
+**Last step before merge:** once CodeRabbit is settled, no CI failures remain, and no
+push is pending, if `ci.fullSuiteOwed` is true run the "Last Step: Full-Suite Run" in
+`steps/ci.md` (exit 3 = re-poll on the next pass, never a failure or escalation).
+
 **Cycle cap check:** use `lib/remediation-cycle.js`'s `shouldEscalate(cycleCount, remaining)`
 — max 3 full remediation cycles (collect → fix → commit → push → reply+resolve → re-poll
 counts as one cycle). If cycle 3 completes and `shouldEscalate` is true (issues remain),
