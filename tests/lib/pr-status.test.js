@@ -290,6 +290,34 @@ test('empty or null rollup yields fullSuiteSkipped false and state NONE', () => 
   }
 });
 
+test('SKIPPED FULL SUITE NOT RUN marker (label present) yields fullSuiteSkipped false', () => {
+  const result = prStatus.summarizeChecks([{ name: 'FULL SUITE NOT RUN', conclusion: 'SKIPPED' }]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, false);
+});
+
+test('NEUTRAL FULL SUITE NOT RUN marker yields fullSuiteSkipped false', () => {
+  const result = prStatus.summarizeChecks([{ name: 'FULL SUITE NOT RUN', conclusion: 'neutral' }]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, false);
+});
+
+test('SUCCESS FULL SUITE NOT RUN marker yields fullSuiteSkipped true', () => {
+  const result = prStatus.summarizeChecks([{ name: 'FULL SUITE NOT RUN', conclusion: 'SUCCESS' }]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+});
+
+test('IN_PROGRESS FULL SUITE NOT RUN marker yields fullSuiteSkipped true', () => {
+  const result = prStatus.summarizeChecks([{ name: 'FULL SUITE NOT RUN', status: 'IN_PROGRESS' }]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+});
+
+test('one skipped and one successful matching check yields fullSuiteSkipped true', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'FULL SUITE NOT RUN', conclusion: 'SKIPPED' },
+    { name: 'CI / FULL SUITE NOT RUN', conclusion: 'SUCCESS' },
+  ]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+});
+
 test('buildSnapshot passes ci.fullSuiteSkipped through, defaulting to false', () => {
   const on = prStatus.buildSnapshot({ ...rawInputs, ci: { state: 'SUCCESS', checks: [], fullSuiteSkipped: true } });
   assert.strictEqual(on.ci.fullSuiteSkipped, true);
