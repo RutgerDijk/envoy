@@ -57,6 +57,7 @@ The snapshot shape (see `lib/pr-status.js`):
 
 ```
 .ci.state                       # overall CI roll-up
+.ci.fullSuiteSkipped            # ci-gate failed with FULL SUITE NOT RUN — remedy, not a code failure
 .coderabbit.checkState
 .coderabbit.unresolvedThreads    # authoritative unresolved count (GraphQL)
 .coderabbit.rateLimit.rateLimited
