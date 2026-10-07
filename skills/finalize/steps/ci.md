@@ -37,7 +37,13 @@ done
 PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
 SUITE_NOT_RUN=$($PR_STATUS "$PR_NUMBER" | jq -r '.ci.fullSuiteSkipped')
 if [ "$SUITE_NOT_RUN" = "true" ]; then
-  node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js "$PR_NUMBER"   # label + rerun; then re-poll
+  FULL_CI_RC=0
+  node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js "$PR_NUMBER" || FULL_CI_RC=$?   # label + rerun
+  case "$FULL_CI_RC" in
+    0) echo "full-ci rerun triggered — restart the CI polling loop above; do NOT compute FAILED from the stale CHECKS."; return 0 2>/dev/null || true ;;
+    1) echo "full-ci helper: report only (run in progress / no run / gh error). Report it and stop this CI step; retry on the next poll."; return 0 2>/dev/null || true ;;
+    2) echo "full-ci blocked after 3 cycles — STOP and escalate to the user."; return 0 2>/dev/null || true ;;
+  esac
 fi
 
 # A marker-red ci-gate is not a code failure: exclude it from FAILED.
