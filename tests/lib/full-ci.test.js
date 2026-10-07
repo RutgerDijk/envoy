@@ -59,13 +59,17 @@ function fakeGh({
   jobs = { 5001: 111 },
   runStatus = {},
   labelCreateError,
+  shaSequence,
 } = {}) {
   const calls = [];
+  let viewN = 0;
   const gh = (args) => {
     calls.push(args);
     if (args[0] === 'pr' && args[1] === 'view') {
       if (view !== undefined) return view;
-      return JSON.stringify({ headRefOid: sha, labels: labels.map((name) => ({ name })), statusCheckRollup: rollup });
+      const cur = shaSequence ? shaSequence[Math.min(viewN, shaSequence.length - 1)] : sha;
+      viewN += 1;
+      return JSON.stringify({ headRefOid: cur, labels: labels.map((name) => ({ name })), statusCheckRollup: rollup });
     }
     if (args[0] === 'api') {
       const m = /actions\/jobs\/(\d+)$/.exec(args[1]);
@@ -84,6 +88,26 @@ function fakeGh({
   return gh;
 }
 
+
+/** A ready snapshot (fast run green but for the marker, review done, CodeRabbit success). */
+function snap(over = {}) {
+  return {
+    ci: { fullSuiteOwed: true, pinned: true, ...(over.ci || {}) },
+    coderabbit: {
+      statusState: 'success',
+      unresolvedThreads: 0,
+      ...(over.coderabbit || {}),
+      rateLimit: { rateLimited: false, resetsAt: null, ...((over.coderabbit || {}).rateLimit || {}) },
+    },
+  };
+}
+
+/** Wrap run() with a ready snapshot, CodeRabbit not in use (auto, no config file). */
+function go(opts) {
+  const snapshot = opts.snapshot || (() => snap());
+  return fullCi.run({ env: {}, exists: () => false, repoRoot: '/repo', ...opts, snapshot });
+}
+
 const has = (gh, ...prefix) =>
   gh.calls.filter((c) => prefix.every((p, i) => c[i] === p));
 
@@ -91,7 +115,7 @@ section('full-ci: label missing');
 
 test('creates label, adds it, reruns the ci-gate run', () => {
   const gh = fakeGh();
-  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  const res = go({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.code, 0);
   assert.strictEqual(res.runId, 111);
   assert.deepStrictEqual(has(gh, 'label', 'create')[0], ['label', 'create', 'full-ci']);
@@ -101,7 +125,7 @@ test('creates label, adds it, reruns the ci-gate run', () => {
 
 test('does not overwrite an existing label (no --force); "already exists" is tolerated', () => {
   const gh = fakeGh({ labelCreateError: 'label with name "full-ci" already exists; use `--force` to update its color and description' });
-  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  const res = go({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.code, 0);
   assert.ok(!has(gh, 'label', 'create')[0].includes('--force'));
   assert.strictEqual(has(gh, 'pr', 'edit').length, 1);
@@ -110,7 +134,7 @@ test('does not overwrite an existing label (no --force); "already exists" is tol
 
 test('other label create errors are reported as gh errors', () => {
   const gh = fakeGh({ labelCreateError: 'HTTP 403: Resource not accessible' });
-  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  const res = go({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.code, 1);
   assert.ok(res.message.includes('HTTP 403'));
   assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
@@ -120,7 +144,7 @@ section('full-ci: label present');
 
 test('skips labelling and only reruns', () => {
   const gh = fakeGh({ labels: ['full-ci'] });
-  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  const res = go({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.code, 0);
   assert.strictEqual(has(gh, 'label', 'create').length, 0);
   assert.strictEqual(has(gh, 'pr', 'edit').length, 0);
@@ -138,7 +162,7 @@ test('reruns the run that owns the failed ci-gate job, not the newest run', () =
     ],
     jobs: { 5001: 111, 9001: 999, 9002: 998 },
   });
-  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  const res = go({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.runId, 111);
   assert.deepStrictEqual(has(gh, 'run', 'rerun'), [['run', 'rerun', '111']]);
   assert.deepStrictEqual(has(gh, 'api')[0], ['api', 'repos/{owner}/{repo}/actions/jobs/5001', '--jq', '.run_id']);
@@ -147,7 +171,7 @@ test('reruns the run that owns the failed ci-gate job, not the newest run', () =
 
 test('two failed gate checks in the same run rerun it once', () => {
   const gh = fakeGh({ rollup: [gate(5001), gate(5002)], jobs: { 5001: 111, 5002: 111 } });
-  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  const res = go({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.code, 0);
   assert.deepStrictEqual(has(gh, 'run', 'rerun'), [['run', 'rerun', '111']]);
 });
@@ -155,7 +179,7 @@ test('two failed gate checks in the same run rerun it once', () => {
 test('no failed ci-gate check: code 1, no label, no rerun, no cycle', () => {
   const cwd = tmp();
   const gh = fakeGh({ rollup: [{ name: 'ci-gate', conclusion: 'SUCCESS', detailsUrl: 'https://github.com/o/r/actions/runs/0/job/5001' }] });
-  const res = fullCi.run({ pr: 7, gh, cwd });
+  const res = go({ pr: 7, gh, cwd });
   assert.strictEqual(res.code, 1);
   assert.ok(/no failed ci-gate/i.test(res.message) && res.message.includes('abc123'));
   assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
@@ -165,14 +189,14 @@ test('no failed ci-gate check: code 1, no label, no rerun, no cycle', () => {
 
 test('gh failure returns code 1 with message', () => {
   const gh = () => { throw new Error('boom'); };
-  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  const res = go({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.code, 1);
   assert.ok(res.message.includes('boom'));
 });
 
 test('invalid pr number rejected without calling gh', () => {
   const gh = fakeGh();
-  const res = fullCi.run({ pr: 'x; rm -rf', gh, cwd: tmp() });
+  const res = go({ pr: 'x; rm -rf', gh, cwd: tmp() });
   assert.strictEqual(res.code, 1);
   assert.strictEqual(gh.calls.length, 0);
 });
@@ -180,7 +204,7 @@ test('invalid pr number rejected without calling gh', () => {
 test('gate run still in progress: code 1, retry message, no label, no rerun, no cycle', () => {
   const cwd = tmp();
   const gh = fakeGh({ runStatus: { 111: 'in_progress' } });
-  const res = fullCi.run({ pr: 7, gh, cwd });
+  const res = go({ pr: 7, gh, cwd });
   assert.strictEqual(res.code, 1);
   assert.ok(/still in progress/.test(res.message));
   assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
@@ -192,7 +216,7 @@ section('full-ci: gh output validation');
 
 test('pr view without headRefOid: code 1 before any job lookup', () => {
   const gh = fakeGh({ view: JSON.stringify({ labels: [] }) });
-  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  const res = go({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.code, 1);
   assert.ok(/headRefOid/.test(res.message));
   assert.strictEqual(has(gh, 'api').length, 0);
@@ -201,24 +225,149 @@ test('pr view without headRefOid: code 1 before any job lookup', () => {
 
 test('pr view non-JSON: code 1 before any job lookup', () => {
   const gh = fakeGh({ view: 'not json' });
-  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  const res = go({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.code, 1);
   assert.strictEqual(has(gh, 'api').length, 0);
 });
 
 test('gh error includes trimmed stderr and is labelled as gh error', () => {
   const gh = () => { const e = new Error('Command failed'); e.stderr = 'HTTP 403 rate limit\n'; throw e; };
-  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  const res = go({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.code, 1);
   assert.ok(/gh/.test(res.message) && res.message.includes('HTTP 403 rate limit'));
   assert.ok(!res.message.endsWith('\n'));
+});
+
+
+const noWrites = (gh) => {
+  assert.strictEqual(has(gh, 'label', 'create').length, 0);
+  assert.strictEqual(has(gh, 'pr', 'edit').length, 0);
+  assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
+};
+
+function notReady(label, snapshot, matcher, extra = {}) {
+  test(`not ready (${label}): exit 3, no writes, no cycle`, () => {
+    const cwd = tmp();
+    const gh = fakeGh();
+    const res = go({ pr: 7, gh, cwd, snapshot: () => snapshot, ...extra });
+    assert.strictEqual(res.code, 3);
+    assert.ok(/^NOT READY: /.test(res.message), res.message);
+    assert.ok(matcher.test(res.message), res.message);
+    noWrites(gh);
+    assert.strictEqual(loops.loadState('full-ci-7', cwd).cyclesSeen, 0);
+  });
+}
+
+section('full-ci: readiness preconditions (exit 3)');
+
+notReady('fullSuiteOwed false', snap({ ci: { fullSuiteOwed: false } }), /owed|FULL SUITE/i);
+notReady('pinned read failed', snap({ ci: { pinned: false, fullSuiteOwed: false } }), /pinned check read failed/);
+notReady('unresolved threads', snap({ coderabbit: { unresolvedThreads: 2 } }), /unresolved/i);
+notReady('rate limited', snap({ coderabbit: { rateLimit: { rateLimited: true } } }), /rate.?limit/i);
+
+test('snapshot reader receives the PR number; read error is exit 1 and never writes', () => {
+  const gh = fakeGh();
+  let seen;
+  const res = go({ pr: 7, gh, cwd: tmp(), snapshot: (n) => { seen = n; throw new Error('snap boom'); } });
+  assert.strictEqual(seen, 7);
+  assert.strictEqual(res.code, 1);
+  assert.ok(res.message.includes('snap boom'));
+  noWrites(gh);
+});
+
+section('full-ci: CodeRabbit-optional switch');
+
+const crOn = { env: { ENVOY_CODERABBIT: 'on' } };
+notReady('CodeRabbit on, status absent', snap({ coderabbit: { statusState: null } }), /absent/i, crOn);
+notReady('CodeRabbit on, status pending', snap({ coderabbit: { statusState: 'pending' } }), /pending/i, crOn);
+notReady('CodeRabbit on, status failure', snap({ coderabbit: { statusState: 'failure' } }), /failure/i, crOn);
+notReady('auto with .coderabbit.yaml present, status absent', snap({ coderabbit: { statusState: null } }), /absent/i,
+  { env: {}, exists: (f) => f === '/repo/.coderabbit.yaml' });
+notReady('auto with .coderabbit.yml present, status absent', snap({ coderabbit: { statusState: null } }), /absent/i,
+  { env: { ENVOY_CODERABBIT: 'auto' }, exists: (f) => f === '/repo/.coderabbit.yml' });
+
+test('CodeRabbit on, success (any case): proceeds, exit 0', () => {
+  const gh = fakeGh();
+  const res = go({ pr: 7, gh, cwd: tmp(), ...crOn, snapshot: () => snap({ coderabbit: { statusState: 'SUCCESS' } }) });
+  assert.strictEqual(res.code, 0);
+});
+
+test('CodeRabbit off: absent status does not block', () => {
+  const gh = fakeGh();
+  const res = go({ pr: 7, gh, cwd: tmp(), env: { ENVOY_CODERABBIT: 'off' }, exists: () => true,
+    snapshot: () => snap({ coderabbit: { statusState: null } }) });
+  assert.strictEqual(res.code, 0);
+});
+
+test('auto with no config file: absent status does not block', () => {
+  const res = go({ pr: 7, gh: fakeGh(), cwd: tmp(), snapshot: () => snap({ coderabbit: { statusState: null } }) });
+  assert.strictEqual(res.code, 0);
+});
+
+test('CodeRabbit on, absent status: exit 3 even though unresolved/rate checks pass', () => {
+  const gh = fakeGh();
+  const res = go({ pr: 7, gh, cwd: tmp(), ...crOn, snapshot: () => snap({ coderabbit: { statusState: null } }) });
+  assert.strictEqual(res.code, 3);
+  noWrites(gh);
+});
+
+test('auto resolves config against repoRoot', () => {
+  const checked = [];
+  go({ pr: 7, gh: fakeGh(), cwd: tmp(), repoRoot: '/the/root', exists: (f) => { checked.push(f); return false; } });
+  assert.deepStrictEqual(checked.sort(), ['/the/root/.coderabbit.yaml', '/the/root/.coderabbit.yml']);
+});
+
+test('invalid ENVOY_CODERABBIT: exit 1 "invalid ENVOY_CODERABBIT", no gh calls', () => {
+  const gh = fakeGh();
+  const res = go({ pr: 7, gh, cwd: tmp(), env: { ENVOY_CODERABBIT: 'maybe' } });
+  assert.strictEqual(res.code, 1);
+  assert.ok(/invalid ENVOY_CODERABBIT/.test(res.message));
+  assert.strictEqual(gh.calls.length, 0);
+});
+
+section('full-ci: head SHA race');
+
+test('SHA changed between readiness read and writes: exit 1, no writes, no cycle', () => {
+  const cwd = tmp();
+  const gh = fakeGh({ shaSequence: ['abc123', 'def456'] });
+  const res = go({ pr: 7, gh, cwd });
+  assert.strictEqual(res.code, 1);
+  assert.ok(/head.*changed|SHA/i.test(res.message));
+  noWrites(gh);
+  assert.strictEqual(loops.loadState('full-ci-7', cwd).cyclesSeen, 0);
+});
+
+test('SHA re-read failure: exit 1, no writes', () => {
+  const gh = fakeGh({ shaSequence: ['abc123'] });
+  const orig = gh;
+  let n = 0;
+  const wrapped = (args) => {
+    if (args[0] === 'pr' && args[1] === 'view' && ++n === 2) throw new Error('reread boom');
+    return orig(args);
+  };
+  wrapped.calls = orig.calls;
+  const res = go({ pr: 7, gh: wrapped, cwd: tmp() });
+  assert.strictEqual(res.code, 1);
+  noWrites(orig);
+});
+
+test('stable SHA: label added then rerun, exit 0', () => {
+  const gh = fakeGh({ shaSequence: ['abc123', 'abc123'] });
+  assert.strictEqual(go({ pr: 7, gh, cwd: tmp() }).code, 0);
+  assert.strictEqual(has(gh, 'run', 'rerun').length, 1);
+});
+
+test('label is never removed', () => {
+  const gh = fakeGh({ labels: ['full-ci'] });
+  go({ pr: 7, gh, cwd: tmp() });
+  assert.ok(!gh.calls.some((c) => c.includes('--remove-label')));
 });
 
 section('full-ci: loop-safeguards max cycles');
 
 test('records a cycle on loop full-ci-<pr>', () => {
   const cwd = tmp();
-  fullCi.run({ pr: 7, gh: fakeGh(), cwd });
+  go({ pr: 7, gh: fakeGh(), cwd });
   const state = loops.loadState('full-ci-7', cwd);
   assert.strictEqual(state.cyclesSeen, 1);
   assert.strictEqual(state.maxCycles, fullCi.MAX_CYCLES);
@@ -226,9 +375,9 @@ test('records a cycle on loop full-ci-<pr>', () => {
 
 test('blocked at maxCycles: code 2, no rerun, no label changes', () => {
   const cwd = tmp();
-  for (let i = 0; i < fullCi.MAX_CYCLES; i++) fullCi.run({ pr: 7, gh: fakeGh(), cwd });
+  for (let i = 0; i < fullCi.MAX_CYCLES; i++) go({ pr: 7, gh: fakeGh(), cwd });
   const gh = fakeGh();
-  const res = fullCi.run({ pr: 7, gh, cwd });
+  const res = go({ pr: 7, gh, cwd });
   assert.strictEqual(res.code, 2);
   assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
   assert.strictEqual(has(gh, 'pr', 'edit').length, 0);
@@ -238,14 +387,14 @@ test('blocked at maxCycles: code 2, no rerun, no label changes', () => {
 
 test('failed attempt (no gate) does not consume a cycle', () => {
   const cwd = tmp();
-  fullCi.run({ pr: 7, gh: fakeGh({ rollup: [] }), cwd });
+  go({ pr: 7, gh: fakeGh({ rollup: [] }), cwd });
   assert.strictEqual(loops.loadState('full-ci-7', cwd).cyclesSeen, 0);
 });
 
 test('other PRs are tracked independently', () => {
   const cwd = tmp();
-  for (let i = 0; i < fullCi.MAX_CYCLES; i++) fullCi.run({ pr: 7, gh: fakeGh(), cwd });
-  assert.strictEqual(fullCi.run({ pr: 8, gh: fakeGh(), cwd }).code, 0);
+  for (let i = 0; i < fullCi.MAX_CYCLES; i++) go({ pr: 7, gh: fakeGh(), cwd });
+  assert.strictEqual(go({ pr: 8, gh: fakeGh(), cwd }).code, 0);
 });
 
 for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
