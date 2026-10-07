@@ -386,6 +386,18 @@ test('accepts a bare nodes array as well as the reviewThreads object', () => {
   assert.strictEqual(prStatus.countUnresolvedTotal({ nodes }), 2);
 });
 
+test('outdated-but-unresolved threads keep counting (and so keep blocking full-ci readiness)', () => {
+  const outdated = { ...thread('rutger', false), isOutdated: true };
+  const resolvedOutdated = { ...thread('rutger', true), isOutdated: true };
+  assert.strictEqual(prStatus.countUnresolvedTotal({ nodes: [outdated, resolvedOutdated] }), 1);
+  const snapshot = prStatus.buildSnapshot({
+    pr: 1,
+    ci: { state: 'SUCCESS', checks: [] },
+    reviewThreads: { nodes: [outdated] },
+  });
+  assert.strictEqual(snapshot.threads.unresolved, 1);
+});
+
 test('empty / missing payload returns 0', () => {
   assert.strictEqual(prStatus.countUnresolvedTotal({ nodes: [] }), 0);
   assert.strictEqual(prStatus.countUnresolvedTotal(null), 0);
