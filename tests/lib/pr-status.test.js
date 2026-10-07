@@ -303,8 +303,10 @@ test('summarizeChecks excludes SUCCESS gate and gate without parsable id', () =>
 });
 
 test('summarizeChecks accepts ERROR and TIMED_OUT gate states, null rollup yields no gates', () => {
-  const r = withGateEnv(undefined, () => prStatus.summarizeChecks([gateNode({ conclusion: 'TIMED_OUT' }), gateNode({ conclusion: 'error' })]));
-  assert.strictEqual(r.gateChecks.length, 2);
+  const t = withGateEnv(undefined, () => prStatus.summarizeChecks([gateNode({ conclusion: 'TIMED_OUT' })]));
+  const e = withGateEnv(undefined, () => prStatus.summarizeChecks([gateNode({ conclusion: 'error' })]));
+  assert.strictEqual(t.gateChecks.length, 1);
+  assert.strictEqual(e.gateChecks.length, 1);
   assert.deepStrictEqual(prStatus.summarizeChecks(null).gateChecks, []);
 });
 
@@ -440,6 +442,168 @@ test('aborts (does not hang) when hasNextPage stays true but the cursor never ad
     /did not advance/,
     'must abort with a clear invariant error, not hang, when the cursor does not advance'
   );
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// SHA-pinned reads, dedupe, combined status, fullSuiteOwed (#87)
+// ═══════════════════════════════════════════════════════════════════
+
+section('summarizeChecks: dedupe by name keeping the latest run');
+
+const run = (over) => ({
+  name: 'ci-gate',
+  status: 'completed',
+  conclusion: 'failure',
+  started_at: '2026-10-07T10:00:00Z',
+  completed_at: '2026-10-07T10:05:00Z',
+  details_url: 'https://github.com/o/r/actions/runs/111/job/222',
+  ...over,
+});
+const green = (over) => run({ conclusion: 'success', started_at: '2026-10-07T11:00:00Z', completed_at: '2026-10-07T11:05:00Z', details_url: 'https://github.com/o/r/actions/runs/333/job/444', ...over });
+const status = (context, state, over) => ({ __typename: 'StatusContext', context, state, created_at: '2026-10-07T10:00:00Z', ...over });
+const markerFetch = () => MARKER;
+const ciFor = (nodes) => withGateEnv(undefined, () => {
+  const summary = prStatus.summarizeChecks(nodes);
+  return { summary, ci: prStatus.deriveCi(summary, markerFetch) };
+});
+
+test('older failed ci-gate run is superseded by a newer green run (API snake_case timestamps)', () => {
+  const { summary, ci } = ciFor([run(), green()]);
+  assert.strictEqual(summary.ci.checks.length, 1);
+  assert.strictEqual(summary.ci.state, 'SUCCESS');
+  assert.deepStrictEqual(summary.gateChecks, []);
+  assert.strictEqual(ci.fullSuiteSkipped, false);
+  assert.strictEqual(ci.fullSuiteOwed, false);
+});
+
+test('dedupe is order-independent and case-insensitive on name; handles gh camelCase timestamps', () => {
+  const oldFail = { name: 'CI-Gate', conclusion: 'FAILURE', startedAt: '2026-10-07T10:00:00Z', completedAt: '2026-10-07T10:05:00Z', detailsUrl: 'u/job/1' };
+  const newGreen = { name: 'ci-gate', conclusion: 'SUCCESS', startedAt: '2026-10-07T11:00:00Z', completedAt: '2026-10-07T11:05:00Z' };
+  const r = prStatus.summarizeChecks([newGreen, oldFail]);
+  assert.strictEqual(r.ci.checks.length, 1);
+  assert.strictEqual(r.ci.state, 'SUCCESS');
+});
+
+test('a newer in-progress rerun supersedes an older failed run (not owed)', () => {
+  const rerun = run({ status: 'in_progress', conclusion: null, started_at: '2026-10-07T11:00:00Z', completed_at: null });
+  const { summary, ci } = ciFor([run(), rerun]);
+  assert.strictEqual(summary.ci.state, 'PENDING');
+  assert.strictEqual(ci.fullSuiteOwed, false);
+});
+
+section('deriveCi: fullSuiteOwed');
+
+test('marker on latest ci-gate with every other check green is owed', () => {
+  const { ci } = ciFor([run(), { name: 'check', status: 'completed', conclusion: 'success' }, status('CodeRabbit', 'success')]);
+  assert.strictEqual(ci.fullSuiteSkipped, true);
+  assert.strictEqual(ci.fullSuiteOwed, true);
+  assert.strictEqual(ci.state, 'FAILURE');
+});
+
+test('marker plus a failed non-gate check is not owed and ci.state stays failing', () => {
+  const { ci } = ciFor([run(), { name: 'check', status: 'completed', conclusion: 'failure' }]);
+  assert.strictEqual(ci.fullSuiteSkipped, true);
+  assert.strictEqual(ci.fullSuiteOwed, false);
+  assert.strictEqual(ci.state, 'FAILURE');
+});
+
+test('marker plus a pending non-gate check is not owed', () => {
+  const { ci } = ciFor([run(), { name: 'check', status: 'in_progress', conclusion: null }]);
+  assert.strictEqual(ci.fullSuiteOwed, false);
+});
+
+test('marker plus a failed or pending commit status of any context is not owed', () => {
+  for (const state of ['failure', 'error', 'pending']) {
+    for (const ctx of ['CodeRabbit', 'deploy/preview']) {
+      const { ci } = ciFor([run(), status(ctx, state)]);
+      assert.strictEqual(ci.fullSuiteSkipped, true, `${ctx}/${state} skipped`);
+      assert.strictEqual(ci.fullSuiteOwed, false, `${ctx}/${state} owed`);
+    }
+  }
+});
+
+test('no marker means not owed even when only the gate fails', () => {
+  const summary = withGateEnv(undefined, () => prStatus.summarizeChecks([run()]));
+  const ci = prStatus.deriveCi(summary, () => []);
+  assert.strictEqual(ci.fullSuiteOwed, false);
+});
+
+test('pinned:false (read failure) forces fullSuiteOwed false even with marker', () => {
+  const summary = withGateEnv(undefined, () => prStatus.summarizeChecks([run()]));
+  const ci = prStatus.deriveCi(summary, markerFetch, { pinned: false });
+  assert.strictEqual(ci.fullSuiteSkipped, true);
+  assert.strictEqual(ci.fullSuiteOwed, false);
+  assert.strictEqual(ci.pinned, false);
+});
+
+section('buildSnapshot: fullSuiteOwed and coderabbit.statusState');
+
+test('buildSnapshot passes ci.fullSuiteOwed through, defaulting to false', () => {
+  const on = prStatus.buildSnapshot({ ...rawInputs, ci: { state: 'FAILURE', checks: [], fullSuiteSkipped: true, fullSuiteOwed: true } });
+  assert.strictEqual(on.ci.fullSuiteOwed, true);
+  assert.strictEqual(prStatus.buildSnapshot(rawInputs).ci.fullSuiteOwed, false);
+});
+
+test('buildSnapshot exposes coderabbit.statusState separately; absent is null', () => {
+  assert.strictEqual(prStatus.buildSnapshot({ ...rawInputs, coderabbitStatusState: 'SUCCESS' }).coderabbit.statusState, 'SUCCESS');
+  assert.strictEqual(prStatus.buildSnapshot(rawInputs).coderabbit.statusState, null);
+  assert.strictEqual(prStatus.buildSnapshot(rawInputs).coderabbit.checkState, 'SUCCESS');
+});
+
+section('CodeRabbit commit status via combined status');
+
+test('combined status keeps latest per context: superseded pending/failed CodeRabbit resolves to success', () => {
+  const nodes = prStatus.normalizePinnedNodes([], {
+    statuses: [{ context: 'CodeRabbit', state: 'success', created_at: '2026-10-07T12:00:00Z' }],
+  });
+  assert.strictEqual(prStatus.summarizeChecks(nodes).coderabbitStatusState, 'success');
+});
+
+test('summarizeChecks also dedupes duplicate statuses by context, latest created_at wins', () => {
+  const r = prStatus.summarizeChecks([
+    status('CodeRabbit', 'pending', { created_at: '2026-10-07T10:00:00Z' }),
+    status('CodeRabbit', 'success', { created_at: '2026-10-07T12:00:00Z' }),
+    status('CodeRabbit', 'failure', { created_at: '2026-10-07T11:00:00Z' }),
+  ]);
+  assert.strictEqual(r.coderabbitStatusState, 'success');
+  assert.strictEqual(r.ci.state, 'SUCCESS');
+});
+
+test('no CodeRabbit status yields null statusState, distinct from success; check run does not count as status', () => {
+  const nodes = prStatus.normalizePinnedNodes([{ name: 'CodeRabbit', status: 'completed', conclusion: 'success' }], { statuses: [] });
+  const r = prStatus.summarizeChecks(nodes);
+  assert.strictEqual(r.coderabbitStatusState, null);
+  assert.strictEqual(r.coderabbitCheckState, 'success');
+  assert.strictEqual(prStatus.summarizeChecks([]).coderabbitStatusState, null);
+});
+
+section('readPinnedChecks: SHA validation and injectable fetchers');
+
+test('rejects a non-40-hex SHA without calling any fetcher', () => {
+  let called = false;
+  const f = () => { called = true; return []; };
+  assert.throws(() => prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, 'abc; rm -rf', { fetchCheckRuns: f, fetchStatus: f }), /invalid head SHA/);
+  assert.strictEqual(called, false);
+});
+
+test('reads check runs and combined status for the SHA and merges into nodes', () => {
+  const sha = 'a'.repeat(40);
+  const seen = [];
+  const nodes = prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
+    fetchCheckRuns: (repo, s) => { seen.push(['runs', s]); return [run()]; },
+    fetchStatus: (repo, s) => { seen.push(['status', s]); return { statuses: [{ context: 'CodeRabbit', state: 'success' }] }; },
+  });
+  assert.deepStrictEqual(seen, [['runs', sha], ['status', sha]]);
+  assert.strictEqual(nodes.length, 2);
+  assert.ok(nodes.some((n) => n.context === 'CodeRabbit' && n.__typename === 'StatusContext'));
+});
+
+test('a fetcher error propagates (caller fails closed)', () => {
+  const sha = 'b'.repeat(40);
+  assert.throws(() => prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
+    fetchCheckRuns: () => { throw new Error('boom'); },
+    fetchStatus: () => ({ statuses: [] }),
+  }), /boom/);
 });
 
 // ═══════════════════════════════════════════════════════════════════
