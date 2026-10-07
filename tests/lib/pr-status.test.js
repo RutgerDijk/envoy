@@ -318,6 +318,61 @@ test('one skipped and one successful matching check yields fullSuiteSkipped true
   assert.strictEqual(result.ci.fullSuiteSkipped, true);
 });
 
+test('stale non-skipped marker with older startedAt + newer SKIPPED marker yields fullSuiteSkipped false', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SUCCESS', startedAt: '2026-01-01T10:00:00Z' },
+    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SKIPPED', startedAt: '2026-01-01T11:00:00Z' },
+  ]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, false);
+  assert.strictEqual(result.ci.checks.length, 2);
+});
+
+test('newer SKIPPED listed first in array still wins by timestamp over older SUCCESS', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SKIPPED', startedAt: '2026-01-01T11:00:00Z' },
+    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SUCCESS', startedAt: '2026-01-01T10:00:00Z' },
+  ]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, false);
+});
+
+test('older SKIPPED marker + newer SUCCESS marker yields fullSuiteSkipped true', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SKIPPED', startedAt: '2026-01-01T10:00:00Z' },
+    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SUCCESS', startedAt: '2026-01-01T11:00:00Z' },
+  ]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+});
+
+test('markers in two workflows: latest-skipped one and a running one yields fullSuiteSkipped true', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'FULL SUITE NOT RUN', workflowName: 'A', conclusion: 'SUCCESS', startedAt: '2026-01-01T10:00:00Z' },
+    { name: 'FULL SUITE NOT RUN', workflowName: 'A', conclusion: 'SKIPPED', startedAt: '2026-01-01T11:00:00Z' },
+    { name: 'FULL SUITE NOT RUN', workflowName: 'B', status: 'IN_PROGRESS', startedAt: '2026-01-01T09:00:00Z' },
+  ]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+});
+
+test('missing timestamps fall back to array order (later position is later)', () => {
+  const staleFirst = prStatus.summarizeChecks([
+    { name: 'FULL SUITE NOT RUN', conclusion: 'SUCCESS' },
+    { name: 'FULL SUITE NOT RUN', conclusion: 'SKIPPED' },
+  ]);
+  assert.strictEqual(staleFirst.ci.fullSuiteSkipped, false);
+  const skippedFirst = prStatus.summarizeChecks([
+    { name: 'FULL SUITE NOT RUN', conclusion: 'SKIPPED' },
+    { name: 'FULL SUITE NOT RUN', conclusion: 'SUCCESS' },
+  ]);
+  assert.strictEqual(skippedFirst.ci.fullSuiteSkipped, true);
+});
+
+test('completedAt is used when startedAt is absent', () => {
+  const result = prStatus.summarizeChecks([
+    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SKIPPED', completedAt: '2026-01-01T12:00:00Z' },
+    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SUCCESS', completedAt: '2026-01-01T10:00:00Z' },
+  ]);
+  assert.strictEqual(result.ci.fullSuiteSkipped, false);
+});
+
 test('buildSnapshot passes ci.fullSuiteSkipped through, defaulting to false', () => {
   const on = prStatus.buildSnapshot({ ...rawInputs, ci: { state: 'SUCCESS', checks: [], fullSuiteSkipped: true } });
   assert.strictEqual(on.ci.fullSuiteSkipped, true);
