@@ -264,113 +264,93 @@ test('no CodeRabbit check yields null coderabbitCheckState', () => {
   assert.strictEqual(result.coderabbitCheckState, null);
 });
 
-test('FULL SUITE NOT RUN check (any case) sets ci.fullSuiteSkipped true', () => {
-  const result = prStatus.summarizeChecks([
-    { name: 'build', conclusion: 'SUCCESS' },
-    { name: 'Full Suite Not Run', conclusion: 'SUCCESS' },
-  ]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, true);
-});
-
-test('rollup without FULL SUITE NOT RUN yields ci.fullSuiteSkipped false', () => {
-  const result = prStatus.summarizeChecks([{ name: 'build', conclusion: 'SUCCESS' }]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, false);
-});
-
-test('prefixed/suffixed FULL SUITE NOT RUN name still matches', () => {
-  const result = prStatus.summarizeChecks([{ name: 'CI / FULL SUITE NOT RUN (skipped)', conclusion: 'SUCCESS' }]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, true);
-});
-
-test('empty or null rollup yields fullSuiteSkipped false and state NONE', () => {
-  for (const input of [[], null]) {
-    const result = prStatus.summarizeChecks(input);
-    assert.strictEqual(result.ci.fullSuiteSkipped, false);
-    assert.strictEqual(result.ci.state, 'NONE');
+function withGateEnv(value, fn) {
+  const prev = process.env.ENVOY_CI_GATE_CHECK;
+  if (value === undefined) delete process.env.ENVOY_CI_GATE_CHECK;
+  else process.env.ENVOY_CI_GATE_CHECK = value;
+  try {
+    return fn();
+  } finally {
+    if (prev === undefined) delete process.env.ENVOY_CI_GATE_CHECK;
+    else process.env.ENVOY_CI_GATE_CHECK = prev;
   }
+}
+
+const gateNode = (over) => ({
+  name: 'ci-gate',
+  conclusion: 'FAILURE',
+  detailsUrl: 'https://github.com/o/r/actions/runs/111/job/222',
+  ...over,
+});
+const MARKER = [{ message: '::error::FULL SUITE NOT RUN - add the full-ci label', title: '' }];
+
+test('summarizeChecks returns failed ci-gate candidates with check-run id from detailsUrl', () => {
+  const r = withGateEnv(undefined, () => prStatus.summarizeChecks([gateNode(), { name: 'build', conclusion: 'SUCCESS' }]));
+  assert.deepStrictEqual(r.gateChecks, [{ name: 'ci-gate', state: 'FAILURE', checkRunId: '222' }]);
+  assert.strictEqual(r.ci.checks.length, 2);
 });
 
-test('SKIPPED FULL SUITE NOT RUN marker (label present) yields fullSuiteSkipped false', () => {
-  const result = prStatus.summarizeChecks([{ name: 'FULL SUITE NOT RUN', conclusion: 'SKIPPED' }]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, false);
+test('summarizeChecks gate name match is case-insensitive and honors ENVOY_CI_GATE_CHECK', () => {
+  const r = withGateEnv('My-Gate', () => prStatus.summarizeChecks([gateNode({ name: 'my-gate' }), gateNode()]));
+  assert.deepStrictEqual(r.gateChecks.map((g) => g.name), ['my-gate']);
 });
 
-test('NEUTRAL FULL SUITE NOT RUN marker yields fullSuiteSkipped false', () => {
-  const result = prStatus.summarizeChecks([{ name: 'FULL SUITE NOT RUN', conclusion: 'neutral' }]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, false);
+test('summarizeChecks excludes SUCCESS gate and gate without parsable id', () => {
+  const r = withGateEnv(undefined, () =>
+    prStatus.summarizeChecks([gateNode({ conclusion: 'SUCCESS' }), gateNode({ detailsUrl: 'https://x/none' }), gateNode({ detailsUrl: undefined })])
+  );
+  assert.deepStrictEqual(r.gateChecks, []);
 });
 
-test('SUCCESS FULL SUITE NOT RUN marker yields fullSuiteSkipped true', () => {
-  const result = prStatus.summarizeChecks([{ name: 'FULL SUITE NOT RUN', conclusion: 'SUCCESS' }]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+test('summarizeChecks accepts ERROR and TIMED_OUT gate states, null rollup yields no gates', () => {
+  const r = withGateEnv(undefined, () => prStatus.summarizeChecks([gateNode({ conclusion: 'TIMED_OUT' }), gateNode({ conclusion: 'error' })]));
+  assert.strictEqual(r.gateChecks.length, 2);
+  assert.deepStrictEqual(prStatus.summarizeChecks(null).gateChecks, []);
 });
 
-test('IN_PROGRESS FULL SUITE NOT RUN marker yields fullSuiteSkipped true', () => {
-  const result = prStatus.summarizeChecks([{ name: 'FULL SUITE NOT RUN', status: 'IN_PROGRESS' }]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+test('a non-gate check literally named FULL SUITE NOT RUN does not count', () => {
+  const r = withGateEnv(undefined, () => prStatus.summarizeChecks([{ name: 'FULL SUITE NOT RUN', conclusion: 'SUCCESS', detailsUrl: 'u/job/5' }]));
+  assert.deepStrictEqual(r.gateChecks, []);
+  assert.strictEqual(prStatus.detectFullSuiteSkipped(r.gateChecks, () => MARKER), false);
 });
 
-test('one skipped and one successful matching check yields fullSuiteSkipped true', () => {
-  const result = prStatus.summarizeChecks([
-    { name: 'FULL SUITE NOT RUN', conclusion: 'SKIPPED' },
-    { name: 'CI / FULL SUITE NOT RUN', conclusion: 'SUCCESS' },
-  ]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+test('detectFullSuiteSkipped: failed gate with marker annotation is true', () => {
+  const calls = [];
+  const out = prStatus.detectFullSuiteSkipped([{ name: 'ci-gate', state: 'FAILURE', checkRunId: '222' }], (id) => {
+    calls.push(id);
+    return MARKER;
+  });
+  assert.strictEqual(out, true);
+  assert.deepStrictEqual(calls, ['222']);
 });
 
-test('stale non-skipped marker with older startedAt + newer SKIPPED marker yields fullSuiteSkipped false', () => {
-  const result = prStatus.summarizeChecks([
-    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SUCCESS', startedAt: '2026-01-01T10:00:00Z' },
-    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SKIPPED', startedAt: '2026-01-01T11:00:00Z' },
-  ]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, false);
-  assert.strictEqual(result.ci.checks.length, 2);
+test('detectFullSuiteSkipped: unrelated annotation is false', () => {
+  const out = prStatus.detectFullSuiteSkipped([{ checkRunId: '1' }], () => [{ message: 'tests failed', title: 'x' }]);
+  assert.strictEqual(out, false);
 });
 
-test('newer SKIPPED listed first in array still wins by timestamp over older SUCCESS', () => {
-  const result = prStatus.summarizeChecks([
-    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SKIPPED', startedAt: '2026-01-01T11:00:00Z' },
-    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SUCCESS', startedAt: '2026-01-01T10:00:00Z' },
-  ]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, false);
+test('detectFullSuiteSkipped: marker matched in title, case-insensitive', () => {
+  const out = prStatus.detectFullSuiteSkipped([{ checkRunId: '1' }], () => [{ message: 'm', title: 'Full Suite Not Run' }]);
+  assert.strictEqual(out, true);
 });
 
-test('older SKIPPED marker + newer SUCCESS marker yields fullSuiteSkipped true', () => {
-  const result = prStatus.summarizeChecks([
-    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SKIPPED', startedAt: '2026-01-01T10:00:00Z' },
-    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SUCCESS', startedAt: '2026-01-01T11:00:00Z' },
-  ]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+test('detectFullSuiteSkipped: no gate checks means no fetch and false', () => {
+  let called = false;
+  assert.strictEqual(prStatus.detectFullSuiteSkipped([], () => { called = true; return MARKER; }), false);
+  assert.strictEqual(called, false);
 });
 
-test('markers in two workflows: latest-skipped one and a running one yields fullSuiteSkipped true', () => {
-  const result = prStatus.summarizeChecks([
-    { name: 'FULL SUITE NOT RUN', workflowName: 'A', conclusion: 'SUCCESS', startedAt: '2026-01-01T10:00:00Z' },
-    { name: 'FULL SUITE NOT RUN', workflowName: 'A', conclusion: 'SKIPPED', startedAt: '2026-01-01T11:00:00Z' },
-    { name: 'FULL SUITE NOT RUN', workflowName: 'B', status: 'IN_PROGRESS', startedAt: '2026-01-01T09:00:00Z' },
-  ]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, true);
+test('detectFullSuiteSkipped: fetch throwing yields false and never throws', () => {
+  const out = prStatus.detectFullSuiteSkipped([{ checkRunId: '1' }], () => { throw new Error('gh failed'); });
+  assert.strictEqual(out, false);
 });
 
-test('missing timestamps fall back to array order (later position is later)', () => {
-  const staleFirst = prStatus.summarizeChecks([
-    { name: 'FULL SUITE NOT RUN', conclusion: 'SUCCESS' },
-    { name: 'FULL SUITE NOT RUN', conclusion: 'SKIPPED' },
-  ]);
-  assert.strictEqual(staleFirst.ci.fullSuiteSkipped, false);
-  const skippedFirst = prStatus.summarizeChecks([
-    { name: 'FULL SUITE NOT RUN', conclusion: 'SKIPPED' },
-    { name: 'FULL SUITE NOT RUN', conclusion: 'SUCCESS' },
-  ]);
-  assert.strictEqual(skippedFirst.ci.fullSuiteSkipped, true);
-});
-
-test('completedAt is used when startedAt is absent', () => {
-  const result = prStatus.summarizeChecks([
-    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SKIPPED', completedAt: '2026-01-01T12:00:00Z' },
-    { name: 'FULL SUITE NOT RUN', workflowName: 'CI', conclusion: 'SUCCESS', completedAt: '2026-01-01T10:00:00Z' },
-  ]);
-  assert.strictEqual(result.ci.fullSuiteSkipped, false);
+test('detectFullSuiteSkipped: later gate can still match after an earlier fetch error', () => {
+  const out = prStatus.detectFullSuiteSkipped([{ checkRunId: '1' }, { checkRunId: '2' }], (id) => {
+    if (id === '1') throw new Error('x');
+    return MARKER;
+  });
+  assert.strictEqual(out, true);
 });
 
 test('buildSnapshot passes ci.fullSuiteSkipped through, defaulting to false', () => {
