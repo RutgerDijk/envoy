@@ -13,13 +13,14 @@ If your CI gates the expensive full suite behind a label, envoy can notice the s
 Envoy only **detects and reacts**. It ships no workflow. When `finalize`, `fix-ci` or `babysit` see the marker, they run:
 
 ```
-node lib/full-ci.js <pr>
+# from the envoy plugin root (skills use ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js)
+node <envoy-plugin>/lib/full-ci.js <pr>
 ```
 
 This adds the `full-ci` label and runs `gh run rerun`, for at most 3 cycles per PR. Exit codes: 0 rerun triggered, 1 failure / no run / run in progress, 2 blocked after 3 cycles. To unblock:
 
 ```
-node lib/loop-safeguards.js cleanup full-ci-<pr>
+node <envoy-plugin>/lib/loop-safeguards.js cleanup full-ci-<pr>
 ```
 
 ## Example (GitHub Actions)

@@ -49,7 +49,7 @@ If a PR number is passed as an argument, act on just that PR.
 For each PR, read the authoritative status snapshot:
 
 ```bash
-SNAP=$(node lib/pr-status.js "$PR" 2>/dev/null)
+SNAP=$(node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js "$PR" 2>/dev/null)
 [ -z "$SNAP" ] && continue   # PR vanished or gh failed — skip, do not guess
 ```
 
@@ -108,7 +108,7 @@ Then apply the first matching rule, then move to the next PR:
 |---------------------------|--------|
 | `shouldReTrigger` returns `action: "retrigger"` | Re-trigger: `gh pr comment "$PR" --body "@coderabbitai review"` |
 | `ci.state` is failing | Invoke `envoy:fix-ci` for this PR |
-| `ci.fullSuiteSkipped` (a `FULL SUITE NOT RUN` check that ran, is running or failed — SKIPPED/NEUTRAL is already ignored; usually green CI) | Run `node lib/full-ci.js "$PR"` — exit 0 = rerun triggered; exit 1 = report only, do not loop (run in progress / no run / gh error: retry next pass); exit 2 = blocked, surface to the user. Never re-run it in a loop within the same pass |
+| `ci.fullSuiteSkipped` (a `FULL SUITE NOT RUN` check that ran, is running or failed — SKIPPED/NEUTRAL is already ignored; usually green CI) | Run `node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js "$PR"` — exit 0 = rerun triggered; exit 1 = report only, do not loop (run in progress / no run / gh error: retry next pass); exit 2 = blocked, surface to the user. Never re-run it in a loop within the same pass |
 | `coderabbit.unresolvedThreads > 0` | Invoke `envoy:coderabbit-pr-review` for this PR |
 | all green, nothing outstanding | Report **ready to merge** |
 
