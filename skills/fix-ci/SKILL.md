@@ -83,11 +83,10 @@ For each interval:
 ```
 
 **`FULL SUITE NOT RUN` marker:** a check whose name matches `/FULL SUITE NOT RUN/i`
-means the consumer CI skipped the full suite (usually still green). Treat it as
-not-green: run `node lib/full-ci.js $PR_NUMBER` (adds the `full-ci` label, reruns
-the PR head run), then re-poll. Exit 1 = report, do not loop; exit 2 = blocked
-after 3 cycles — stop and surface to the user (unblock:
-`node lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`).
+whose state is not SKIPPED/NEUTRAL (a skipped marker job means the `full-ci` label
+is present: ignore it) means the consumer CI skipped the full suite (usually still
+green). Treat it as not-green: run `node lib/full-ci.js $PR_NUMBER` (adds the
+`full-ci` label, reruns the PR head run), then re-poll. Exit 0 = rerun triggered (re-poll CI), 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass, 2 = blocked after 3 cycles — stop and surface to the user (unblock: `node lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`).
 
 ### Step 3: Classify Failures
 

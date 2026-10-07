@@ -37,11 +37,11 @@ FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion == "FAILURE")] | length'
 ```
 
 **If all checks pass:** no CI failures to add to this cycle's combined fix list
-— unless a check name matches `/FULL SUITE NOT RUN/i`. That marker means the
-consumer CI skipped the full suite (usually still green): treat it as not-green,
-run `node lib/full-ci.js $PR_NUMBER`, and re-poll. Exit 0 = rerun triggered
-(re-poll CI), 1 = report, do not loop, 2 = blocked after 3 cycles — stop and
-surface to the user (unblock: `node lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`).
+— unless a check name matches `/FULL SUITE NOT RUN/i` and its state is not
+SKIPPED/NEUTRAL (a skipped marker job means the `full-ci` label is present: ignore it).
+A marker that ran, is running, or failed means the consumer CI skipped the full suite
+(usually still green): treat it as not-green, run `node lib/full-ci.js $PR_NUMBER`,
+and re-poll. Exit 0 = rerun triggered (re-poll CI), 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass, 2 = blocked after 3 cycles — stop and surface to the user (unblock: `node lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`).
 
 ### Diagnose Failures (Classify, Do Not Fix Yet)
 
