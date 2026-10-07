@@ -148,6 +148,58 @@ check('babysit snapshot shape lists .ci.fullSuiteSkipped and .ci.fullSuiteOwed',
   assert.ok(shape.includes('.ci.fullSuiteSkipped'));
   assert.ok(shape.includes('.ci.fullSuiteOwed'));
 });
+
+// ---- fix round: guarded last step, bounded re-poll, single snapshot ----
+const ciMd = () => read(FILES[0]);
+const lastStepBash = () => {
+  const b = ciMd();
+  const sec = b.slice(b.indexOf('### Last Step'));
+  const start = sec.indexOf('```bash');
+  return sec.slice(start, sec.indexOf('```', start + 7));
+};
+check('ci.md bash snippet has a distinct 3) case separate from 1)', () => {
+  const sn = lastStepBash();
+  const c1 = sn.indexOf('    1)');
+  const c3 = sn.indexOf('    3)');
+  assert.ok(c1 >= 0 && c3 > c1);
+  assert.ok(/3\)[^\n]*re-poll on the next pass/.test(sn));
+  assert.ok(!/1\)[^\n]*NOT READY/.test(sn));
+});
+check('ci.md last-step guard enforces FAILED == 0 and no unpushed work, failing closed', () => {
+  const sn = lastStepBash();
+  const guard = sn.slice(0, sn.indexOf('full-ci.js'));
+  assert.ok(/"\$FAILED" -eq 0/.test(guard));
+  assert.ok(guard.includes('git status --porcelain'));
+  assert.ok(guard.includes('git rev-list --count @{u}..HEAD'));
+  assert.ok(sn.includes('not the last step yet'));
+});
+check('ci.md bounds exit 3/1 re-polls and ends with a ready-except report', () => {
+  const b = ciMd();
+  assert.ok(/at most 3 polls/i.test(b));
+  assert.ok(b.includes('ready except full-suite run — NOT READY: <reason>; re-poll on the next pass (babysit or re-run finalize)'));
+  const sec = b.slice(b.indexOf('ready except full-suite run') - 600, b.indexOf('ready except full-suite run') + 400);
+  assert.ok(/not a failure and not an escalation/i.test(sec));
+});
+check('ci.md captures one pr-status snapshot (SNAP=) and reads both flags from it', () => {
+  const b = ciMd();
+  assert.ok(b.includes('SNAP=$($PR_STATUS "$PR_NUMBER")'));
+  assert.ok(!/\$PR_STATUS "\$PR_NUMBER" \| jq/.test(b));
+  assert.ok(b.includes(`echo "$SNAP" | jq -r '.ci.fullSuiteOwed'`));
+});
+check('ci.md exit-0 text points at the Step 8 re-poll, not the polling loop above', () => {
+  const b = ciMd();
+  assert.ok(b.includes('return to the Step 8 re-poll'));
+  assert.ok(!b.includes('restart the CI polling loop above'));
+});
+check('ci.md "all checks pass" sentence no longer says "the flag is false"', () => {
+  assert.ok(!ciMd().includes('(and the flag is false)'));
+});
+check('babysit Step 4 surfaces a persistent NOT READY reason as information', () => {
+  const b = read(FILES[2]);
+  const step4 = b.slice(b.indexOf('### Step 4'));
+  assert.ok(step4.includes('NOT READY'));
+  assert.ok(/information/i.test(step4));
+});
 for (const rel of FILES.filter((f) => f.endsWith('SKILL.md'))) {
   check(`${rel} under 500 lines`, () => assert.ok(read(rel).split('\n').length < 500));
 }
