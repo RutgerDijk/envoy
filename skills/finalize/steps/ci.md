@@ -14,18 +14,36 @@ Steps 4-6.
 # CI: 15min max (synchronous checks, faster feedback loop)
 # Poll with exponential backoff — 15min timeout
 # intervals: 30s, 60s, 120s, 240s, 240s, 240s (cumulative: 15.5min)
+# `gh pr checks` has no `conclusion` field: use `bucket` (pass|fail|pending|skipping|cancel).
+# It exits 8 while checks are pending/failing but still prints the JSON, so keep stdout
+# and validate it. A failed query yields an empty CHECKS and the counts become "unknown"
+# (never 0): fail closed.
+fetch_checks() {
+  local out
+  out=$(gh pr checks "$PR_NUMBER" --json name,state,bucket 2>/dev/null)
+  if printf '%s' "$out" | jq -e 'type == "array"' >/dev/null 2>&1; then printf '%s' "$out"; fi
+}
+count_checks() {  # usage: count_checks <jq args...> <filter>; prints a number or "unknown"
+  if [ -z "$CHECKS" ]; then echo unknown; return; fi
+  printf '%s' "$CHECKS" | jq "$@" 2>/dev/null || echo unknown
+}
+PENDING_JQ='[.[] | select((.bucket // "") == "pending")] | length'
+# "cancel" counts as failing: a cancelled check is not green (lib/pr-status.js treats CANCELLED as failing too).
+FAILED_JQ='[.[] | select((.bucket // "") == "fail" or (.bucket // "") == "cancel")
+        | select(($skip == "true" and ((.name // "") | ascii_downcase) == ($gate | ascii_downcase)) | not)] | length'
+
 ELAPSED=0
 for WAIT in 30 60 120 240 240 240; do
-  CHECKS=$(gh pr checks $PR_NUMBER --json name,state,conclusion 2>/dev/null)
-  PENDING=$(echo "$CHECKS" | jq '[.[] | select(.state == "PENDING" or .state == "QUEUED")] | length')
+  CHECKS=$(fetch_checks)
+  PENDING=$(count_checks "$PENDING_JQ")
 
-  if [ "$PENDING" -eq 0 ]; then
+  if [ "$PENDING" = "0" ]; then
     break  # All checks resolved
   fi
 
   ELAPSED=$((ELAPSED + WAIT))
   if [ "$ELAPSED" -ge 900 ]; then
-    echo "CI checks still running after 15 minutes. Pending: $PENDING"
+    echo "CI checks still running (or unreadable) after 15 minutes. Pending: $PENDING"
     break
   fi
 
@@ -41,10 +59,11 @@ SUITE_OWED=$(echo "$SNAP" | jq -r '.ci.fullSuiteOwed')
 
 # A marker-red ci-gate is not a code failure: exclude it from FAILED.
 GATE="${ENVOY_CI_GATE_CHECK:-ci-gate}"
-FAILED=$(echo "$CHECKS" | jq --arg skip "$SUITE_NOT_RUN" --arg gate "$GATE" \
-  '[.[] | select(.conclusion == "FAILURE")
-        | select(($skip == "true" and (.name | ascii_downcase) == ($gate | ascii_downcase)) | not)] | length')
+FAILED=$(count_checks --arg skip "$SUITE_NOT_RUN" --arg gate "$GATE" "$FAILED_JQ")
 ```
+
+`FAILED` is a number or `unknown`. `unknown` (the `gh pr checks` query failed or returned
+non-JSON) is NOT zero failures: do not treat CI as green and do not enter the last step; re-poll.
 
 `fullSuiteSkipped` = `true` means the CI gate failed with a `FULL SUITE NOT RUN` annotation:
 CI is RED because the full suite was not run, not because of a code failure. Do not diagnose
@@ -63,7 +82,7 @@ those first.
 ```bash
 # Preconditions in the guard (fail closed): no failures, clean tree, nothing unpushed.
 AHEAD=$(git rev-list --count @{u}..HEAD 2>/dev/null) || AHEAD=""   # no upstream / error => not last step
-if [ "$SUITE_OWED" = "true" ] && [ "$FAILED" -eq 0 ] \
+if [ "$SUITE_OWED" = "true" ] && [ "$FAILED" = "0" ] \
    && [ -z "$(git status --porcelain)" ] && [ "$AHEAD" = "0" ]; then
   FULL_CI_RC=0
   node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js "$PR_NUMBER" || FULL_CI_RC=$?   # label + rerun
@@ -92,7 +111,7 @@ ready except full-suite run — NOT READY: <reason>; re-poll on the next pass (b
 This is a report, not a failure and not an escalation. Exit 2 is unchanged: blocked, surface to the user.
 If a push happens after the label is on, that is fine: it simply runs the full suite. Never remove the label.
 
-**If `FAILED` is 0** (non-gate checks pass; `fullSuiteOwed` may still be true and is handled by the last step above): no CI failures to add to this cycle's combined fix list.
+**If `FAILED` is `0`** (non-gate checks pass; `fullSuiteOwed` may still be true and is handled by the last step above): no CI failures to add to this cycle's combined fix list.
 
 ### Diagnose Failures (Classify, Do Not Fix Yet)
 

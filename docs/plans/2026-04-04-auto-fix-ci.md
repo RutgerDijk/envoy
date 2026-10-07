@@ -151,7 +151,7 @@ Tasks are sequential because later tasks depend on earlier ones (fix-ci skill mu
 
 1. Read current `skills/finishing-branch/SKILL.md` (post Task 3 changes)
 2. After the CodeRabbit resolution steps, add new steps:
-   - **Poll GitHub Actions**: `gh pr checks $PR --json name,state,conclusion` with exponential backoff (30s, 60s, 120s, 240s) and 15min timeout
+   - **Poll GitHub Actions**: `gh pr checks $PR --json name,state,bucket` with exponential backoff (30s, 60s, 120s, 240s) and 15min timeout
    - **If failures detected**: invoke fix-ci skill logic inline (classify, diagnose, fix, verify, push, re-poll — max 3 cycles)
    - **If all pass**: proceed to final verification
    - **On escalation**: present failure summary with workflow names, error excerpts, and attempted fixes

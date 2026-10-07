@@ -63,8 +63,11 @@ OWNER=$(gh repo view --json owner -q '.owner.login')
 REPO=$(gh repo view --json name -q '.name')
 BRANCH=$(git branch --show-current)
 
-# Get latest check runs
-gh pr checks $PR_NUMBER --json name,state,conclusion 2>/dev/null
+# Get latest check runs. `gh pr checks` has no `conclusion` field: use `bucket`
+# (pass|fail|pending|skipping|cancel). It exits 8 while checks are pending/failing
+# but still prints the JSON; any other failure prints nothing => treat as "unknown", not "no failures".
+CHECKS=$(gh pr checks "$PR_NUMBER" --json name,state,bucket) || [ "$?" -eq 8 ] || CHECKS=""
+[ -n "$CHECKS" ] || echo "Cannot read CI checks (gh pr checks failed) - result unknown, not green"
 ```
 
 ### Step 2: Poll for Check Completion
@@ -76,8 +79,9 @@ intervals = [30s, 60s, 120s, 240s]
 timeout = 15 minutes
 
 For each interval:
-  - Query: gh pr checks $PR_NUMBER --json name,state,conclusion
-  - If all checks resolved (pass or fail): break
+  - Query: gh pr checks $PR_NUMBER --json name,state,bucket   (exit 8 = pending/failing, JSON still valid; any other error = unknown, not green)
+  - Failed = bucket "fail" or "cancel" (a cancelled check is not green); pending = bucket "pending"
+  - If no check is pending: break
   - If still running: report progress, sleep, continue
   - If timeout: report which checks are still pending
 ```

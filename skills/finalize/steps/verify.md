@@ -24,8 +24,9 @@ npm run build
 npm run lint
 
 # CI status (exclude pending/queued — only show actual failures)
-gh pr checks $PR_NUMBER --json name,state,conclusion \
-  --jq '.[] | select(.state != "PENDING" and .state != "QUEUED") | select(.conclusion != "SUCCESS") | .name + ": " + .conclusion'
+# `gh pr checks` has no `conclusion` field: use `bucket` (exit 8 = pending/failing; JSON is still printed)
+gh pr checks $PR_NUMBER --json name,state,bucket \
+  --jq '.[] | select((.bucket // "") == "fail" or (.bucket // "") == "cancel") | (.name // "?") + ": " + .bucket'
 
 # Zero unresolved PR conversations — one snapshot source (all-author unresolved
 # review threads) shared with CodeRabbit polling.

@@ -319,7 +319,7 @@ fi
 **CI — a fresh read is enough (synchronous, not async like CodeRabbit):**
 
 ```bash
-gh pr checks $PR_NUMBER --json name,state,conclusion
+gh pr checks $PR_NUMBER --json name,state,bucket
 ```
 
 **If either CodeRabbit threads or CI failures remain:** that is the next cycle's
