@@ -32,19 +32,27 @@ function section(name) {
   process.stdout.write(`\n\x1b[1m${name}\x1b[0m\n`);
 }
 
+const tmpDirs = [];
 function tmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'full-ci-'));
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'full-ci-'));
+  tmpDirs.push(d);
+  return d;
 }
 
 /** Fake gh: records calls, answers pr view / run list from options. */
-function fakeGh({ labels = [], sha = 'abc123', runs = [{ databaseId: 111, createdAt: '2026-01-01T00:00:00Z' }] } = {}) {
+function fakeGh({ labels = [], sha = 'abc123', view, runs = [{ databaseId: 111, createdAt: '2026-01-01T00:00:00Z', status: 'completed', headSha: 'abc123' }] } = {}) {
   const calls = [];
   const gh = (args) => {
     calls.push(args);
     if (args[0] === 'pr' && args[1] === 'view') {
+      if (view !== undefined) return view;
       return JSON.stringify({ headRefOid: sha, labels: labels.map((name) => ({ name })) });
     }
-    if (args[0] === 'run' && args[1] === 'list') return JSON.stringify(runs);
+    if (args[0] === 'run' && args[1] === 'list') {
+      const i = args.indexOf('--commit');
+      const want = i === -1 ? undefined : args[i + 1];
+      return JSON.stringify(runs.filter((r) => r.headSha === undefined || r.headSha === want));
+    }
     return '';
   };
   gh.calls = calls;
@@ -64,7 +72,8 @@ test('creates label, adds it, reruns the head-SHA run', () => {
   assert.strictEqual(has(gh, 'label', 'create').length, 1);
   assert.deepStrictEqual(has(gh, 'pr', 'edit')[0], ['pr', 'edit', '7', '--add-label', 'full-ci']);
   assert.deepStrictEqual(has(gh, 'run', 'rerun')[0], ['run', 'rerun', '111']);
-  assert.ok(has(gh, 'run', 'list')[0].includes('abc123'));
+  const list = has(gh, 'run', 'list')[0];
+  assert.strictEqual(list[list.indexOf('--commit') + 1], 'abc123');
 });
 
 section('full-ci: label present');
@@ -82,9 +91,9 @@ section('full-ci: run selection');
 
 test('picks the most recent run for the head SHA', () => {
   const gh = fakeGh({ runs: [
-    { databaseId: 1, createdAt: '2026-01-01T00:00:00Z' },
-    { databaseId: 3, createdAt: '2026-01-03T00:00:00Z' },
-    { databaseId: 2, createdAt: '2026-01-02T00:00:00Z' },
+    { databaseId: 1, createdAt: '2026-01-01T00:00:00Z', status: 'completed' },
+    { databaseId: 3, createdAt: '2026-01-03T00:00:00Z', status: 'completed' },
+    { databaseId: 2, createdAt: '2026-01-02T00:00:00Z', status: 'completed' },
   ] });
   const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
   assert.strictEqual(res.runId, 3);
@@ -113,6 +122,57 @@ test('invalid pr number rejected without calling gh', () => {
   assert.strictEqual(gh.calls.length, 0);
 });
 
+test('runs for a different SHA are ignored by the commit filter', () => {
+  const gh = fakeGh({ runs: [{ databaseId: 9, createdAt: '2026-01-09T00:00:00Z', status: 'completed', headSha: 'other' }] });
+  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  assert.strictEqual(res.code, 1);
+  assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
+});
+
+test('prefers latest completed run over a newer in-progress one', () => {
+  const gh = fakeGh({ runs: [
+    { databaseId: 1, createdAt: '2026-01-01T00:00:00Z', status: 'completed' },
+    { databaseId: 2, createdAt: '2026-01-02T00:00:00Z', status: 'in_progress' },
+  ] });
+  assert.strictEqual(fullCi.run({ pr: 7, gh, cwd: tmp() }).runId, 1);
+});
+
+test('only an in-progress run: code 1, retry message, no rerun, no cycle', () => {
+  const cwd = tmp();
+  const gh = fakeGh({ runs: [{ databaseId: 2, createdAt: '2026-01-02T00:00:00Z', status: 'in_progress' }] });
+  const res = fullCi.run({ pr: 7, gh, cwd });
+  assert.strictEqual(res.code, 1);
+  assert.ok(/still in progress/.test(res.message));
+  assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
+  assert.strictEqual(loops.loadState('full-ci-7', cwd).cyclesSeen, 0);
+});
+
+section('full-ci: gh output validation');
+
+test('pr view without headRefOid: code 1 before any run list', () => {
+  const gh = fakeGh({ view: JSON.stringify({ labels: [] }) });
+  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  assert.strictEqual(res.code, 1);
+  assert.ok(/headRefOid/.test(res.message));
+  assert.strictEqual(has(gh, 'run', 'list').length, 0);
+  assert.strictEqual(has(gh, 'pr', 'edit').length, 0);
+});
+
+test('pr view non-JSON: code 1 before any run list', () => {
+  const gh = fakeGh({ view: 'not json' });
+  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  assert.strictEqual(res.code, 1);
+  assert.strictEqual(has(gh, 'run', 'list').length, 0);
+});
+
+test('gh error includes trimmed stderr and is labelled as gh error', () => {
+  const gh = () => { const e = new Error('Command failed'); e.stderr = 'HTTP 403 rate limit\n'; throw e; };
+  const res = fullCi.run({ pr: 7, gh, cwd: tmp() });
+  assert.strictEqual(res.code, 1);
+  assert.ok(/gh/.test(res.message) && res.message.includes('HTTP 403 rate limit'));
+  assert.ok(!res.message.endsWith('\n'));
+});
+
 section('full-ci: loop-safeguards max cycles');
 
 test('records a cycle on loop full-ci-<pr>', () => {
@@ -131,6 +191,8 @@ test('blocked at maxCycles: code 2, no rerun, no label changes', () => {
   assert.strictEqual(res.code, 2);
   assert.strictEqual(has(gh, 'run', 'rerun').length, 0);
   assert.strictEqual(has(gh, 'pr', 'edit').length, 0);
+  assert.ok(res.message.includes('cleanup full-ci-7'));
+  assert.ok(!/\breset\b/.test(res.message));
 });
 
 test('failed attempt (no run) does not consume a cycle', () => {
@@ -144,6 +206,8 @@ test('other PRs are tracked independently', () => {
   for (let i = 0; i < fullCi.MAX_CYCLES; i++) fullCi.run({ pr: 7, gh: fakeGh(), cwd });
   assert.strictEqual(fullCi.run({ pr: 8, gh: fakeGh(), cwd }).code, 0);
 });
+
+for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);
