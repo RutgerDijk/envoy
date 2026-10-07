@@ -49,7 +49,7 @@ If a PR number is passed as an argument, act on just that PR.
 For each PR, read the authoritative status snapshot:
 
 ```bash
-SNAP=$(node lib/pr-status.js "$PR" 2>/dev/null)
+SNAP=$(node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js "$PR" 2>/dev/null)
 [ -z "$SNAP" ] && continue   # PR vanished or gh failed — skip, do not guess
 ```
 
@@ -57,6 +57,7 @@ The snapshot shape (see `lib/pr-status.js`):
 
 ```
 .ci.state                       # overall CI roll-up
+.ci.fullSuiteSkipped            # ci-gate failed with FULL SUITE NOT RUN — remedy, not a code failure
 .coderabbit.checkState
 .coderabbit.unresolvedThreads    # authoritative unresolved count (GraphQL)
 .coderabbit.rateLimit.rateLimited
@@ -106,6 +107,7 @@ Then apply the first matching rule, then move to the next PR:
 
 | Condition (from snapshot) | Action |
 |---------------------------|--------|
+| `ci.fullSuiteSkipped` (the CI gate failed with a `FULL SUITE NOT RUN` annotation — CI is RED but not a code failure; this row must match before the re-trigger and failing rows, so the one action is the full-ci remedy) | Run `node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js "$PR"` (label + rerun, not fix-ci) — exit 0 = rerun triggered; exit 1 = report only, do not loop (run in progress / no run / gh error: retry next pass); exit 2 = blocked, surface to the user. Never re-run it in a loop within the same pass |
 | `shouldReTrigger` returns `action: "retrigger"` | Re-trigger: `gh pr comment "$PR" --body "@coderabbitai review"` |
 | `ci.state` is failing | Invoke `envoy:fix-ci` for this PR |
 | `coderabbit.unresolvedThreads > 0` | Invoke `envoy:coderabbit-pr-review` for this PR |

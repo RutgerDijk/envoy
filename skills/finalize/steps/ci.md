@@ -33,10 +33,33 @@ for WAIT in 30 60 120 240 240 240; do
   sleep $WAIT
 done
 
-FAILED=$(echo "$CHECKS" | jq '[.[] | select(.conclusion == "FAILURE")] | length')
+# Check the FULL SUITE NOT RUN marker BEFORE treating CI as failed or passed.
+PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
+SUITE_NOT_RUN=$($PR_STATUS "$PR_NUMBER" | jq -r '.ci.fullSuiteSkipped')
+if [ "$SUITE_NOT_RUN" = "true" ]; then
+  FULL_CI_RC=0
+  node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js "$PR_NUMBER" || FULL_CI_RC=$?   # label + rerun
+  case "$FULL_CI_RC" in
+    0) echo "full-ci rerun triggered — restart the CI polling loop above; do NOT compute FAILED from the stale CHECKS."; return 0 2>/dev/null || true ;;
+    1) echo "full-ci helper: report only (run in progress / no run / gh error). Report it and stop this CI step; retry on the next poll."; return 0 2>/dev/null || true ;;
+    2) echo "full-ci blocked after 3 cycles — STOP and escalate to the user."; return 0 2>/dev/null || true ;;
+  esac
+fi
+
+# A marker-red ci-gate is not a code failure: exclude it from FAILED.
+GATE="${ENVOY_CI_GATE_CHECK:-ci-gate}"
+FAILED=$(echo "$CHECKS" | jq --arg skip "$SUITE_NOT_RUN" --arg gate "$GATE" \
+  '[.[] | select(.conclusion == "FAILURE")
+        | select(($skip == "true" and (.name | ascii_downcase) == ($gate | ascii_downcase)) | not)] | length')
 ```
 
-**If all checks pass:** no CI failures to add to this cycle's combined fix list.
+`fullSuiteSkipped` = `true` means the CI gate failed with a `FULL SUITE NOT RUN` annotation:
+CI is RED because the full suite was not run, not because of a code failure. Do not diagnose
+it as a failure (the red `ci-gate` is excluded from `FAILED` above); remedy
+it by label + rerun via `lib/full-ci.js`, then re-poll.
+Exit 0 = rerun triggered (re-poll CI), 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass, 2 = blocked after 3 cycles — stop and surface to the user (unblock: `node ${CLAUDE_SKILL_DIR}/../../lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`).
+
+**If all checks pass** (and the flag is false): no CI failures to add to this cycle's combined fix list.
 
 ### Diagnose Failures (Classify, Do Not Fix Yet)
 
