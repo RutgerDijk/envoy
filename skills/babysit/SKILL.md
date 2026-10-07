@@ -124,6 +124,10 @@ CodeRabbit"). Then suggest a re-run — e.g. "re-run in ~15m; the #NN cooldown e
 at HH:MM" — and remind the caller they can automate it with `/loop 15m
 /envoy:babysit`.
 
+If a PR's full-suite row keeps returning `NOT READY: <reason>` on consecutive passes, include that
+reason in the report as information (e.g. "CodeRabbit status never reached success"). It is still
+never a failure or an escalation; the next pass simply re-polls.
+
 ## Integration with Envoy
 
 - Reads `lib/pr-status.js` — the single PR-status source (shared with `envoy:prs`)
