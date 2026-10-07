@@ -680,6 +680,42 @@ test('a fetcher error propagates (caller fails closed)', () => {
   }), /boom/);
 });
 
+section('buildSnapshot: real deriveCi output survives into the snapshot');
+
+test('ci.pinned from deriveCi is carried through buildSnapshot (true and false)', () => {
+  const { ci } = ciFor([run(), { name: 'check', status: 'completed', conclusion: 'success' }]);
+  assert.strictEqual(ci.pinned, true);
+  const snap = prStatus.buildSnapshot({ ...rawInputs, ci });
+  assert.strictEqual(snap.ci.pinned, true);
+  assert.strictEqual(snap.ci.fullSuiteOwed, true);
+
+  const summary = withGateEnv(undefined, () => prStatus.summarizeChecks([run()]));
+  const unpinned = prStatus.deriveCi(summary, markerFetch, { pinned: false });
+  assert.strictEqual(prStatus.buildSnapshot({ ...rawInputs, ci: unpinned }).ci.pinned, false);
+});
+
+test('ci.pinned fails closed to false when absent', () => {
+  const snap = prStatus.buildSnapshot({ ...rawInputs, ci: { state: 'FAILURE', checks: [] } });
+  assert.strictEqual(snap.ci.pinned, false);
+});
+
+section('buildSnapshot: relative rate-limit cooldown is measured from the comment time');
+
+test('relative "N minutes" resetsAt is anchored on rateLimitCommentAt, not now', () => {
+  const snap = prStatus.buildSnapshot({
+    ...rawInputs,
+    rateLimitCommentAt: '2026-07-15T09:00:00.000Z',
+    now: new Date('2026-07-15T12:00:00.000Z'),
+  });
+  assert.strictEqual(snap.coderabbit.rateLimit.rateLimited, true);
+  assert.strictEqual(snap.coderabbit.rateLimit.resetsAt, '2026-07-15T09:10:00.000Z');
+});
+
+test('without rateLimitCommentAt the relative cooldown still falls back to now', () => {
+  const snap = prStatus.buildSnapshot({ ...rawInputs, rateLimitCommentAt: null });
+  assert.strictEqual(snap.coderabbit.rateLimit.resetsAt, '2026-07-15T12:10:00.000Z');
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════

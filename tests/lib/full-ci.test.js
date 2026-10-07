@@ -264,6 +264,35 @@ notReady('fullSuiteOwed false', snap({ ci: { fullSuiteOwed: false } }), /owed|FU
 notReady('pinned read failed', snap({ ci: { pinned: false, fullSuiteOwed: false } }), /pinned check read failed/);
 notReady('unresolved threads', snap({ coderabbit: { unresolvedThreads: 2 } }), /unresolved/i);
 notReady('rate limited', snap({ coderabbit: { rateLimit: { rateLimited: true } } }), /rate.?limit/i);
+notReady('rate limited, cooldown still running', snap({ coderabbit: { rateLimit: { rateLimited: true, resetsAt: '2999-01-01T00:00:00.000Z' } } }), /rate.?limit/i);
+
+test('stale rate-limit comment whose cooldown has elapsed does not block (exit 0)', () => {
+  const gh = fakeGh();
+  const res = go({ pr: 7, gh, cwd: tmp(),
+    snapshot: () => snap({ coderabbit: { rateLimit: { rateLimited: true, resetsAt: '2020-01-01T00:00:00.000Z' } } }) });
+  assert.strictEqual(res.code, 0, res.message);
+});
+
+test('notReadyReason honours an injected now for the cooldown', () => {
+  const s = snap({ coderabbit: { rateLimit: { rateLimited: true, resetsAt: '2026-10-07T12:00:00.000Z' } } });
+  assert.ok(/rate.?limit/i.test(fullCi.notReadyReason(s, false, new Date('2026-10-07T11:59:00.000Z'))));
+  assert.strictEqual(fullCi.notReadyReason(s, false, new Date('2026-10-07T12:01:00.000Z')), null);
+});
+
+test('a real pr-status buildSnapshot of a ready PR is ready (no hand-built snapshot)', () => {
+  const prStatus = require(path.join(__dirname, '..', '..', 'lib', 'pr-status.js'));
+  const real = prStatus.buildSnapshot({
+    pr: 7,
+    ci: { state: 'FAILURE', checks: [], fullSuiteSkipped: true, fullSuiteOwed: true, pinned: true },
+    coderabbitCheckState: null,
+    coderabbitStatusState: 'success',
+    reviewThreads: { nodes: [] },
+    rateLimitCommentBody: null,
+    reviewers: [],
+    lastActivityAt: null,
+  });
+  assert.strictEqual(fullCi.notReadyReason(real, true), null);
+});
 
 test('snapshot reader receives the PR number; read error is exit 1 and never writes', () => {
   const gh = fakeGh();
