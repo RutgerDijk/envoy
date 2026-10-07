@@ -680,6 +680,28 @@ test('a fetcher error propagates (caller fails closed)', () => {
   }), /boom/);
 });
 
+section('readPinnedChecks: fetch order (dae0334)');
+
+test('check runs are fetched before the combined status', () => {
+  const sha = '1'.repeat(40);
+  const order = [];
+  prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
+    fetchCheckRuns: () => { order.push('checkRuns'); return []; },
+    fetchStatus: () => { order.push('status'); return { total_count: 0, statuses: [] }; },
+  });
+  assert.deepStrictEqual(order, ['checkRuns', 'status']);
+});
+
+test('a check-runs fetch error short-circuits: the status fetcher is never called', () => {
+  const sha = '2'.repeat(40);
+  const order = [];
+  assert.throws(() => prStatus.readPinnedChecks({ owner: 'o', repo: 'r' }, sha, {
+    fetchCheckRuns: () => { order.push('checkRuns'); throw new Error('check-runs boom'); },
+    fetchStatus: () => { order.push('status'); return { total_count: 0, statuses: [] }; },
+  }), /check-runs boom/);
+  assert.deepStrictEqual(order, ['checkRuns']);
+});
+
 section('buildSnapshot: real deriveCi output survives into the snapshot');
 
 test('ci.pinned from deriveCi is carried through buildSnapshot (true and false)', () => {
