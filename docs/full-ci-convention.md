@@ -12,13 +12,21 @@ If your CI gates the expensive full suite behind a label, envoy can notice the s
 
 ## What envoy does
 
-Envoy only **detects and reacts**. It ships no workflow. On `ci.fullSuiteSkipped`, `finalize`, `fix-ci` and `babysit` run the helper from the envoy plugin:
+Envoy only **detects and reacts**. It ships no workflow. The marker is the raw signal (`ci.fullSuiteSkipped`); envoy acts on the derived **owed** state (`ci.fullSuiteOwed`): "fast run green, full run owed". A marker-red `ci-gate` is therefore not a failure. A real job failure, or any failed or pending check or commit status elsewhere on the head SHA, is still a failure and keeps `fullSuiteOwed` false.
+
+The label is the **last step** before merge. `finalize`, `fix-ci` and `babysit` run the helper from the envoy plugin on every pass while the suite is owed:
 
 ```
 node <envoy-plugin>/lib/full-ci.js <pr>
 ```
 
-It resolves the run that owns the failed `ci-gate` job (never the newest run of some other workflow or event), adds the `full-ci` label, then `gh run rerun <id>` (whole run, NOT `--failed`). The rerun re-runs `changes`, which now sees the label: no fresh labeled run, no stale marker. At most 3 cycles per PR, counted over the PR's whole lifetime (not reset by new pushes). Exit codes: 0 rerun triggered, 1 report only (failure / no run / run in progress), 2 blocked after 3 cycles. To unblock:
+It adds the `full-ci` label and reruns the whole run (`gh run rerun <id>`, NOT `--failed`) only when the PR is ready: no more pushes are planned, the pinned check read succeeded, the fast run is green apart from the marker, no unresolved review threads remain, CodeRabbit is not rate limited and, when the repo uses CodeRabbit, its latest commit status (`coderabbit.statusState`) is `success` (absent is not done). It resolves the run that owns the failed `ci-gate` job (never the newest run of some other workflow or event). The rerun re-runs `changes`, which now sees the label: no fresh labeled run, no stale marker.
+
+Reads are pinned to the head SHA (latest check run per name, combined commit status). The head SHA is re-read right before the writes; if it moved, envoy reports only and retries on the next pass. A push after the label is on is fine: it just runs the full suite. Envoy never removes the label.
+
+**CodeRabbit switch:** `ENVOY_CODERABBIT=on|off|auto` (default `auto`; anything else is exit 1). `auto` means CodeRabbit is in use iff `.coderabbit.yaml` or `.coderabbit.yml` exists at the repo root, so repos without CodeRabbit are never held waiting for its status.
+
+Exit codes: 0 rerun triggered, 1 report only (failure / no run / run in progress / head moved), 2 blocked after 3 cycles, 3 NOT READY: re-poll on the next pass. Exit 3 is never a failure or escalation: it makes no writes (no label, no rerun) and uses no cycle. At most 3 cycles per PR, counted over the PR's whole lifetime (not reset by new pushes). To unblock exit 2:
 
 ```
 node <envoy-plugin>/lib/loop-safeguards.js cleanup full-ci-<pr>
