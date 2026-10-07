@@ -25,8 +25,13 @@ npm run lint
 
 # CI status (exclude pending/queued — only show actual failures)
 # `gh pr checks` has no `conclusion` field: use `bucket` (exit 8 = pending/failing; JSON is still printed)
-gh pr checks $PR_NUMBER --json name,state,bucket \
-  --jq '.[] | select((.bucket // "") == "fail" or (.bucket // "") == "cancel") | (.name // "?") + ": " + .bucket'
+# Keep stdout whenever it is a valid JSON array regardless of exit code; missing/malformed output is unknown, not green.
+CHECKS=$(gh pr checks $PR_NUMBER --json name,state,bucket 2>/dev/null || true)
+if printf '%s' "$CHECKS" | jq -e 'type == "array"' >/dev/null 2>&1; then
+  printf '%s' "$CHECKS" | jq -r '.[] | select((.bucket // "") == "fail" or (.bucket // "") == "cancel") | (.name // "?") + ": " + .bucket'
+else
+  echo "CI status unavailable - cannot confirm green."
+fi
 
 # Zero unresolved PR conversations — one snapshot source (all-author unresolved
 # review threads) shared with CodeRabbit polling.
