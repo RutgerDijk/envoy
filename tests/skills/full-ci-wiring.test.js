@@ -204,6 +204,19 @@ for (const rel of FILES.filter((f) => f.endsWith('SKILL.md'))) {
   check(`${rel} under 500 lines`, () => assert.ok(read(rel).split('\n').length < 500));
 }
 
+check('babysit owed row: NOT READY from unresolved human review threads has no babysit action (information only)', () => {
+  const row = read(FILES[2]).split('\n').find((l) => l.startsWith('| `ci.fullSuiteOwed`'));
+  assert.ok(row && /human/i.test(row) && /no action/i.test(row) && /information/i.test(row));
+});
+check('lib/full-ci.js header: only finalize and babysit run it; no-more-pushes enforced by callers', () => {
+  const h = read('lib/full-ci.js').slice(0, read('lib/full-ci.js').indexOf("const { execFileSync }"));
+  assert.ok(!/finalize, fix-ci and babysit/.test(h));
+  assert.ok(/finalize and babysit/.test(h));
+  assert.ok(!/enforced here/.test(h));
+  assert.ok(/not by this helper/i.test(h) || /callers? enforce/i.test(h));
+  assert.ok(/any reviewer/i.test(h));
+});
+
 // ---- Issue #87 follow-up: `gh pr checks` has no `conclusion` field; use `bucket` ----
 const CHECKS_FILES = [
   'skills/finalize/steps/ci.md',

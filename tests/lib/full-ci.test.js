@@ -93,6 +93,7 @@ function fakeGh({
 function snap(over = {}) {
   return {
     ci: { fullSuiteOwed: true, pinned: true, ...(over.ci || {}) },
+    threads: { unresolved: 0, ...(over.threads || {}) },
     coderabbit: {
       statusState: 'success',
       unresolvedThreads: 0,
@@ -263,6 +264,24 @@ section('full-ci: readiness preconditions (exit 3)');
 notReady('fullSuiteOwed false', snap({ ci: { fullSuiteOwed: false } }), /owed|FULL SUITE/i);
 notReady('pinned read failed', snap({ ci: { pinned: false, fullSuiteOwed: false } }), /pinned check read failed/);
 notReady('unresolved threads', snap({ coderabbit: { unresolvedThreads: 2 } }), /unresolved/i);
+notReady('human-only unresolved thread (CodeRabbit count 0)', snap({ threads: { unresolved: 1 } }), /^NOT READY: 1 unresolved review thread\(s\)$/);
+notReady('CodeRabbit unresolved thread (all-reviewers total agrees)', snap({ threads: { unresolved: 2 }, coderabbit: { unresolvedThreads: 2 } }), /^NOT READY: 2 unresolved review thread\(s\)$/);
+notReady('missing threads field fails closed with a distinct reason', { ...snap(), threads: undefined }, /review thread count unavailable/i);
+notReady('non-number threads.unresolved fails closed', snap({ threads: { unresolved: '0' } }), /review thread count unavailable/i);
+notReady('missing CodeRabbit count fails closed without printing undefined', snap({ coderabbit: { unresolvedThreads: undefined } }), /CodeRabbit.*thread count unavailable/i);
+
+test('no reason ever prints "undefined" or "NaN" for bad thread data', () => {
+  for (const s of [{ ...snap(), threads: undefined }, snap({ threads: { unresolved: null } }), snap({ coderabbit: { unresolvedThreads: undefined } })]) {
+    const r = fullCi.notReadyReason(s, false);
+    assert.ok(r && !/undefined|NaN|null/.test(r), r);
+  }
+});
+
+test('both thread counts zero is ready (exit 0)', () => {
+  const res = go({ pr: 7, gh: fakeGh(), cwd: tmp(), snapshot: () => snap({ threads: { unresolved: 0 }, coderabbit: { unresolvedThreads: 0 } }) });
+  assert.strictEqual(res.code, 0, res.message);
+});
+
 notReady('rate limited', snap({ coderabbit: { rateLimit: { rateLimited: true } } }), /rate.?limit/i);
 notReady('rate limited, cooldown still running', snap({ coderabbit: { rateLimit: { rateLimited: true, resetsAt: '2999-01-01T00:00:00.000Z' } } }), /rate.?limit/i);
 
