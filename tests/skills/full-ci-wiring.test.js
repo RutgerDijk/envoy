@@ -41,6 +41,22 @@ for (const rel of FILES.slice(0, 2)) {
   check(`${rel} mentions loop-safeguards.js cleanup full-ci-`, () =>
     assert.ok(read(rel).includes('loop-safeguards.js cleanup full-ci-')));
 }
+for (const rel of FILES) {
+  check(`${rel} uses plugin-root full-ci.js path, no bare node lib/full-ci.js`, () => {
+    const b = read(rel);
+    assert.ok(b.includes('${CLAUDE_SKILL_DIR}/../../lib/full-ci.js'));
+    assert.ok(!b.includes('node lib/full-ci.js'));
+    assert.ok(!b.includes('node lib/loop-safeguards.js'));
+  });
+}
+for (const rel of FILES.slice(0, 2)) {
+  check(`${rel} mentions fullSuiteSkipped`, () => assert.ok(read(rel).includes('fullSuiteSkipped')));
+}
+check('babysit snapshot uses plugin-root pr-status.js', () => {
+  const b = read(FILES[2]);
+  assert.ok(b.includes('${CLAUDE_SKILL_DIR}/../../lib/pr-status.js'));
+  assert.ok(!b.includes('node lib/pr-status.js'));
+});
 check('babysit mentions fullSuiteSkipped', () =>
   assert.ok(read(FILES[2]).includes('fullSuiteSkipped')));
 check('babysit marker row comes after failing-ci row', () => {

@@ -28,6 +28,7 @@ test('example sets name: FULL SUITE NOT RUN', () => has('name: FULL SUITE NOT RU
 test('example uses labeled trigger', () => has('labeled'));
 test('states the matching regex', () => has('/FULL SUITE NOT RUN/i'));
 test('documents loop-safeguards cleanup', () => has('loop-safeguards.js cleanup full-ci-'));
+test('does not use consumer-relative node lib/ paths', () => assert.ok(!/node lib\//.test(doc)));
 test('documents the 3 cycle cap', () => has('3 cycles'));
 test('documents skipped marker is ignored', () => assert.ok(/skipped/i.test(doc)));
 
