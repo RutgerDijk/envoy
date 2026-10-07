@@ -1,23 +1,24 @@
 # Consumer CI convention: `full-ci`
 
-If your CI gates the expensive full suite behind a label, envoy can notice the suite was skipped and react. You only need to follow this convention.
+If your CI gates the expensive full suite behind a label, envoy can notice the suite was skipped and react. Follow this convention (the runtime-read pattern).
 
 ## The contract
 
 - **Label:** `full-ci`. The full suite runs only when the PR carries it.
-- **Marker:** when the label is absent, emit a check/job whose **name** matches `/FULL SUITE NOT RUN/i`. Envoy reads check names from `statusCheckRollup` via `lib/pr-status.js`. It does not read logs or job summaries, so the marker must be in the name.
-- **Skipped markers are ignored:** when the label is present the marker job is skipped but still appears in `statusCheckRollup`. Detection ignores a matching check whose state is SKIPPED or NEUTRAL. Only a marker that ran means the suite did not.
+- **No label triggers:** the `pull_request` trigger has NO `labeled`/`unlabeled` types, so adding the label starts no run (a run started by a label event would report its skipped jobs as success to the required check).
+- **Runtime label read:** a `changes` job reads labels at runtime with `gh pr view <pr> --json labels`, never from `github.event.pull_request.labels`, and exposes a `full` output.
+- **Gate:** `ci-gate` reads `needs.changes.outputs.full`. When the run was not full, a test job ran and every job passed, it prints `::error::FULL SUITE NOT RUN — add the full-ci label` and fails.
+- **Detection:** envoy looks at the gate check named `ci-gate` (override with env `ENVOY_CI_GATE_CHECK`). If it failed, its annotation matching `/FULL SUITE NOT RUN/i` sets `ci.fullSuiteSkipped` in `lib/pr-status.js`.
 
 ## What envoy does
 
-Envoy only **detects and reacts**. It ships no workflow. When `finalize`, `fix-ci` or `babysit` see the marker, they run:
+Envoy only **detects and reacts**. It ships no workflow. On `ci.fullSuiteSkipped`, `finalize`, `fix-ci` and `babysit` run the helper from the envoy plugin:
 
 ```
-# from the envoy plugin root (skills use ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js)
 node <envoy-plugin>/lib/full-ci.js <pr>
 ```
 
-This adds the `full-ci` label and runs `gh run rerun`, for at most 3 cycles per PR. Exit codes: 0 rerun triggered, 1 failure / no run / run in progress, 2 blocked after 3 cycles. To unblock:
+It adds the `full-ci` label, then `gh run rerun <id>` (whole run, NOT `--failed`). The rerun re-runs `changes`, which now sees the label: no fresh labeled run, no stale marker. At most 3 cycles per PR. Exit codes: 0 rerun triggered, 1 report only (failure / no run / run in progress), 2 blocked after 3 cycles. To unblock:
 
 ```
 node <envoy-plugin>/lib/loop-safeguards.js cleanup full-ci-<pr>
@@ -28,26 +29,39 @@ node <envoy-plugin>/lib/loop-safeguards.js cleanup full-ci-<pr>
 ```yaml
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
 
 jobs:
-  full-suite-not-run:
-    name: FULL SUITE NOT RUN
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'full-ci') }}
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.l.outputs.full }}
     steps:
-      - run: echo "Add the full-ci label to run the full suite"
+      - id: l
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          full=$(gh pr view "$PR" --json labels -q '[.labels[].name] | index("full-ci") != null')
+          echo "full=$full" >> "$GITHUB_OUTPUT"
 
-  full-suite:
-    if: contains(github.event.pull_request.labels.*.name, 'full-ci')
+  test:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: npm test
+
+  ci-gate:
+    if: always()
+    needs: [changes, test]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          if [ "${{ needs.changes.outputs.full }}" != "true" ] && [ "${{ needs.test.result }}" = "success" ]; then
+            echo "::error::FULL SUITE NOT RUN — add the full-ci label"
+            exit 1
+          fi
+          [ "${{ needs.test.result }}" = "success" ] || [ "${{ needs.test.result }}" = "skipped" ]
 ```
-
-`labeled` in `types` is required. The check name comes from `name:`, not the job id, so keep `name: FULL SUITE NOT RUN` exactly.
-
-## Caveat: reruns and labels
-
-A rerun of a `pull_request` run reuses the **original** event payload. A plain `gh run rerun` therefore re-emits the stale payload, and the marker is still present. Adding the label is what fixes it: the label event triggers a fresh run via `labeled`, which sees the label and skips the marker.

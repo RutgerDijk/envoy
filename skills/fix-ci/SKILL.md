@@ -82,12 +82,11 @@ For each interval:
   - If timeout: report which checks are still pending
 ```
 
-**`FULL SUITE NOT RUN` marker:** check
+**`FULL SUITE NOT RUN` gate (check BEFORE classifying failures):**
 `node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js "$PR" | jq -r '.ci.fullSuiteSkipped'`.
-`true` means a `FULL SUITE NOT RUN` marker check ran, is running or failed (latest per
-name; SKIPPED/NEUTRAL is ignored: a skipped marker means the `full-ci` label is present),
-i.e. the consumer CI skipped the full suite (usually still green).
-Treat it as not-green: run `node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js $PR_NUMBER` (adds the
+`true` means the CI gate failed with a `FULL SUITE NOT RUN` annotation (CI is RED because
+the full suite was not run, not a code failure). Do not log-dive or classify it:
+run `node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js $PR_NUMBER` (adds the
 `full-ci` label, reruns the PR head run), then re-poll. Exit 0 = rerun triggered (re-poll CI), 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass, 2 = blocked after 3 cycles — stop and surface to the user (unblock: `node ${CLAUDE_SKILL_DIR}/../../lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`).
 
 ### Step 3: Classify Failures
