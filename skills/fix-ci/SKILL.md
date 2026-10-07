@@ -63,8 +63,13 @@ OWNER=$(gh repo view --json owner -q '.owner.login')
 REPO=$(gh repo view --json name -q '.name')
 BRANCH=$(git branch --show-current)
 
-# Get latest check runs
-gh pr checks $PR_NUMBER --json name,state,conclusion 2>/dev/null
+# Get latest check runs. `gh pr checks` has no `conclusion` field: use `bucket`
+# (pass|fail|pending|skipping|cancel). It exits non-zero (8 pending, 1 failing) yet still
+# prints valid JSON, so keep stdout whenever it is a JSON array; only missing/malformed
+# output is "unknown", not "no failures".
+CHECKS=$(gh pr checks "$PR_NUMBER" --json name,state,bucket 2>/dev/null || true)
+echo "$CHECKS" | jq -e 'type == "array"' >/dev/null 2>&1 || CHECKS=""
+[ -n "$CHECKS" ] || echo "Cannot read CI checks (gh pr checks failed) - result unknown, not green"
 ```
 
 ### Step 2: Poll for Check Completion
@@ -76,18 +81,17 @@ intervals = [30s, 60s, 120s, 240s]
 timeout = 15 minutes
 
 For each interval:
-  - Query: gh pr checks $PR_NUMBER --json name,state,conclusion
-  - If all checks resolved (pass or fail): break
+  - Query: gh pr checks $PR_NUMBER --json name,state,bucket   (non-zero exit with valid JSON array = still usable; missing/malformed output = unknown, not green)
+  - Failed = bucket "fail" or "cancel" (a cancelled check is not green); pending = bucket "pending"
+  - If no check is pending: break
   - If still running: report progress, sleep, continue
   - If timeout: report which checks are still pending
 ```
 
 **`FULL SUITE NOT RUN` gate (check BEFORE classifying failures):**
-`node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js "$PR_NUMBER" | jq -r '.ci.fullSuiteSkipped'`.
-`true` means the CI gate failed with a `FULL SUITE NOT RUN` annotation (CI is RED because
-the full suite was not run, not a code failure). Do not log-dive or classify it:
-run `node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js $PR_NUMBER` (adds the
-`full-ci` label, reruns the PR head run), then re-poll. Exit 0 = rerun triggered (re-poll CI), 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass, 2 = blocked after 3 cycles — stop and surface to the user (unblock: `node ${CLAUDE_SKILL_DIR}/../../lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`).
+`node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js "$PR_NUMBER" | jq -r '.ci.fullSuiteOwed, .ci.fullSuiteSkipped'`.
+- `fullSuiteOwed` is `true`: the CI gate failed with a `FULL SUITE NOT RUN` annotation and nothing else is red or pending (CI is RED because the full suite was not run, not a code failure). Do not log-dive or classify the gate. Report "fast run green, full run owed" and hand back to `envoy:finalize` or `envoy:babysit`, which own the last-step decision. fix-ci never adds the `full-ci` label and never runs the full-suite helper. This is a terminal, non-failure outcome of this run (Step 8 `REPORT_OWED`).
+- `fullSuiteSkipped` is `true` but `fullSuiteOwed` is `false`: the marker plus another real failure. Classify and fix the real failures as usual (Step 3 on); the marker alone must not mask them, and the gate failure itself is not diagnosed. If no other check is failing (e.g. `pinned` is `false` because the SHA-pinned read fell back to the unpinned rollup, so `fullSuiteOwed` was forced false), there is nothing real to fix: report "cannot confirm the owed state; re-poll" and hand back without diagnosing the gate.
 
 ### Step 3: Classify Failures
 
@@ -211,7 +215,7 @@ loop:
 
     POLL_CI:
       Poll CI checks with backoff (Step 2)
-      If .ci.fullSuiteSkipped is true → state = REMEDIATE_FULL_CI
+      If .ci.fullSuiteOwed is true → state = REPORT_OWED
       If any check FAILED  → state = FIX
       If all checks PASSED → state = CONFIRM
 
@@ -224,10 +228,10 @@ loop:
       CONFIRM_COUNT = 0
       → state = POLL_CI
 
-    REMEDIATE_FULL_CI:
-      Run full-ci.js (Step 2 gate) — label + rerun, no code change, no push
-      Do not increment FIX_CYCLE (full-ci.js bounds itself at 3 cycles)
-      Exit 0 → state = POLL_CI; exit 1 → report, state = POLL_CI on the next pass; exit 2 → state = ESCALATE
+    REPORT_OWED:
+      Report "fast run green, full run owed" (Step 2 gate) — no label, no rerun, no push
+      Do not increment FIX_CYCLE; not a failure and not an escalation
+      Hand back to finalize/babysit → state = DONE
 
     CONFIRM:
       CONFIRM_COUNT += 1

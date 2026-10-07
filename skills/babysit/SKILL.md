@@ -57,7 +57,8 @@ The snapshot shape (see `lib/pr-status.js`):
 
 ```
 .ci.state                       # overall CI roll-up
-.ci.fullSuiteSkipped            # ci-gate failed with FULL SUITE NOT RUN — remedy, not a code failure
+.ci.fullSuiteSkipped            # ci-gate failed with FULL SUITE NOT RUN — raw marker, not a code failure
+.ci.fullSuiteOwed               # marker is the ONLY red/pending thing — fast run green, full run owed (last step)
 .coderabbit.checkState
 .coderabbit.unresolvedThreads    # authoritative unresolved count (GraphQL)
 .coderabbit.rateLimit.rateLimited
@@ -107,11 +108,11 @@ Then apply the first matching rule, then move to the next PR:
 
 | Condition (from snapshot) | Action |
 |---------------------------|--------|
-| `ci.fullSuiteSkipped` (the CI gate failed with a `FULL SUITE NOT RUN` annotation — CI is RED but not a code failure; this row must match before the re-trigger and failing rows, so the one action is the full-ci remedy) | Run `node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js "$PR"` (label + rerun, not fix-ci) — exit 0 = rerun triggered; exit 1 = report only, do not loop (run in progress / no run / gh error: retry next pass); exit 2 = blocked, surface to the user. Never re-run it in a loop within the same pass |
 | `shouldReTrigger` returns `action: "retrigger"` | Re-trigger: `gh pr comment "$PR" --body "@coderabbitai review"` |
-| `ci.state` is failing | Invoke `envoy:fix-ci` for this PR |
+| `ci.state` is failing and `ci.fullSuiteOwed` is false (a marker-only red gate is NOT a failure; marker plus a real failure still goes to fix-ci) | Invoke `envoy:fix-ci` for this PR |
 | `coderabbit.unresolvedThreads > 0` | Invoke `envoy:coderabbit-pr-review` for this PR |
-| all green, nothing outstanding | Report **ready to merge** |
+| `ci.fullSuiteOwed` (the CI gate failed with a `FULL SUITE NOT RUN` annotation and that marker is the only outstanding item — every row above has precedence; this is the LAST action before merge) | Run `node ${CLAUDE_SKILL_DIR}/../../lib/full-ci.js "$PR"` (label + rerun, not fix-ci) — exit 0 = rerun triggered; exit 1 = report only, do not loop (run in progress / no run / gh error: retry next pass); exit 2 = blocked (applies only once the PR is otherwise ready; exit 3 takes precedence over exit 2), surface to the user (unblock: `node ${CLAUDE_SKILL_DIR}/../../lib/loop-safeguards.js cleanup full-ci-$PR`); exit 3 = `NOT READY: <reason>` — re-poll on the next pass, never a failure or escalation (when the reason is unresolved human review threads, babysit has no action for it: report the reason as information only). Never re-run it in a loop within the same pass |
+| all green, nothing outstanding, and `ci.fullSuiteOwed` is false | Report **ready to merge** (never while `fullSuiteOwed` is true) |
 
 Only re-trigger CodeRabbit when `shouldReTrigger` says so — never poke an active
 or already-complete review.
@@ -122,6 +123,10 @@ Summarize the pass: per PR, the action taken (or "ready to merge" / "waiting on
 CodeRabbit"). Then suggest a re-run — e.g. "re-run in ~15m; the #NN cooldown ends
 at HH:MM" — and remind the caller they can automate it with `/loop 15m
 /envoy:babysit`.
+
+If a PR's full-suite row keeps returning `NOT READY: <reason>` on consecutive passes, include that
+reason in the report as information (e.g. "CodeRabbit status never reached success"). It is still
+never a failure or an escalation; the next pass simply re-polls.
 
 ## Integration with Envoy
 
