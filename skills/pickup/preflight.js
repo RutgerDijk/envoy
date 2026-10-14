@@ -65,13 +65,30 @@ function writeJson(rel, data) {
 
 function nowIso() { return new Date().toISOString(); }
 
+// The issue number arrives as the first non-flag skill argument, e.g.
+// `2497` or `#2497`. The Briefing line forwards "$ARGUMENTS" quoted (an
+// unquoted `#2497` would be a shell comment), so split it into tokens here.
+// ENVOY_ISSUE_NUMBER remains as a fallback.
+function resolveIssueNumber(argv) {
+  const tokens = argv.flatMap((a) => a.split(/\s+/)).filter(Boolean);
+  const arg = tokens.find((a) => !a.startsWith('--'));
+  return arg !== undefined ? arg.replace(/^#/, '') : process.env.ENVOY_ISSUE_NUMBER;
+}
+
 function main() {
-  const issueNumber = process.env.ENVOY_ISSUE_NUMBER;
+  const issueNumber = resolveIssueNumber(process.argv.slice(2));
 
   if (!issueNumber) {
     banner('fatal');
-    say('No ENVOY_ISSUE_NUMBER in environment.');
-    say('Set it before invoking pickup (usually handled by the slash command).');
+    say('No issue number given.');
+    say('Usage: /envoy:pickup <issue-number> (or set ENVOY_ISSUE_NUMBER).');
+    return;
+  }
+
+  if (!/^[1-9]\d*$/.test(issueNumber)) {
+    banner('fatal');
+    say(`"${issueNumber}" is not a valid issue number.`);
+    say('Usage: /envoy:pickup <issue-number>');
     return;
   }
 
