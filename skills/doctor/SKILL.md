@@ -14,7 +14,7 @@ allowed-tools:
 
 ## Briefing
 
-!`node ${CLAUDE_SKILL_DIR}/preflight.js`
+!`node ${CLAUDE_SKILL_DIR}/preflight.js "$ARGUMENTS"`
 
 ### Checklist
 
@@ -54,14 +54,9 @@ re-running the checks by hand.
 
 ## `--fix` mode
 
-Pass `--fix` to stage remediation. Because the inline preflight briefing
-takes no CLI arguments, set `ENVOY_DOCTOR_FIX=1` in the environment before
-invoking the skill (the same convention `pickup` uses for
-`ENVOY_ISSUE_NUMBER`) — e.g.:
-
-```bash
-ENVOY_DOCTOR_FIX=1 node skills/doctor/preflight.js
-```
+Pass `--fix` to stage remediation: `/envoy:doctor --fix`. The Briefing line
+forwards the skill arguments to preflight. `ENVOY_DOCTOR_FIX=1` in the
+environment is still honoured as a fallback.
 
 Preflight refuses (fatal) to proceed with `--fix` if the worktree has
 uncommitted changes — plan mutations should never land on top of an
@@ -95,7 +90,7 @@ Worktree has uncommitted changes — --fix refuses to run on a dirty worktree.
 Commit or stash your changes, then re-run /envoy:doctor --fix.
 ```
 
-Commit or stash first, then re-run with `ENVOY_DOCTOR_FIX=1`.
+Commit or stash first, then re-run `/envoy:doctor --fix`.
 
 ## Integration with Envoy
 

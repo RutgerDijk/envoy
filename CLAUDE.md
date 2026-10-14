@@ -55,6 +55,10 @@ skills/<name>/
 followed by a visible checklist of steps/layers. Preflight prints
 `## STATUS: ok|degraded|fatal` as its first content line. `fatal` stops
 the skill. `ENVOY_HOOK_PROFILE=strict` promotes `degraded` → `fatal`.
+Skills that take arguments forward them as
+`!`node ${CLAUDE_SKILL_DIR}/preflight.js "$ARGUMENTS"`` — quoted, since an
+unquoted `#123` is a shell comment — and preflight splits the string into
+tokens (#89).
 
 **Deferred-pending-upstream:** `disable-model-invocation` is intentionally
 NOT set on any skill; Claude Code plugin support is tracked in
