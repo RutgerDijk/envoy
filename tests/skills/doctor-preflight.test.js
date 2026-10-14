@@ -12,10 +12,8 @@
  *   - otherwise                                         -> ok (report-only
  *     works even on a dirty worktree, since it mutates nothing)
  *
- * --fix is requested via the ENVOY_DOCTOR_FIX=1 env-var seam, following the
- * same convention pickup uses for ENVOY_ISSUE_NUMBER: the inline `!` Briefing
- * substitution takes no args, so flags reach preflight via env var set ahead
- * of invocation.
+ * --fix is requested as a skill argument (the Briefing line forwards
+ * "$ARGUMENTS") or via the ENVOY_DOCTOR_FIX=1 env-var fallback.
  */
 
 const assert = require('assert');
@@ -63,11 +61,12 @@ function initRepo() {
   return dir;
 }
 
-function runPreflight(cwd, extraEnv = {}) {
+function runPreflight(cwd, extraEnv = {}, args = []) {
   const env = { ...process.env, ENVOY_REPO_ROOT: REPO_ROOT, ...extraEnv };
+  if (!('ENVOY_DOCTOR_FIX' in extraEnv)) delete env.ENVOY_DOCTOR_FIX;
   let out;
   try {
-    out = execFileSync('node', [PREFLIGHT], { cwd, env, encoding: 'utf8' });
+    out = execFileSync('node', [PREFLIGHT, ...args], { cwd, env, encoding: 'utf8' });
   } catch (err) {
     out = (err.stdout || '') + (err.stderr || '');
   }
@@ -106,6 +105,33 @@ test('dirty worktree, --fix -> fatal', () => {
 test('clean worktree, --fix -> ok', () => {
   const dir = initRepo();
   const { status } = runPreflight(dir, { ENVOY_DOCTOR_FIX: '1' });
+  assert.strictEqual(status, 'ok');
+});
+
+test('SKILL.md Briefing forwards $ARGUMENTS to preflight (#89)', () => {
+  const md = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'doctor', 'SKILL.md'), 'utf8');
+  assert.match(md, /!`node \$\{CLAUDE_SKILL_DIR\}\/preflight\.js "\$ARGUMENTS"`/);
+});
+
+test('dirty worktree, --fix as skill argument -> fatal (#89)', () => {
+  const dir = initRepo();
+  fs.writeFileSync(path.join(dir, 'README.md'), '# changed\n');
+  const { status, out } = runPreflight(dir, {}, ['--fix']);
+  assert.strictEqual(status, 'fatal', out);
+  assert.ok(/uncommitted|dirty/i.test(out));
+});
+
+test('dirty worktree, --fix inside a quoted "$ARGUMENTS" string -> fatal (#89)', () => {
+  const dir = initRepo();
+  fs.writeFileSync(path.join(dir, 'README.md'), '# changed\n');
+  const { status } = runPreflight(dir, {}, ['--verbose --fix']);
+  assert.strictEqual(status, 'fatal');
+});
+
+test('dirty worktree, empty quoted argument -> ok (report-only) (#89)', () => {
+  const dir = initRepo();
+  fs.writeFileSync(path.join(dir, 'README.md'), '# changed\n');
+  const { status } = runPreflight(dir, {}, ['']);
   assert.strictEqual(status, 'ok');
 });
 

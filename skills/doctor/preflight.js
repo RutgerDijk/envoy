@@ -6,7 +6,7 @@
  *
  * Gates entry into the doctor skill and prints the read-only hygiene report:
  *   - not inside a git repo                              -> fatal
- *   - --fix requested (ENVOY_DOCTOR_FIX=1) on a dirty
+ *   - --fix requested (argument or ENVOY_DOCTOR_FIX=1) on a dirty
  *     worktree                                            -> fatal
  *   - otherwise                                           -> ok
  *
@@ -14,10 +14,9 @@
  * doctor's default mode never mutates anything, so a dirty worktree is not
  * a blocker for it.
  *
- * --fix flag: the inline `!` Briefing substitution takes no CLI args, so
- * flags reach preflight via an env-var seam, matching the convention pickup
- * uses for ENVOY_ISSUE_NUMBER — set ENVOY_DOCTOR_FIX=1 in the environment
- * before invoking `/envoy:doctor --fix`.
+ * --fix flag: the Briefing line forwards "$ARGUMENTS" quoted, so
+ * `/envoy:doctor --fix` arrives as one argv string that is split into tokens
+ * here. ENVOY_DOCTOR_FIX=1 in the environment remains as a fallback.
  *
  * Test seams (never used outside tests):
  *   - ENVOY_GH_ISSUE_STATE_FILE points at a JSON file of
@@ -98,7 +97,8 @@ function main() {
     return;
   }
 
-  const fixRequested = process.env.ENVOY_DOCTOR_FIX === '1';
+  const args = process.argv.slice(2).flatMap((a) => a.split(/\s+/)).filter(Boolean);
+  const fixRequested = args.includes('--fix') || process.env.ENVOY_DOCTOR_FIX === '1';
 
   // Check dirtiness BEFORE appendEvent — appendEvent creates/touches
   // .envoy/ledger.jsonl, which would itself make the worktree look dirty on

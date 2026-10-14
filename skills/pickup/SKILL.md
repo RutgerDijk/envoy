@@ -18,7 +18,7 @@ allowed-tools:
 
 ## Briefing
 
-!`node ${CLAUDE_SKILL_DIR}/preflight.js`
+!`node ${CLAUDE_SKILL_DIR}/preflight.js "$ARGUMENTS"`
 
 ### Checklist
 
