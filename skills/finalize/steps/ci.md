@@ -109,7 +109,7 @@ ready except full-suite run — NOT READY: <reason>; re-poll on the next pass (b
 ```
 
 This is a report, not a failure and not an escalation. Exit 2 is unchanged: blocked, surface to the user.
-If a push happens after the label is on, that is fine: it simply runs the full suite. Never remove the label.
+Envoy never removes the label itself; a consumer may drop it on a new push, and the helper adds it again at the next ready point.
 
 **If `FAILED` is `0`** (non-gate checks pass; `fullSuiteOwed` may still be true and is handled by the last step above): no CI failures to add to this cycle's combined fix list.
 
