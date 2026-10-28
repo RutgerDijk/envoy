@@ -35,6 +35,9 @@ function check(name, fn) {
 check('lib/full-ci.js exists', () => assert.ok(fs.existsSync(path.join(ROOT, 'lib/full-ci.js'))));
 
 const CALLERS = [FILES[0], FILES[2]]; // finalize + babysit own the last-step call
+for (const rel of CALLERS) {
+  check(`${rel} states the cycle rule as 3 cycles per head commit (#91)`, () => assert.ok(/3 cycles per head commit/.test(read(rel))));
+}
 for (const rel of FILES) {
   check(`${rel} mentions FULL SUITE NOT RUN`, () => assert.ok(read(rel).includes('FULL SUITE NOT RUN')));
   check(`${rel} mentions fullSuiteOwed`, () => assert.ok(read(rel).includes('fullSuiteOwed')));
