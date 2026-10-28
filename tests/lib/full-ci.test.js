@@ -468,6 +468,73 @@ test('other PRs are tracked independently', () => {
   assert.strictEqual(go({ pr: 8, gh: fakeGh(), cwd }).code, 0);
 });
 
+section('full-ci: cycle cap counts per head commit');
+
+/** Run MAX_CYCLES ready cycles on head <sha>. */
+const exhaust = (cwd, sha) => {
+  for (let i = 0; i < fullCi.MAX_CYCLES; i++) assert.strictEqual(go({ pr: 7, gh: fakeGh({ sha }), cwd }).code, 0);
+};
+const lastRerun = (cwd) => loops.loadState('full-ci-7', cwd).history.filter((h) => h.action === 'rerun').pop();
+
+test('3 cycles on head A, ready on head B: adds missing label, reruns, exit 0', () => {
+  const cwd = tmp();
+  exhaust(cwd, 'aaa111');
+  const gh = fakeGh({ sha: 'bbb222' });
+  const res = go({ pr: 7, gh, cwd });
+  assert.strictEqual(res.code, 0, res.message);
+  assert.deepStrictEqual(has(gh, 'pr', 'edit')[0], ['pr', 'edit', '7', '--add-label', 'full-ci']);
+  assert.deepStrictEqual(has(gh, 'run', 'rerun'), [['run', 'rerun', '111']]);
+  assert.strictEqual(loops.loadState('full-ci-7', cwd).cyclesSeen, 1);
+  assert.strictEqual(lastRerun(cwd).headSha, 'bbb222');
+});
+
+test('3 cycles on head A, ready on head A again: exit 2 with the same BLOCKED message, no writes', () => {
+  const cwd = tmp();
+  exhaust(cwd, 'aaa111');
+  const gh = fakeGh({ sha: 'aaa111' });
+  const res = go({ pr: 7, gh, cwd });
+  assert.strictEqual(res.code, 2);
+  assert.strictEqual(res.message,
+    'BLOCKED: full-ci-7 reached maxCycles=3; refusing to rerun. After fixing the root cause, clear with: node lib/loop-safeguards.js cleanup full-ci-7');
+  noWrites(gh);
+  assert.strictEqual(loops.loadState('full-ci-7', cwd).cyclesSeen, fullCi.MAX_CYCLES);
+});
+
+test('3 cycles on head A, not ready on head B: exit 3, no writes, state untouched', () => {
+  const cwd = tmp();
+  exhaust(cwd, 'aaa111');
+  const before = fs.readFileSync(path.join(cwd, '.envoy', 'loops', 'full-ci-7.json'), 'utf8');
+  const gh = fakeGh({ sha: 'bbb222' });
+  const res = go({ pr: 7, gh, cwd, snapshot: () => snap({ threads: { unresolved: 1 } }) });
+  assert.strictEqual(res.code, 3);
+  noWrites(gh);
+  assert.strictEqual(fs.readFileSync(path.join(cwd, '.envoy', 'loops', 'full-ci-7.json'), 'utf8'), before);
+});
+
+test('pre-change state (no head SHA recorded) at cyclesSeen 3: reads cleanly, reruns, records the head', () => {
+  const cwd = tmp();
+  const legacy = {
+    loop: 'full-ci-7', confirmed: 0, maxCycles: 3, cyclesSeen: 3,
+    history: [1, 2, 3].map((i) => ({ action: 'rerun', at: `2026-10-0${i}T00:00:00.000Z`, reason: 'run 111' })),
+  };
+  fs.mkdirSync(path.join(cwd, '.envoy', 'loops'), { recursive: true });
+  fs.writeFileSync(path.join(cwd, '.envoy', 'loops', 'full-ci-7.json'), JSON.stringify(legacy));
+  const gh = fakeGh({ sha: 'aaa111' });
+  const res = go({ pr: 7, gh, cwd });
+  assert.strictEqual(res.code, 0, res.message);
+  assert.strictEqual(has(gh, 'run', 'rerun').length, 1);
+  assert.strictEqual(loops.loadState('full-ci-7', cwd).cyclesSeen, 1);
+  assert.strictEqual(lastRerun(cwd).headSha, 'aaa111');
+});
+
+test('a completed cycle records the head SHA it reran', () => {
+  const cwd = tmp();
+  assert.strictEqual(go({ pr: 7, gh: fakeGh({ sha: 'ccc333' }), cwd }).code, 0);
+  const entry = lastRerun(cwd);
+  assert.strictEqual(entry.headSha, 'ccc333');
+  assert.strictEqual(entry.reason, 'run 111');
+});
+
 for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
