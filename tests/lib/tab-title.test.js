@@ -131,6 +131,16 @@ test('long issue titles are truncated to keep the whole title <= 60 chars', () =
   assert.ok(t.endsWith('…'));
 });
 
+test('truncation never splits a surrogate pair', () => {
+  // Prefix "#83 · PR #91 · " is 15 chars; place an astral emoji across the cut.
+  for (let pad = 40; pad <= 46; pad++) {
+    const t = tt.computeTitle({ issue: 83, pr: 91, issueTitle: 'x'.repeat(pad) + '\u{1F600}'.repeat(10) });
+    assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(t), `lone high surrogate at pad ${pad}`);
+    assert.ok(!/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(t), `lone low surrogate at pad ${pad}`);
+    assert.ok(Array.from(t).length <= 60);
+  }
+});
+
 test('control characters in the issue title are stripped', () => {
   const t = tt.computeTitle({ issue: 1, issueTitle: 'bad\x07\x1b]2;evil\nname' });
   assert.ok(!/[\x00-\x1f\x7f]/.test(t), JSON.stringify(t));
@@ -202,21 +212,52 @@ test('ENVOY_TAB_TITLE_TTY (resolved by the hook) is used with zero ps calls', ()
   assert.strictEqual(calls.length, 0);
 });
 
-test('invalid ENVOY_TAB_TITLE_TTY is ignored and the walk runs', () => {
-  for (const bad of ['/etc/passwd; x', 'ttys042', '/dev/../etc/x y']) {
+test('invalid or non-tty ENVOY_TAB_TITLE_TTY is rejected without walking from a (reused) pid', () => {
+  const bad = [
+    '/etc/passwd; x',
+    'ttys042',
+    '/dev/../etc/x',
+    '/dev/../etc/x y',
+    '/dev/null',
+    '/dev/fd/1',
+    '/dev/tty/../null',
+    '/dev/pts/x',
+    ''
+  ];
+  for (const value of bad) {
     const { deps, calls } = fakeDeps({
-      env: { ENVOY_TAB_TITLE_TTY: bad },
-      responses: { 'ps -o ppid=,tty= -p 500': ' 1 ttys001' }
+      env: { ENVOY_TAB_TITLE_TTY: value, ENVOY_TAB_TITLE_PID: '900' },
+      responses: { 'ps -o ppid=,tty= -p': ' 1 ttys001' }
     });
-    assert.strictEqual(tt.findTtyDevice(deps), '/dev/ttys001', bad);
-    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(tt.findTtyDevice(deps), null, JSON.stringify(value));
+    assert.strictEqual(calls.length, 0, JSON.stringify(value));
   }
 });
 
-test('walk is bounded (no infinite loop on a cycle)', () => {
+test('Linux /dev/pts/<n> devices are accepted', () => {
+  const { deps } = fakeDeps({ env: { ENVOY_TAB_TITLE_TTY: '/dev/pts/3' } });
+  assert.strictEqual(tt.findTtyDevice(deps), '/dev/pts/3');
+});
+
+test('walk is bounded at 32 hops over a long chain of distinct pids', () => {
+  const calls = [];
+  const deps = {
+    env: {},
+    pid: 1000,
+    exec(cmd, args) {
+      calls.push([cmd, ...args]);
+      const pid = Number(args[args.length - 1]);
+      return ` ${pid + 1} ??`;
+    }
+  };
+  assert.strictEqual(tt.findTtyDevice(deps), null);
+  assert.strictEqual(calls.length, 32);
+});
+
+test('walk stops on a ppid cycle', () => {
   const { deps, calls } = fakeDeps({ responses: { 'ps -o ppid=,tty= -p 500': ' 500 ??' } });
   assert.strictEqual(tt.findTtyDevice(deps), null);
-  assert.ok(calls.length <= 32);
+  assert.strictEqual(calls.length, 1);
 });
 
 // ═══════════════════════════════════════════════════════════════════
