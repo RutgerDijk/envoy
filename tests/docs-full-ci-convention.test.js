@@ -46,7 +46,8 @@ test('documents the 3 cycle cap', () => has('3 cycles'));
 test('example gate fails when the changes job did not succeed', () => has('needs.changes.result'));
 test('documents that the gate check name must match exactly', () => assert.ok(/exact/i.test(doc) && /ci-gate/.test(doc)));
 test('documents that the helper reruns the run owning the failed gate job', () => assert.ok(/run that owns the failed .?ci-gate.? job/i.test(doc)));
-test('documents per-PR cycle lifetime', () => assert.ok(/per PR/i.test(doc)));
+test('documents the cycle cap per head commit (#91)', () => assert.ok(/3 cycles per head commit/i.test(doc)));
+test('no longer claims the cap counts over the PR lifetime (#91)', () => assert.ok(!/whole lifetime/i.test(doc) && !/not reset by new pushes/i.test(doc)));
 
 // Issue #87: the label goes on LAST, once the PR is ready.
 test('documents the owed state', () => assert.ok(/fast run green, full run owed/i.test(doc) && /fullSuiteOwed/.test(doc)));
@@ -62,7 +63,12 @@ test('exit 2 / 3 cycles wording still exists', () => assert.ok(/2 blocked after 
 test('documents ENVOY_CODERABBIT on|off|auto', () => assert.ok(/ENVOY_CODERABBIT/.test(doc) && /on\|off\|auto/.test(doc)));
 test('documents .coderabbit.yaml/.yml auto-detection', () => assert.ok(/\.coderabbit\.yaml/.test(doc) && /\.coderabbit\.yml/.test(doc)));
 test('documents SHA-pinned reads', () => assert.ok(/head SHA/i.test(doc) && /latest check run per name/i.test(doc)));
-test('documents a push after the label is fine and the label is never removed', () => assert.ok(/push after the label/i.test(doc) && /never removes the label/i.test(doc)));
+test('Envoy never removes the label itself (#91)', () => assert.ok(/never removes the label itself/i.test(doc)));
+test('a consumer may drop the label on a new push (#91)', () => assert.ok(/consumer may drop (it|the label|the `full-ci` label) on a new push/i.test(doc)));
+test('the helper adds the label again at the next ready point (#91)', () => assert.ok(/helper adds it again at the next ready point/i.test(doc)));
+test('precedence sentence scopes past cycles to this head (#91)', () => assert.ok(/even after 3 past cycles on this head/i.test(doc)));
+test('unblocking exit 2 mentions a new push also restarts the count (#91)', () => assert.ok(/To unblock exit 2[^\n]*new push[^\n]*head commit[^\n]*count/i.test(doc)));
+test('no stale push-after-label wording (#91)', () => assert.ok(!/push after the label is on is fine/i.test(doc) && !/just runs the full suite/i.test(doc)));
 test('head SHA re-read happens immediately before the writes', () => assert.ok(/re-read right before the writes/i.test(doc)))
 test('fix-ci is report-only and hands off; not a helper caller', () => assert.ok(/`fix-ci`[^.]*(report|hand)/i.test(doc) && !/`finalize`, `fix-ci`/.test(doc) && !/`fix-ci` and `babysit`/.test(doc)));
 test('only finalize and babysit run the helper', () => assert.ok(/`finalize` and `babysit` run the helper/.test(doc)));

@@ -35,6 +35,11 @@ function check(name, fn) {
 check('lib/full-ci.js exists', () => assert.ok(fs.existsSync(path.join(ROOT, 'lib/full-ci.js'))));
 
 const CALLERS = [FILES[0], FILES[2]]; // finalize + babysit own the last-step call
+for (const rel of CALLERS) {
+  check(`${rel} states the cycle rule as 3 cycles per head commit (#91)`, () => assert.ok(/3 cycles per head commit/.test(read(rel))));
+  check(`${rel} has no stale push-after-label wording (#91)`, () => assert.ok(!/simply runs the full suite|push happens after the label/i.test(read(rel))));
+}
+check('finalize ci.md says Envoy never removes the label itself and the helper re-adds it (#91)', () => { const t = read(FILES[0]); assert.ok(/never removes the label itself/i.test(t) && /consumer may drop it on a new push/i.test(t) && /adds it again at the next ready point/i.test(t)); });
 for (const rel of FILES) {
   check(`${rel} mentions FULL SUITE NOT RUN`, () => assert.ok(read(rel).includes('FULL SUITE NOT RUN')));
   check(`${rel} mentions fullSuiteOwed`, () => assert.ok(read(rel).includes('fullSuiteOwed')));

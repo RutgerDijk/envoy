@@ -89,7 +89,7 @@ if [ "$SUITE_OWED" = "true" ] && [ "$FAILED" = "0" ] \
   case "$FULL_CI_RC" in
     0) echo "full-ci rerun triggered — return to the Step 8 re-poll (the rerun is a whole run); do NOT compute FAILED from the stale CHECKS." ;;
     1) echo "full-ci helper: report only, do not loop (run in progress / no run / gh error). Report it and stop this CI step; retry on the next poll." ;;
-    2) echo "full-ci blocked after 3 cycles — STOP and surface to the user." ;;
+    2) echo "full-ci blocked after 3 cycles per head commit — STOP and surface to the user." ;;
     3) echo "NOT READY — re-poll on the next pass. Not a failure, not an escalation." ;;
   esac
 elif [ "$SUITE_OWED" = "true" ]; then
@@ -97,7 +97,7 @@ elif [ "$SUITE_OWED" = "true" ]; then
 fi
 ```
 
-Exit codes: 0 = rerun triggered (re-poll CI); 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass; 2 = blocked after 3 cycles, which applies only once the PR is otherwise ready (exit 3 takes precedence over exit 2) — stop and surface to the user (unblock: `node ${CLAUDE_SKILL_DIR}/../../lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`); exit 3 = `NOT READY: <reason>` (CodeRabbit not yet resolved or the gate is not marker-only) — re-poll on the next pass, never a failure and never an escalation (no writes, no cycle consumed).
+Exit codes: 0 = rerun triggered (re-poll CI); 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass; 2 = blocked after 3 cycles per head commit, which applies only once the PR is otherwise ready (exit 3 takes precedence over exit 2) — stop and surface to the user (unblock: `node ${CLAUDE_SKILL_DIR}/../../lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`); exit 3 = `NOT READY: <reason>` (CodeRabbit not yet resolved or the gate is not marker-only) — re-poll on the next pass, never a failure and never an escalation (no writes, no cycle consumed).
 
 **Bounded re-poll for exit 3 and exit 1:** there is no real "next pass" inside one finalize session, so
 re-poll at most 3 polls (spaced by the existing poll interval), re-running the snapshot and this step each
@@ -109,7 +109,7 @@ ready except full-suite run — NOT READY: <reason>; re-poll on the next pass (b
 ```
 
 This is a report, not a failure and not an escalation. Exit 2 is unchanged: blocked, surface to the user.
-If a push happens after the label is on, that is fine: it simply runs the full suite. Never remove the label.
+Envoy never removes the label itself; a consumer may drop it on a new push, and the helper adds it again at the next ready point.
 
 **If `FAILED` is `0`** (non-gate checks pass; `fullSuiteOwed` may still be true and is handled by the last step above): no CI failures to add to this cycle's combined fix list.
 
