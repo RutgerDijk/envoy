@@ -196,6 +196,23 @@ test('returns null when no ancestor has a tty or ps fails', () => {
   assert.strictEqual(tt.findTtyDevice(broken.deps), null);
 });
 
+test('ENVOY_TAB_TITLE_TTY (resolved by the hook) is used with zero ps calls', () => {
+  const { deps, calls } = fakeDeps({ env: { ENVOY_TAB_TITLE_TTY: '/dev/ttys042' } });
+  assert.strictEqual(tt.findTtyDevice(deps), '/dev/ttys042');
+  assert.strictEqual(calls.length, 0);
+});
+
+test('invalid ENVOY_TAB_TITLE_TTY is ignored and the walk runs', () => {
+  for (const bad of ['/etc/passwd; x', 'ttys042', '/dev/../etc/x y']) {
+    const { deps, calls } = fakeDeps({
+      env: { ENVOY_TAB_TITLE_TTY: bad },
+      responses: { 'ps -o ppid=,tty= -p 500': ' 1 ttys001' }
+    });
+    assert.strictEqual(tt.findTtyDevice(deps), '/dev/ttys001', bad);
+    assert.strictEqual(calls.length, 1);
+  }
+});
+
 test('walk is bounded (no infinite loop on a cycle)', () => {
   const { deps, calls } = fakeDeps({ responses: { 'ps -o ppid=,tty= -p 500': ' 500 ??' } });
   assert.strictEqual(tt.findTtyDevice(deps), null);
@@ -364,6 +381,32 @@ test('vscode path writes OSC 2 to the ancestor tty', () => {
   });
   assert.strictEqual(tt.refresh(deps), '#83 · Dash');
   assert.deepStrictEqual(writes, [['/dev/ttys009', '\x1b]2;#83 · Dash\x07']]);
+});
+
+test('vscode: the tty is resolved before any git/gh call (ancestors may exit)', () => {
+  const { deps, calls } = fakeDeps({
+    env: VSCODE_ENV,
+    responses: {
+      [GIT_BRANCH]: 'feature/83-x',
+      [GH_ISSUE]: 'Dash',
+      [GH_PR]: '',
+      'ps -o ppid=,tty= -p 500': ' 400 ttys009'
+    }
+  });
+  tt.refresh(deps);
+  const firstPs = calls.findIndex((c) => c[0] === 'ps');
+  const firstOther = calls.findIndex((c) => c[0] === 'git' || c[0] === 'gh');
+  assert.ok(firstPs !== -1 && firstPs < firstOther, JSON.stringify(calls));
+  assert.strictEqual(calls.filter((c) => c[0] === 'ps').length, 1, 'tty resolved once');
+});
+
+test('vscode without a tty: refresh stops before any gh call', () => {
+  const { deps, calls } = fakeDeps({
+    env: VSCODE_ENV,
+    responses: { [GIT_BRANCH]: 'feature/83-x', [GH_ISSUE]: 'Dash', [GH_PR]: '' }
+  });
+  assert.strictEqual(tt.refresh(deps), null);
+  assert.ok(!calls.some((c) => c[0] === 'gh'));
 });
 
 test('refresh never throws, even when exec throws', () => {
