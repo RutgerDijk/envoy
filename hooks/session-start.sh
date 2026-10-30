@@ -10,6 +10,12 @@ exec < /dev/null
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Label the terminal tab with the branch's issue (and PR) — cmux / VS Code only.
+# Detached and silenced: it can never block or delay session start, and never
+# writes to this hook's stdout (which is JSON context). ENVOY_TAB_TITLE_PID
+# hands over this hook's pid so the tty walk survives the child's reparenting.
+( ENVOY_TAB_TITLE_PID=$$ node "$PLUGIN_DIR/lib/tab-title.js" </dev/null >/dev/null 2>&1 & )
+
 HOOK_SOURCE=$(HOOK_INPUT="$HOOK_INPUT" node -e '
   try {
     const s = JSON.parse(process.env.HOOK_INPUT || "{}");
