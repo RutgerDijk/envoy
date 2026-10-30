@@ -76,6 +76,7 @@ test('CMUX_WORKSPACE_ID present → cmux new-workspace with argv array', () => {
     'new-workspace',
     '--cwd', DIR,
     '--name', '#93 start',
+    '--focus', 'true',
     '--command', `claude --resume ${SID}`,
   ]);
 });
@@ -84,7 +85,7 @@ test('cmux mode without title omits --name', () => {
   const f = fakeDeps({ CMUX_WORKSPACE_ID: 'abc' });
   openSession({ dir: DIR, sessionId: SID }, f.deps);
   assert.deepStrictEqual(f.calls[0].args, [
-    'new-workspace', '--cwd', DIR, '--command', `claude --resume ${SID}`,
+    'new-workspace', '--cwd', DIR, '--focus', 'true', '--command', `claude --resume ${SID}`,
   ]);
 });
 
@@ -93,6 +94,17 @@ test('cmux mode passes a title with shell metacharacters verbatim as one argv', 
   const evil = 'x"; rm -rf ~; echo "';
   openSession({ dir: DIR, sessionId: SID, title: evil }, f.deps);
   assert.strictEqual(f.calls[0].args[4], evil);
+});
+
+test('cmux exec failure falls back to print mode', () => {
+  const f = fakeDeps({ CMUX_WORKSPACE_ID: 'abc' }, { failOn: 'cmux' });
+  const res = openSession({ dir: DIR, sessionId: SID }, f.deps);
+  assert.deepStrictEqual(res, {
+    mode: 'print', command: `claude --resume ${SID}`, fallbackFrom: 'cmux',
+  });
+  const out = f.logs.join('\n');
+  assert.ok(out.includes(`cd '${DIR}'`), 'prints cd line');
+  assert.ok(out.includes(`claude --resume ${SID}`), 'prints the command');
 });
 
 section('vscode mode');
@@ -122,6 +134,16 @@ test('vscode mode is fail-soft when pbcopy throws', () => {
   assert.ok(!/copied to (the )?clipboard/i.test(out), 'does not claim it was copied');
 });
 
+test('code exec failure falls back to print mode without pbcopy', () => {
+  const f = fakeDeps({ TERM_PROGRAM: 'vscode' }, { failOn: 'code' });
+  const res = openSession({ dir: DIR, sessionId: SID }, f.deps);
+  assert.deepStrictEqual(res, {
+    mode: 'print', command: `claude --resume ${SID}`, fallbackFrom: 'vscode',
+  });
+  assert.ok(!f.calls.some((c) => c.cmd === 'pbcopy'), 'does not call pbcopy');
+  assert.ok(f.logs.join('\n').includes(`cd '${DIR}'`));
+});
+
 section('print mode');
 
 test('neither cmux nor vscode → no exec calls, prints dir + command', () => {
@@ -135,6 +157,18 @@ test('neither cmux nor vscode → no exec calls, prints dir + command', () => {
   assert.ok(out.includes(`claude --resume ${SID}`), 'prints the command');
 });
 
+test('print mode POSIX single-quotes dir (spaces, quotes)', () => {
+  const f = fakeDeps({});
+  openSession({ dir: "/Users/me/my proj/it's", sessionId: SID }, f.deps);
+  assert.ok(f.logs.includes("cd '/Users/me/my proj/it'\\''s'"), f.logs.join('|'));
+});
+
+test('print mode result has no fallbackFrom', () => {
+  const f = fakeDeps({});
+  const res = openSession({ dir: DIR, sessionId: SID }, f.deps);
+  assert.ok(!('fallbackFrom' in res));
+});
+
 test('empty CMUX_WORKSPACE_ID does not count as cmux', () => {
   const f = fakeDeps({ CMUX_WORKSPACE_ID: '' });
   assert.strictEqual(openSession({ dir: DIR, sessionId: SID }, f.deps).mode, 'print');
@@ -146,6 +180,13 @@ test('rejects sessionId with shell metacharacters', () => {
   const f = fakeDeps({ CMUX_WORKSPACE_ID: 'abc' });
   assert.throws(() => openSession({ dir: DIR, sessionId: 'abc; rm -rf /' }, f.deps), /sessionId/);
   assert.throws(() => openSession({ dir: DIR, sessionId: '$(whoami)' }, f.deps), /sessionId/);
+  assert.strictEqual(f.calls.length, 0);
+});
+
+test('rejects sessionId starting with "-" (option injection)', () => {
+  const f = fakeDeps({ CMUX_WORKSPACE_ID: 'abc' });
+  assert.throws(() => openSession({ dir: DIR, sessionId: '--dangerously-skip-permissions' }, f.deps), /sessionId/);
+  assert.throws(() => openSession({ dir: DIR, sessionId: '-x' }, f.deps), /sessionId/);
   assert.strictEqual(f.calls.length, 0);
 });
 
