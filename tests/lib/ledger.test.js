@@ -145,6 +145,112 @@ test('appends successive events as separate lines', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// appendEvent — sessionId stamping
+// ═══════════════════════════════════════════════════════════════════
+
+section('appendEvent: stamps sessionId from opts / CLAUDE_SESSION_ID / CLAUDE_CODE_SESSION_ID');
+
+const SESSION_ENV_KEYS = ['CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID'];
+
+/**
+ * Run fn with the session env vars set to `values` (undefined ⇒ unset), then
+ * restore whatever was there before so tests stay hermetic.
+ */
+function withSessionEnv(values, fn) {
+  const saved = {};
+  for (const k of SESSION_ENV_KEYS) {
+    saved[k] = process.env[k];
+    if (values[k] === undefined) delete process.env[k];
+    else process.env[k] = values[k];
+  }
+  try {
+    fn();
+  } finally {
+    for (const k of SESSION_ENV_KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  }
+}
+
+function appendAndRead(event, opts) {
+  const dir = makeTmp('ledger-session-');
+  try {
+    ledger.appendEvent(dir, event, Object.assign({ now: new Date(), branch: 'b' }, opts));
+    return JSON.parse(readLines(dir)[0]);
+  } finally {
+    cleanup(dir);
+  }
+}
+
+test('stamps sessionId from CLAUDE_SESSION_ID', () => {
+  withSessionEnv({ CLAUDE_SESSION_ID: 'sess-abc' }, () => {
+    const ev = appendAndRead({ type: 'skill-started', skill: 'pickup' });
+    assert.strictEqual(ev.sessionId, 'sess-abc');
+  });
+});
+
+test('falls back to CLAUDE_CODE_SESSION_ID when CLAUDE_SESSION_ID is unset', () => {
+  withSessionEnv({ CLAUDE_CODE_SESSION_ID: 'code-sess-1' }, () => {
+    const ev = appendAndRead({ type: 'skill-started', skill: 'pickup' });
+    assert.strictEqual(ev.sessionId, 'code-sess-1');
+  });
+});
+
+test('CLAUDE_SESSION_ID wins over CLAUDE_CODE_SESSION_ID', () => {
+  withSessionEnv({ CLAUDE_SESSION_ID: 'primary', CLAUDE_CODE_SESSION_ID: 'secondary' }, () => {
+    const ev = appendAndRead({ type: 'x' });
+    assert.strictEqual(ev.sessionId, 'primary');
+  });
+});
+
+test('omits sessionId when no env var is set, and the write still succeeds', () => {
+  withSessionEnv({}, () => {
+    const ev = appendAndRead({ type: 'skill-started', skill: 'pickup' });
+    assert.strictEqual(ev.type, 'skill-started');
+    assert.ok(!('sessionId' in ev), 'sessionId should be omitted');
+  });
+});
+
+test('opts.sessionId overrides the env vars', () => {
+  withSessionEnv({ CLAUDE_SESSION_ID: 'env-sess', CLAUDE_CODE_SESSION_ID: 'env-code' }, () => {
+    const ev = appendAndRead({ type: 'x' }, { sessionId: 'injected' });
+    assert.strictEqual(ev.sessionId, 'injected');
+  });
+});
+
+test('opts.sessionId === null suppresses sessionId even when env is set', () => {
+  withSessionEnv({ CLAUDE_SESSION_ID: 'env-sess', CLAUDE_CODE_SESSION_ID: 'env-code' }, () => {
+    const ev = appendAndRead({ type: 'x' }, { sessionId: null });
+    assert.ok(!('sessionId' in ev), 'sessionId should be suppressed');
+  });
+});
+
+test('explicit event.sessionId wins over the stamped value', () => {
+  withSessionEnv({ CLAUDE_SESSION_ID: 'env-sess' }, () => {
+    const ev = appendAndRead({ type: 'x', sessionId: 'caller' }, { sessionId: 'injected' });
+    assert.strictEqual(ev.sessionId, 'caller');
+  });
+});
+
+test('hotfix skill-started (no opts, as skills/hotfix/SKILL.md calls it) carries sessionId', () => {
+  // Mirrors the hotfix call exactly: appendEvent(cwd, {type, skill, issue})
+  // with no opts — sessionId must come from the central env-based stamp.
+  withSessionEnv({ CLAUDE_SESSION_ID: 'hotfix-sess' }, () => {
+    const dir = makeTmp('ledger-hotfix-');
+    try {
+      ledger.appendEvent(dir, { type: 'skill-started', skill: 'hotfix', issue: 99 });
+      const ev = JSON.parse(readLines(dir)[0]);
+      assert.strictEqual(ev.skill, 'hotfix');
+      assert.strictEqual(ev.issue, 99);
+      assert.strictEqual(ev.sessionId, 'hotfix-sess');
+    } finally {
+      cleanup(dir);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // appendEvent — size cap
 // ═══════════════════════════════════════════════════════════════════
 
