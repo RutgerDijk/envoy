@@ -12,9 +12,24 @@ PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Label the terminal tab with the branch's issue (and PR) — cmux / VS Code only.
 # Detached and silenced: it can never block or delay session start, and never
-# writes to this hook's stdout (which is JSON context). ENVOY_TAB_TITLE_PID
-# hands over this hook's pid so the tty walk survives the child's reparenting.
-( ENVOY_TAB_TITLE_PID=$$ node "$PLUGIN_DIR/lib/tab-title.js" </dev/null >/dev/null 2>&1 & )
+# writes to this hook's stdout (which is JSON context). For opted-in VS Code
+# users only, the owning tty is resolved here synchronously (a few local ps
+# calls) because the detached child is reparented and loses its ancestry.
+TAB_TTY=""
+if [ "$TERM_PROGRAM" = "vscode" ] && [ "$CLAUDE_CODE_DISABLE_TERMINAL_TITLE" = "1" ]; then
+    _tt_pid=$$
+    _tt_hops=0
+    while [ -n "$_tt_pid" ] && [ "$_tt_pid" -gt 0 ] 2>/dev/null && [ "$_tt_hops" -lt 32 ]; do
+        read -r _tt_ppid _tt_tty <<< "$(ps -o ppid=,tty= -p "$_tt_pid" 2>/dev/null)"
+        if [ -n "$_tt_tty" ] && [ "$_tt_tty" != "??" ] && [ "$_tt_tty" != "?" ]; then
+            TAB_TTY="/dev/$_tt_tty"
+            break
+        fi
+        _tt_pid=$_tt_ppid
+        _tt_hops=$((_tt_hops + 1))
+    done
+fi
+( ENVOY_TAB_TITLE_TTY="$TAB_TTY" ENVOY_TAB_TITLE_PID=$$ node "$PLUGIN_DIR/lib/tab-title.js" </dev/null >/dev/null 2>&1 & )
 
 HOOK_SOURCE=$(HOOK_INPUT="$HOOK_INPUT" node -e '
   try {
