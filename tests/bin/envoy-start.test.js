@@ -14,20 +14,31 @@ const BIN = path.join(__dirname, '..', '..', 'bin', 'envoy-start.js');
 
 let passed = 0;
 let failed = 0;
+const queue = [];
 
+/** Queue a (possibly async) test; queued tests run in order at the end. */
 function test(name, fn) {
-  try {
-    fn();
-    passed++;
-    process.stdout.write(`  \x1b[32m✓\x1b[0m ${name}\n`);
-  } catch (err) {
-    failed++;
-    process.stdout.write(`  \x1b[31m✗\x1b[0m ${name}\n    ${err.message}\n`);
-  }
+  queue.push({ name, fn });
 }
 
 function section(name) {
-  process.stdout.write(`\n\x1b[1m${name}\x1b[0m\n`);
+  queue.push({ section: name });
+}
+
+async function runAll() {
+  for (const item of queue) {
+    if (item.section) { process.stdout.write(`\n\x1b[1m${item.section}\x1b[0m\n`); continue; }
+    try {
+      await item.fn();
+      passed++;
+      process.stdout.write(`  \x1b[32m✓\x1b[0m ${item.name}\n`);
+    } catch (err) {
+      failed++;
+      process.stdout.write(`  \x1b[31m✗\x1b[0m ${item.name}\n    ${err.message}\n`);
+    }
+  }
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed > 0 ? 1 : 0);
 }
 
 let mod;
@@ -294,6 +305,32 @@ test('issues: recommended first, then planned, then by number; pickup/brainstorm
   assert.strictEqual(rows[2][2], 'no');
 });
 
+test('inProgress issue: Action is —, Plan cell carries a dim in-progress marker', () => {
+  const snap = fixture();
+  snap.issues.push({ number: 70, title: 'Being worked on', description: '', labels: [], url: `${REPO}/issues/70`, plan: true, recommended: false, inProgress: true });
+  const t = tables(mod.render(snap, { width: 160 }))[3];
+  const rows = dataRows(t);
+  const row = rows.find((r) => r[0].replace(/^>\s*/, '') === '#70');
+  assert.ok(row, 'issue #70 row missing');
+  assert.strictEqual(row[row.length - 1], '—');
+  assert.match(row[2], /in progress/);
+  assert.ok(!row[0].startsWith('>'), 'inProgress issue must not be marked recommended');
+  const raw = t.find((l) => strip(l).includes('#70'));
+  assert.ok(/\x1b\[2m[^\x1b]*in progress/.test(raw), 'in-progress marker not dimmed');
+});
+
+test('recommended marker comes only from the snapshot flag (even when inProgress)', () => {
+  const snap = fixture();
+  snap.issues.forEach((i) => { i.recommended = false; });
+  snap.issues[0].recommended = true; // #7, no plan
+  snap.issues[0].inProgress = true;
+  const rows = dataRows(tables(mod.render(snap, { width: 160 }))[3]);
+  const marked = rows.filter((r) => r[0].startsWith('>'));
+  assert.strictEqual(marked.length, 1);
+  assert.strictEqual(marked[0][0].replace(/^>\s*/, ''), '#7');
+  assert.strictEqual(rows[0][0].replace(/^>\s*/, ''), '#7', 'recommended row must be first');
+});
+
 test('issue title cell includes the description', () => {
   const rows = dataRows(tables(mod.render(fixture(), { width: 160 }))[3]);
   assert.match(rows[0][1], /Recommended issue.*Do this next/);
@@ -334,42 +371,57 @@ test('color:false emits no SGR and no OSC 8 sequences but keeps box chars', () =
 section('main');
 // ═══════════════════════════════════════════════════════════════════
 
-test('--json prints the raw snapshot', () => {
+test('--json prints the raw snapshot (async collect)', async () => {
   const stdout = capture();
   const snap = fixture();
-  const code = mod.main(['--json'], { collect: () => snap, stdout, stderr: capture(), env: {} });
+  const code = await mod.main(['--json'], { collect: async () => snap, stdout, stderr: capture(), env: {} });
   assert.strictEqual(code, 0);
   assert.deepStrictEqual(JSON.parse(stdout.text()), snap);
 });
 
-test('default prints the dashboard', () => {
+test('default prints the dashboard (sync collect)', async () => {
   const stdout = capture();
-  const code = mod.main([], { collect: fixture, stdout, stderr: capture(), env: {}, width: 120 });
+  const code = await mod.main([], { collect: fixture, stdout, stderr: capture(), env: {}, width: 120 });
   assert.strictEqual(code, 0);
   assert.ok(stdout.text().includes('\x1b['), 'expected colour by default');
   assert.ok(strip(stdout.text()).includes('NEXT STEP'));
 });
 
-test('NO_COLOR env disables colour and links', () => {
+test('NO_COLOR env disables colour and links', async () => {
   const stdout = capture();
-  mod.main([], { collect: fixture, stdout, stderr: capture(), env: { NO_COLOR: '1' }, width: 120 });
+  await mod.main([], { collect: fixture, stdout, stderr: capture(), env: { NO_COLOR: '1' }, width: 120 });
   assert.ok(!stdout.text().includes('\x1b'), 'escape sequence present under NO_COLOR');
   assert.ok(stdout.text().includes('NEXT STEP'));
 });
 
-test('collect throwing: error on stderr, empty dashboard, exit 0', () => {
+test('collect throwing: error on stderr, empty dashboard, exit 0', async () => {
   const stdout = capture();
   const stderr = capture();
-  const code = mod.main([], { collect: () => { throw new Error('boom'); }, stdout, stderr, env: {}, width: 100 });
+  const code = await mod.main([], { collect: () => { throw new Error('boom'); }, stdout, stderr, env: {}, width: 100 });
   assert.strictEqual(code, 0);
   assert.match(stderr.text(), /boom/);
   assert.strictEqual(tables(stdout.text()).length, 4);
   assert.match(strip(stdout.text()), /nothing open/);
 });
 
-test('collect is called with the repo root option', () => {
+test('collect rejecting (async): error on stderr, empty dashboard, exit 0', async () => {
+  const stdout = capture();
+  const stderr = capture();
+  const code = await mod.main([], { collect: async () => { throw new Error('async boom'); }, stdout, stderr, env: {}, width: 100 });
+  assert.strictEqual(code, 0);
+  assert.match(stderr.text(), /async boom/);
+  assert.strictEqual(tables(stdout.text()).length, 4);
+});
+
+test('main returns a Promise', () => {
+  const p = mod.main(['--json'], { collect: emptyFixture, stdout: capture(), stderr: capture(), env: {} });
+  assert.ok(p && typeof p.then === 'function', 'main must return a Promise');
+  return p;
+});
+
+test('collect is called with the repo root option', async () => {
   let got = null;
-  mod.main(['--json'], { collect: (o) => { got = o; return emptyFixture(); }, stdout: capture(), stderr: capture(), env: {}, cwd: '/some/dir' });
+  await mod.main(['--json'], { collect: (o) => { got = o; return emptyFixture(); }, stdout: capture(), stderr: capture(), env: {}, cwd: '/some/dir' });
   assert.ok(got && got.repoRoot === '/some/dir', `repoRoot not passed: ${JSON.stringify(got)}`);
 });
 
@@ -377,5 +429,4 @@ test('collect is called with the repo root option', () => {
 // Summary
 // ═══════════════════════════════════════════════════════════════════
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed > 0 ? 1 : 0);
+runAll();
