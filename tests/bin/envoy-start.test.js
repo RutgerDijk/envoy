@@ -263,6 +263,18 @@ test('Action column contains only allowed verbs or —', () => {
   }
 });
 
+test('Action verbs stay whole at narrow widths (split pane)', () => {
+  const allowed = new Set(['hervat', 'pickup', 'brainstorm', 'cleanup', '—']);
+  for (const width of [50, 40]) {
+    for (const t of tables(mod.render(fixture(), { width }))) {
+      for (const row of dataRows(t)) {
+        const action = row[row.length - 1];
+        assert.ok(allowed.has(action), `width ${width}: truncated action "${action}"`);
+      }
+    }
+  }
+});
+
 test('worktree actions: hervat when ahead/dirty, cleanup when stale, — otherwise', () => {
   const rows = dataRows(tables(mod.render(fixture(), { width: 140 }))[1]);
   const byBranch = Object.fromEntries(rows.map((r) => [r[0], r[r.length - 1]]));
