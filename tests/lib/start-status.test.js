@@ -19,19 +19,31 @@ const LIB = path.join(__dirname, '..', '..', 'lib');
 let passed = 0;
 let failed = 0;
 
+const queue = [];
+
 function test(name, fn) {
-  try {
-    fn();
-    passed++;
-    process.stdout.write(`  \x1b[32m✓\x1b[0m ${name}\n`);
-  } catch (err) {
-    failed++;
-    process.stdout.write(`  \x1b[31m✗\x1b[0m ${name}\n    ${err.message}\n`);
-  }
+  queue.push({ name, fn });
 }
 
 function section(name) {
-  process.stdout.write(`\n\x1b[1m${name}\x1b[0m\n`);
+  queue.push({ section: name });
+}
+
+async function runAll() {
+  for (const item of queue) {
+    if (item.section) {
+      process.stdout.write(`\n\x1b[1m${item.section}\x1b[0m\n`);
+      continue;
+    }
+    try {
+      await item.fn();
+      passed++;
+      process.stdout.write(`  \x1b[32m✓\x1b[0m ${item.name}\n`);
+    } catch (err) {
+      failed++;
+      process.stdout.write(`  \x1b[31m✗\x1b[0m ${item.name}\n    ${err.message}\n`);
+    }
+  }
 }
 
 const ss = require(path.join(LIB, 'start-status'));
@@ -76,9 +88,13 @@ function makeFixture(spec = {}) {
     }
     if (a.startsWith('remote get-url')) return 'https://github.com/acme/repo.git\n';
     if (a.startsWith('symbolic-ref')) return 'origin/main\n';
+    if (a.startsWith('rev-parse --verify')) {
+      if (spec.noOriginRef) throw new Error('unknown ref');
+      return 'deadbeef\n';
+    }
     const w = worktrees.find((x) => x.path === cwd) || {};
     if (a.startsWith('rev-list --count')) return `${w.ahead || 0}\n`;
-    if (a.startsWith('status --porcelain')) return w.dirty ? ' M file.js\n' : '';
+    if (a.includes('status --porcelain')) return w.dirty ? ' M file.js\n' : '';
     if (a.startsWith('log -1')) return `${(w.lastCommit || NOW).toISOString()}\n`;
     return '';
   };
@@ -91,11 +107,11 @@ function makeFixture(spec = {}) {
     return '[]';
   };
 
-  const prSnapshot = (n) => {
+  const prSnapshot = spec.prSnapshot || ((n) => {
     const s = (spec.snapshots || {})[n];
     if (s instanceof Error) throw s;
     return s || { ci: { state: 'SUCCESS' }, threads: { unresolved: 0 } };
-  };
+  });
 
   return {
     base,
@@ -145,14 +161,14 @@ const bashUse = (command) => ({
 
 section('helpers');
 
-test('encodeProjectDir replaces / and . with -', () => {
+test('encodeProjectDir replaces / and . with -', async () => {
   assert.strictEqual(
     ss.encodeProjectDir('/Users/x/proj/.worktrees/93-foo'),
     '-Users-x-proj--worktrees-93-foo'
   );
 });
 
-test('linkedIssue parses feature/fix/hotfix branches', () => {
+test('linkedIssue parses feature/fix/hotfix branches', async () => {
   assert.strictEqual(ss.linkedIssue('feature/93-envoy-start'), 93);
   assert.strictEqual(ss.linkedIssue('fix/12-bug'), 12);
   assert.strictEqual(ss.linkedIssue('hotfix/7-x'), 7);
@@ -161,7 +177,7 @@ test('linkedIssue parses feature/fix/hotfix branches', () => {
   assert.strictEqual(ss.linkedIssue(null), null);
 });
 
-test('describeBody strips headers and caps to one short line', () => {
+test('describeBody strips headers and caps to one short line', async () => {
   const d = ss.describeBody('## Overview\n\nAdds a **dashboard** for\nsessions.\n\n## Architecture\n' + 'x'.repeat(300));
   assert.ok(!d.includes('#'), d);
   assert.ok(!d.includes('\n'), d);
@@ -176,11 +192,11 @@ test('describeBody strips headers and caps to one short line', () => {
 
 section('sessions');
 
-test('session is linked to its worktree via cwd and gitBranch', () => {
+test('session is linked to its worktree via cwd and gitBranch', async () => {
   const fx = makeFixture({ worktrees: [{ dir: '12-foo', branch: 'feature/12-foo', ahead: 1 }] });
   try {
     writeTranscript(fx, fx.wtPath('12-foo'), 'sess-wt', { branch: 'feature/12-foo', modified: daysAgo(20) });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const wt = snap.worktrees.find((w) => w.branch === 'feature/12-foo');
     assert.ok(wt, 'worktree present');
     assert.strictEqual(wt.sessions.length, 1);
@@ -192,12 +208,12 @@ test('session is linked to its worktree via cwd and gitBranch', () => {
   }
 });
 
-test('old session on the default branch is dropped; recent one is kept', () => {
+test('old session on the default branch is dropped; recent one is kept', async () => {
   const fx = makeFixture();
   try {
     writeTranscript(fx, fx.repoRoot, 'old-main', { branch: 'main', modified: daysAgo(10) });
     writeTranscript(fx, fx.repoRoot, 'new-main', { branch: 'main', modified: daysAgo(2) });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const main = snap.worktrees.find((w) => w.path === fx.repoRoot);
     const ids = main.sessions.map((s) => s.sessionId);
     assert.deepStrictEqual(ids, ['new-main']);
@@ -206,14 +222,14 @@ test('old session on the default branch is dropped; recent one is kept', () => {
   }
 });
 
-test('old session whose branch is alive (open PR) is kept', () => {
+test('old session whose branch is alive (open PR) is kept', async () => {
   const fx = makeFixture({
     worktrees: [{ dir: '20-bar', branch: 'feature/20-bar' }],
     prs: [{ number: 5, title: 'Bar', headRefName: 'feature/20-bar', url: 'u' }],
   });
   try {
     writeTranscript(fx, fx.wtPath('20-bar'), 'old-pr', { branch: 'feature/20-bar', modified: daysAgo(40) });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const wt = snap.worktrees.find((w) => w.branch === 'feature/20-bar');
     assert.deepStrictEqual(wt.sessions.map((s) => s.sessionId), ['old-pr']);
   } finally {
@@ -221,7 +237,7 @@ test('old session whose branch is alive (open PR) is kept', () => {
   }
 });
 
-test('session with unknown cwd falls back to matching gitBranch', () => {
+test('session with unknown cwd falls back to matching gitBranch', async () => {
   const fx = makeFixture({ worktrees: [{ dir: '30-baz', branch: 'feature/30-baz' }] });
   try {
     // Transcript lives in the main repo project dir but ran on the worktree branch.
@@ -231,7 +247,7 @@ test('session with unknown cwd falls back to matching gitBranch', () => {
     const toDir = path.join(fx.projectsRoot, ss.encodeProjectDir(fx.repoRoot));
     fs.mkdirSync(toDir, { recursive: true });
     fs.renameSync(from, path.join(toDir, 'moved.jsonl'));
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const wt = snap.worktrees.find((w) => w.branch === 'feature/30-baz');
     assert.deepStrictEqual(wt.sessions.map((s) => s.sessionId), ['moved']);
   } finally {
@@ -239,7 +255,7 @@ test('session with unknown cwd falls back to matching gitBranch', () => {
   }
 });
 
-test('session that started in main but moved into a worktree attaches to that worktree', () => {
+test('session that started in main but moved into a worktree attaches to that worktree', async () => {
   const fx = makeFixture({ worktrees: [{ dir: '33-mv', branch: 'feature/33-mv' }] });
   try {
     const filler = [];
@@ -253,7 +269,7 @@ test('session that started in main but moved into a worktree attaches to that wo
         { type: 'user', cwd: fx.wtPath('33-mv'), gitBranch: 'feature/33-mv', sessionId: 'drift', message: { content: 'go' } },
       ],
     });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const wt = snap.worktrees.find((w) => w.branch === 'feature/33-mv');
     const main = snap.worktrees.find((w) => w.path === fx.repoRoot);
     assert.deepStrictEqual(wt.sessions.map((s) => s.sessionId), ['drift']);
@@ -265,14 +281,14 @@ test('session that started in main but moved into a worktree attaches to that wo
   }
 });
 
-test('session summary is a clean single line without markup tags', () => {
+test('session summary is a clean single line without markup tags', async () => {
   const fx = makeFixture();
   try {
     writeTranscript(fx, fx.repoRoot, 'tags', {
       modified: daysAgo(1),
       prompt: '\n\n<command-message>envoy:pickup</command-message>\n<command-name>/envoy:pickup</command-name> 93',
     });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const s = snap.worktrees[0].sessions[0];
     assert.ok(!/[<>\n]/.test(s.summary), JSON.stringify(s.summary));
     assert.ok(s.summary.includes('envoy:pickup'), s.summary);
@@ -287,14 +303,14 @@ test('session summary is a clean single line without markup tags', () => {
 
 section('brainstorms');
 
-test('ledger brainstorm with sessionId and no issue is listed', () => {
+test('ledger brainstorm with sessionId and no issue is listed', async () => {
   const fx = makeFixture();
   try {
     writeLedger(fx.repoRoot, [
       { ts: daysAgo(3).toISOString(), branch: 'main', type: 'skill-started', skill: 'brainstorm', sessionId: 'bs-1' },
     ]);
     writeTranscript(fx, fx.repoRoot, 'bs-1', { prompt: 'dark mode toggle', modified: daysAgo(3) });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.strictEqual(snap.brainstorms.length, 1);
     const b = snap.brainstorms[0];
     assert.strictEqual(b.sessionId, 'bs-1');
@@ -307,7 +323,7 @@ test('ledger brainstorm with sessionId and no issue is listed', () => {
   }
 });
 
-test('ledger brainstorm whose transcript ran gh issue create is not listed', () => {
+test('ledger brainstorm whose transcript ran gh issue create is not listed', async () => {
   const fx = makeFixture();
   try {
     writeLedger(fx.repoRoot, [
@@ -317,28 +333,28 @@ test('ledger brainstorm whose transcript ran gh issue create is not listed', () 
       modified: daysAgo(1),
       lines: [skillUse('envoy:brainstorm'), bashUse('ISSUE_URL=$(gh issue create --title "X" --body "y")')],
     });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.brainstorms, []);
   } finally {
     fx.cleanup();
   }
 });
 
-test('ledger brainstorm whose session later logged an issue is not listed', () => {
+test('ledger brainstorm whose session later logged an issue is not listed', async () => {
   const fx = makeFixture();
   try {
     writeLedger(fx.repoRoot, [
       { ts: daysAgo(2).toISOString(), branch: 'main', type: 'skill-started', skill: 'brainstorm', sessionId: 'bs-2' },
       { ts: daysAgo(2).toISOString(), branch: 'main', type: 'skill-started', skill: 'pickup', issue: 44, sessionId: 'bs-2' },
     ]);
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.brainstorms, []);
   } finally {
     fx.cleanup();
   }
 });
 
-test('duplicate ledger brainstorm events dedupe by sessionId keeping earliest ts', () => {
+test('duplicate ledger brainstorm events dedupe by sessionId keeping earliest ts', async () => {
   const fx = makeFixture({ worktrees: [{ dir: '1-a', branch: 'feature/1-a' }] });
   try {
     writeLedger(fx.repoRoot, [
@@ -347,7 +363,7 @@ test('duplicate ledger brainstorm events dedupe by sessionId keeping earliest ts
     writeLedger(fx.wtPath('1-a'), [
       { ts: daysAgo(4).toISOString(), branch: 'main', type: 'skill-started', skill: 'brainstorm', sessionId: 'dup' },
     ]);
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.strictEqual(snap.brainstorms.length, 1);
     assert.strictEqual(snap.brainstorms[0].startedAt, daysAgo(4).toISOString());
   } finally {
@@ -355,7 +371,7 @@ test('duplicate ledger brainstorm events dedupe by sessionId keeping earliest ts
   }
 });
 
-test('fallback: transcript with brainstorm Skill tool_use and no gh issue create is listed', () => {
+test('fallback: transcript with brainstorm Skill tool_use and no gh issue create is listed', async () => {
   const fx = makeFixture();
   try {
     writeTranscript(fx, fx.repoRoot, 'fb-1', {
@@ -367,7 +383,7 @@ test('fallback: transcript with brainstorm Skill tool_use and no gh issue create
         { type: 'user', message: { content: 'Step 2: ISSUE_URL=$(gh issue create --title ...)' } },
       ],
     });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.brainstorms.map((b) => b.sessionId), ['fb-1']);
     assert.ok(snap.brainstorms[0].topic.includes('offline sync'));
   } finally {
@@ -375,35 +391,35 @@ test('fallback: transcript with brainstorm Skill tool_use and no gh issue create
   }
 });
 
-test('fallback: slash-command brainstorm invocation is detected', () => {
+test('fallback: slash-command brainstorm invocation is detected', async () => {
   const fx = makeFixture();
   try {
     writeTranscript(fx, fx.repoRoot, 'fb-cmd', {
       modified: daysAgo(1),
       lines: [{ type: 'user', message: { content: '<command-name>/envoy:brainstorm</command-name>' } }],
     });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.brainstorms.map((b) => b.sessionId), ['fb-cmd']);
   } finally {
     fx.cleanup();
   }
 });
 
-test('fallback: skills listing mentioning envoy:brainstorm is not an invocation', () => {
+test('fallback: skills listing mentioning envoy:brainstorm is not an invocation', async () => {
   const fx = makeFixture();
   try {
     writeTranscript(fx, fx.repoRoot, 'noise', {
       modified: daysAgo(1),
       lines: [{ type: 'user', message: { content: '- envoy:brainstorm: Use when starting any new feature' } }],
     });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.brainstorms, []);
   } finally {
     fx.cleanup();
   }
 });
 
-test('fallback: issue created late in a large transcript is found (head+tail scan)', () => {
+test('fallback: issue created late in a large transcript is found (head+tail scan)', async () => {
   const fx = makeFixture();
   try {
     const filler = [];
@@ -413,14 +429,14 @@ test('fallback: issue created late in a large transcript is found (head+tail sca
       modified: daysAgo(1),
       lines: [skillUse('envoy:brainstorm'), ...filler, bashUse('gh issue create --title T')],
     });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.brainstorms, []);
   } finally {
     fx.cleanup();
   }
 });
 
-test('issue created mid-transcript (outside head/tail windows) is found', () => {
+test('issue created mid-transcript (outside head/tail windows) is found', async () => {
   const fx = makeFixture();
   try {
     const big = 'm'.repeat(2000);
@@ -432,7 +448,7 @@ test('issue created mid-transcript (outside head/tail windows) is found', () => 
     writeLedger(fx.repoRoot, [
       { ts: daysAgo(1).toISOString(), branch: 'main', type: 'skill-started', skill: 'brainstorm', sessionId: 'mid' },
     ]);
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.brainstorms, []);
   } finally {
     fx.cleanup();
@@ -445,7 +461,7 @@ test('issue created mid-transcript (outside head/tail windows) is found', () => 
 
 section('worktrees');
 
-test('worktree reports branch, issue, ahead, dirty, lastActivityAt, idleDays, stale', () => {
+test('worktree reports branch, issue, ahead, dirty, lastActivityAt, idleDays, stale', async () => {
   const fx = makeFixture({
     worktrees: [
       { dir: '12-foo', branch: 'feature/12-foo', ahead: 3, dirty: true, lastCommit: daysAgo(2) },
@@ -453,7 +469,7 @@ test('worktree reports branch, issue, ahead, dirty, lastActivityAt, idleDays, st
     ],
   });
   try {
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const a = snap.worktrees.find((w) => w.branch === 'feature/12-foo');
     assert.strictEqual(a.path, fx.wtPath('12-foo'));
     assert.strictEqual(a.issue, 12);
@@ -471,11 +487,11 @@ test('worktree reports branch, issue, ahead, dirty, lastActivityAt, idleDays, st
   }
 });
 
-test('newer session activity refreshes worktree lastActivityAt', () => {
+test('newer session activity refreshes worktree lastActivityAt', async () => {
   const fx = makeFixture({ worktrees: [{ dir: '14-x', branch: 'feature/14-x', lastCommit: daysAgo(40) }] });
   try {
     writeTranscript(fx, fx.wtPath('14-x'), 's14', { branch: 'feature/14-x', modified: daysAgo(1) });
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const w = snap.worktrees.find((x) => x.branch === 'feature/14-x');
     assert.strictEqual(w.idleDays, 1);
     assert.strictEqual(w.stale, false);
@@ -484,11 +500,11 @@ test('newer session activity refreshes worktree lastActivityAt', () => {
   }
 });
 
-test('main worktree is never stale', () => {
+test('main worktree is never stale', async () => {
   const fx = makeFixture();
   try {
     fx.worktrees[0].lastCommit = daysAgo(90);
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const main = snap.worktrees.find((w) => w.path === fx.repoRoot);
     assert.strictEqual(main.stale, false);
     assert.strictEqual(main.issue, null);
@@ -503,7 +519,7 @@ test('main worktree is never stale', () => {
 
 section('prs');
 
-test('PR status comes from prSnapshot; red CI or unresolved threads need attention', () => {
+test('PR status comes from prSnapshot; red CI or unresolved threads need attention', async () => {
   const fx = makeFixture({
     prs: [
       { number: 1, title: 'Red', headRefName: 'feature/10-red', url: 'u1' },
@@ -517,7 +533,7 @@ test('PR status comes from prSnapshot; red CI or unresolved threads need attenti
     },
   });
   try {
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const byN = Object.fromEntries(snap.prs.map((p) => [p.number, p]));
     assert.strictEqual(byN[1].ci, 'FAILURE');
     assert.strictEqual(byN[1].needsAttention, true);
@@ -534,7 +550,7 @@ test('PR status comes from prSnapshot; red CI or unresolved threads need attenti
   }
 });
 
-test('one failing prSnapshot yields ci:null for that PR only', () => {
+test('one failing prSnapshot yields ci:null for that PR only', async () => {
   const fx = makeFixture({
     prs: [
       { number: 1, title: 'Boom', headRefName: 'a', url: 'u1' },
@@ -543,7 +559,7 @@ test('one failing prSnapshot yields ci:null for that PR only', () => {
     snapshots: { 1: new Error('boom') },
   });
   try {
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.strictEqual(snap.prs.length, 2);
     assert.strictEqual(snap.prs.find((p) => p.number === 1).ci, null);
     assert.strictEqual(snap.prs.find((p) => p.number === 2).ci, 'SUCCESS');
@@ -556,7 +572,7 @@ section('issues');
 
 const planBody = `## Overview\n\nPlanned work.\n\n${BEGIN}\n\`\`\`json\n{"tasks":[]}\n\`\`\`\n${END}\n`;
 
-test('issues carry title, description, labels, url and plan flag', () => {
+test('issues carry title, description, labels, url and plan flag', async () => {
   const fx = makeFixture({
     issues: [
       { number: 40, title: 'Plain', body: '## Overview\n\nJust an idea.', labels: [{ name: 'enhancement' }], url: 'i40' },
@@ -564,7 +580,7 @@ test('issues carry title, description, labels, url and plan flag', () => {
     ],
   });
   try {
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const byN = Object.fromEntries(snap.issues.map((i) => [i.number, i]));
     assert.strictEqual(byN[40].title, 'Plain');
     assert.strictEqual(byN[40].description, 'Just an idea.');
@@ -577,7 +593,7 @@ test('issues carry title, description, labels, url and plan flag', () => {
   }
 });
 
-test('exactly one issue is recommended: plan first, then lowest number', () => {
+test('exactly one issue is recommended: plan first, then lowest number', async () => {
   const fx = makeFixture({
     issues: [
       { number: 50, title: 'a', body: '', labels: [], url: '' },
@@ -586,7 +602,7 @@ test('exactly one issue is recommended: plan first, then lowest number', () => {
     ],
   });
   try {
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const rec = snap.issues.filter((i) => i.recommended);
     assert.strictEqual(rec.length, 1);
     assert.strictEqual(rec[0].number, 55);
@@ -595,7 +611,7 @@ test('exactly one issue is recommended: plan first, then lowest number', () => {
   }
 });
 
-test('without plan issues, lowest number is recommended', () => {
+test('without plan issues, lowest number is recommended', async () => {
   const fx = makeFixture({
     issues: [
       { number: 9, title: 'a', body: '', labels: [], url: '' },
@@ -603,7 +619,7 @@ test('without plan issues, lowest number is recommended', () => {
     ],
   });
   try {
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.issues.filter((i) => i.recommended).map((i) => i.number), [3]);
   } finally {
     fx.cleanup();
@@ -616,7 +632,7 @@ test('without plan issues, lowest number is recommended', () => {
 
 section('ranking');
 
-test('order: attention PR > worktree with work > brainstorm > plan issue > issue > stale cleanup', () => {
+test('order: attention PR > worktree with work > brainstorm > plan issue > issue > stale cleanup', async () => {
   const fx = makeFixture({
     worktrees: [
       { dir: '70-work', branch: 'feature/70-work', ahead: 2, lastCommit: daysAgo(1) },
@@ -637,7 +653,7 @@ test('order: attention PR > worktree with work > brainstorm > plan issue > issue
     writeLedger(fx.repoRoot, [
       { ts: daysAgo(1).toISOString(), branch: 'main', type: 'skill-started', skill: 'brainstorm', sessionId: 'bs-r' },
     ]);
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     const seq = snap.ranking.map((r) => `${r.kind}:${r.ref}:${r.action}`);
     assert.deepStrictEqual(seq, [
       'pr:8:hervat',
@@ -654,10 +670,10 @@ test('order: attention PR > worktree with work > brainstorm > plan issue > issue
   }
 });
 
-test('next is null when nothing is open', () => {
+test('next is null when nothing is open', async () => {
   const fx = makeFixture();
   try {
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.ranking, []);
     assert.strictEqual(snap.next, null);
   } finally {
@@ -671,10 +687,10 @@ test('next is null when nothing is open', () => {
 
 section('shape + fail-soft');
 
-test('snapshot has the documented top-level shape', () => {
+test('snapshot has the documented top-level shape', async () => {
   const fx = makeFixture();
   try {
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.strictEqual(snap.generatedAt, NOW.toISOString());
     assert.strictEqual(snap.repo.root, fx.repoRoot);
     assert.strictEqual(snap.repo.url, 'https://github.com/acme/repo');
@@ -687,10 +703,10 @@ test('snapshot has the documented top-level shape', () => {
   }
 });
 
-test('gh missing yields empty prs/issues, never a crash', () => {
+test('gh missing yields empty prs/issues, never a crash', async () => {
   const fx = makeFixture({ ghThrows: true, worktrees: [{ dir: '1-a', branch: 'feature/1-a' }] });
   try {
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.prs, []);
     assert.deepStrictEqual(snap.issues, []);
     assert.ok(snap.worktrees.length >= 1);
@@ -699,10 +715,10 @@ test('gh missing yields empty prs/issues, never a crash', () => {
   }
 });
 
-test('git missing yields a usable snapshot with empty worktrees', () => {
+test('git missing yields a usable snapshot with empty worktrees', async () => {
   const fx = makeFixture({ gitThrows: true });
   try {
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.ok(Array.isArray(snap.worktrees));
     assert.strictEqual(snap.repo.root, fx.repoRoot);
   } finally {
@@ -710,10 +726,10 @@ test('git missing yields a usable snapshot with empty worktrees', () => {
   }
 });
 
-test('missing projects root yields no sessions or brainstorms, never a crash', () => {
+test('missing projects root yields no sessions or brainstorms, never a crash', async () => {
   const fx = makeFixture();
   try {
-    const snap = ss.collect({ ...fx.opts, projectsRoot: path.join(fx.base, 'nope') });
+    const snap = await ss.collect({ ...fx.opts, projectsRoot: path.join(fx.base, 'nope') });
     assert.deepStrictEqual(snap.brainstorms, []);
     assert.ok(snap.worktrees.every((w) => w.sessions.length === 0));
   } finally {
@@ -721,7 +737,7 @@ test('missing projects root yields no sessions or brainstorms, never a crash', (
   }
 });
 
-test('corrupt transcript and ledger lines are skipped', () => {
+test('corrupt transcript and ledger lines are skipped', async () => {
   const fx = makeFixture();
   try {
     const dir = path.join(fx.projectsRoot, ss.encodeProjectDir(fx.repoRoot));
@@ -729,12 +745,301 @@ test('corrupt transcript and ledger lines are skipped', () => {
     fs.writeFileSync(path.join(dir, 'bad.jsonl'), '{not json\n');
     fs.mkdirSync(path.join(fx.repoRoot, '.envoy'), { recursive: true });
     fs.writeFileSync(path.join(fx.repoRoot, '.envoy', 'ledger.jsonl'), 'garbage\n');
-    const snap = ss.collect(fx.opts);
+    const snap = await ss.collect(fx.opts);
     assert.deepStrictEqual(snap.brainstorms, []);
   } finally {
     fx.cleanup();
   }
 });
 
-process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
-process.exit(failed > 0 ? 1 : 0);
+
+// ═══════════════════════════════════════════════════════════════════
+// Fix round: async PRs, timeouts, in-flight issues, ranking, git hygiene
+// ═══════════════════════════════════════════════════════════════════
+
+section('async + parallel PR status');
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const prList = (n) => Array.from({ length: n }, (_, i) => ({ number: i + 1, title: `P${i + 1}`, headRefName: `b${i + 1}`, url: '' }));
+
+test('collect returns a Promise', async () => {
+  const fx = makeFixture();
+  try {
+    const p = ss.collect(fx.opts);
+    assert.ok(p && typeof p.then === 'function', 'returns a thenable');
+    await p;
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('async prSnapshot calls run concurrently (4 PRs ≈ one delay)', async () => {
+  const fx = makeFixture({
+    prs: prList(4),
+    prSnapshot: async () => {
+      await sleep(150);
+      return { ci: { state: 'SUCCESS' }, threads: { unresolved: 0 } };
+    },
+  });
+  try {
+    const t0 = Date.now();
+    const snap = await ss.collect(fx.opts);
+    const ms = Date.now() - t0;
+    assert.strictEqual(snap.prs.length, 4);
+    assert.ok(snap.prs.every((p) => p.ci === 'SUCCESS'));
+    assert.ok(ms < 450, `took ${ms}ms`);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('PR concurrency is capped at 4', async () => {
+  let active = 0;
+  let peak = 0;
+  const fx = makeFixture({
+    prs: prList(10),
+    prSnapshot: async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await sleep(20);
+      active--;
+      return { ci: { state: 'SUCCESS' }, threads: { unresolved: 0 } };
+    },
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    assert.strictEqual(snap.prs.length, 10);
+    assert.ok(peak > 1, `peak ${peak}`);
+    assert.ok(peak <= 4, `peak ${peak}`);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('default prSnapshot spawns pr-status.js via execFile in repoRoot with timeout', async () => {
+  const fx = makeFixture({ prs: prList(1) });
+  const calls = [];
+  const execFile = (file, args, options, cb) => {
+    calls.push({ file, args, options });
+    setImmediate(() => cb(null, JSON.stringify({ ci: { state: 'FAILURE' }, threads: { unresolved: 1 } }), ''));
+  };
+  try {
+    const { prSnapshot, ...rest } = fx.opts;
+    const snap = await ss.collect({ ...rest, execFile });
+    assert.strictEqual(calls.length, 1);
+    const c = calls[0];
+    assert.strictEqual(c.file, process.execPath);
+    assert.ok(/pr-status\.js$/.test(c.args[0]), c.args[0]);
+    assert.strictEqual(c.args[1], '1');
+    assert.strictEqual(c.options.cwd, fx.repoRoot);
+    assert.strictEqual(c.options.timeout, 15000);
+    assert.ok(c.options.maxBuffer >= 16 * 1024 * 1024);
+    assert.strictEqual(snap.prs[0].ci, 'FAILURE');
+    assert.strictEqual(snap.prs[0].unresolved, 1);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+section('timeouts');
+
+test('a timed-out PR gets ci:null while the others still fill', async () => {
+  const fx = makeFixture({
+    prs: prList(3),
+    prSnapshot: async (n) => {
+      if (n === 2) {
+        const e = new Error('spawnSync timed out');
+        e.code = 'ETIMEDOUT';
+        throw e;
+      }
+      return { ci: { state: 'SUCCESS' }, threads: { unresolved: 0 } };
+    },
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const byN = Object.fromEntries(snap.prs.map((p) => [p.number, p]));
+    assert.strictEqual(byN[2].ci, null);
+    assert.strictEqual(byN[1].ci, 'SUCCESS');
+    assert.strictEqual(byN[3].ci, 'SUCCESS');
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('default runner timeouts: git 5s, gh 15s, pr-status 15s, 16MB maxBuffer', async () => {
+  assert.strictEqual(ss.TIMEOUTS.git, 5000);
+  assert.strictEqual(ss.TIMEOUTS.gh, 15000);
+  assert.strictEqual(ss.TIMEOUTS.prStatus, 15000);
+  assert.ok(ss.MAX_BUFFER >= 16 * 1024 * 1024);
+});
+
+section('in-flight issues');
+
+test('issue linked to a worktree or open PR is inProgress', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '40-wt', branch: 'feature/40-wt' }],
+    prs: [{ number: 7, title: 'x', headRefName: 'fix/41-pr', url: '' }],
+    issues: [
+      { number: 40, title: 'a', body: '', labels: [], url: '' },
+      { number: 41, title: 'b', body: '', labels: [], url: '' },
+      { number: 42, title: 'c', body: '', labels: [], url: '' },
+    ],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const byN = Object.fromEntries(snap.issues.map((i) => [i.number, i]));
+    assert.strictEqual(byN[40].inProgress, true);
+    assert.strictEqual(byN[41].inProgress, true);
+    assert.strictEqual(byN[42].inProgress, false);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('in-flight issues are not ranked and not recommended', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '50-wt', branch: 'feature/50-wt' }],
+    issues: [
+      { number: 50, title: 'flight', body: planBody, labels: [], url: '' },
+      { number: 51, title: 'free', body: '', labels: [], url: '' },
+    ],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    assert.deepStrictEqual(snap.issues.filter((i) => i.recommended).map((i) => i.number), [51]);
+    const issueRefs = snap.ranking.filter((r) => r.kind === 'issue').map((r) => r.ref);
+    assert.deepStrictEqual(issueRefs, [51]);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('when all issues are in flight, the best one is still recommended', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '60-a', branch: 'feature/60-a' }, { dir: '61-b', branch: 'feature/61-b' }],
+    issues: [
+      { number: 60, title: 'a', body: '', labels: [], url: '' },
+      { number: 61, title: 'b', body: planBody, labels: [], url: '' },
+    ],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    assert.deepStrictEqual(snap.issues.filter((i) => i.recommended).map((i) => i.number), [61]);
+    assert.deepStrictEqual(snap.ranking.filter((r) => r.kind === 'issue'), []);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+section('ranking refinements');
+
+test('worktree with an open PR is represented by the PR, not ranked itself', async () => {
+  const fx = makeFixture({
+    worktrees: [
+      { dir: '70-red', branch: 'feature/70-red', ahead: 2 },
+      { dir: '71-green', branch: 'feature/71-green', ahead: 3, dirty: true },
+    ],
+    prs: [
+      { number: 1, title: 'red', headRefName: 'feature/70-red', url: '' },
+      { number: 2, title: 'green', headRefName: 'feature/71-green', url: '' },
+    ],
+    snapshots: { 1: { ci: { state: 'FAILURE' }, threads: { unresolved: 0 } } },
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const seq = snap.ranking.map((r) => `${r.kind}:${r.ref}:${r.action}`);
+    assert.deepStrictEqual(seq, ['pr:1:hervat']);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('main worktree is never ranked, even when dirty', async () => {
+  const fx = makeFixture();
+  try {
+    fx.worktrees[0].dirty = true;
+    const snap = await ss.collect(fx.opts);
+    assert.strictEqual(snap.worktrees[0].dirty, true);
+    assert.deepStrictEqual(snap.ranking, []);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+section('brainstorm window + scan');
+
+test('ledger brainstorm older than 30 days is dropped', async () => {
+  const fx = makeFixture();
+  try {
+    writeLedger(fx.repoRoot, [
+      { ts: daysAgo(45).toISOString(), branch: 'main', type: 'skill-started', skill: 'brainstorm', sessionId: 'ancient' },
+      { ts: daysAgo(5).toISOString(), branch: 'main', type: 'skill-started', skill: 'brainstorm', sessionId: 'fresh' },
+    ]);
+    const snap = await ss.collect(fx.opts);
+    assert.deepStrictEqual(snap.brainstorms.map((b) => b.sessionId), ['fresh']);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+section('transcript metadata');
+
+test('later cwd change without gitBranch resets the stale branch', async () => {
+  const fx = makeFixture({ worktrees: [{ dir: '80-x', branch: 'feature/80-x' }] });
+  try {
+    const filler = Array.from({ length: 100 }, () => ({ type: 'user', message: { content: 'f'.repeat(2000) } }));
+    writeTranscript(fx, fx.repoRoot, 'nobranch', {
+      branch: 'main',
+      modified: daysAgo(1),
+      lines: [...filler, { type: 'user', cwd: fx.wtPath('80-x'), sessionId: 'nobranch', message: { content: 'x' } }],
+    });
+    const snap = await ss.collect(fx.opts);
+    const wt = snap.worktrees.find((w) => w.branch === 'feature/80-x');
+    assert.deepStrictEqual(wt.sessions.map((s) => s.sessionId), ['nobranch']);
+    assert.notStrictEqual(wt.sessions[0].gitBranch, 'main');
+  } finally {
+    fx.cleanup();
+  }
+});
+
+section('git hygiene');
+
+test('ahead counts against origin/<default> when that ref exists', async () => {
+  const fx = makeFixture({ worktrees: [{ dir: '90-a', branch: 'feature/90-a', ahead: 1 }] });
+  try {
+    await ss.collect(fx.opts);
+    const rl = fx.gitCalls.find((c) => c.args[0] === 'rev-list');
+    assert.ok(rl, 'rev-list called');
+    assert.ok(rl.args.includes('origin/main..HEAD'), rl.args.join(' '));
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('ahead falls back to local default when origin ref is missing', async () => {
+  const fx = makeFixture({ noOriginRef: true, worktrees: [{ dir: '91-a', branch: 'feature/91-a', ahead: 1 }] });
+  try {
+    await ss.collect(fx.opts);
+    const rl = fx.gitCalls.find((c) => c.args[0] === 'rev-list');
+    assert.ok(rl.args.includes('main..HEAD'), rl.args.join(' '));
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('git status uses --no-optional-locks', async () => {
+  const fx = makeFixture({ worktrees: [{ dir: '92-a', branch: 'feature/92-a' }] });
+  try {
+    await ss.collect(fx.opts);
+    const st = fx.gitCalls.filter((c) => c.args.includes('status'));
+    assert.ok(st.length > 0);
+    assert.ok(st.every((c) => c.args[0] === '--no-optional-locks'), JSON.stringify(st.map((c) => c.args)));
+  } finally {
+    fx.cleanup();
+  }
+});
+
+runAll().then(() => {
+  process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
+  process.exit(failed > 0 ? 1 : 0);
+});
