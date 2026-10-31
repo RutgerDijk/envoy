@@ -101,6 +101,7 @@ function paint(text, style, url, color) {
 
 /**
  * Shrink column widths (widest first) until the table fits `maxWidth`.
+ * The last column (Action) is never shrunk, so verbs stay whole.
  * @param {number[]} widths
  * @param {number} maxWidth
  */
@@ -108,7 +109,7 @@ function fitWidths(widths, maxWidth) {
   const total = () => widths.reduce((a, b) => a + b, 0) + widths.length * 3 + 1;
   while (total() > maxWidth) {
     let iMax = -1;
-    for (let i = 0; i < widths.length; i++) {
+    for (let i = 0; i < widths.length - 1; i++) {
       if (widths[i] > MIN_COL && (iMax < 0 || widths[i] > widths[iMax])) iMax = i;
     }
     if (iMax < 0) break;
@@ -130,7 +131,6 @@ function table(title, headers, rows, opts = {}) {
   const maxWidth = opts.width || 100;
   const norm = rows.map((r) => (Array.isArray(r) ? { cells: r } : r));
   const empty = norm.length === 0;
-  const B = (s) => s; // box characters are never coloured
 
   let widths = headers.map((h, i) => Math.max(cellWidth(h), ...norm.map((r) => cellWidth(r.cells[i]))));
   const placeholder = [{ t: opts.placeholder || 'none', s: '2' }];
@@ -141,7 +141,7 @@ function table(title, headers, rows, opts = {}) {
   }
   widths = fitWidths(widths, maxWidth);
 
-  const hline = (l, m, r, mid = m) => B(l + widths.map((w) => '─'.repeat(w + 2)).join(mid) + r);
+  const hline = (l, m, r, mid = m) => l + widths.map((w) => '─'.repeat(w + 2)).join(mid) + r;
   const line = (cells, style) => '│' + cells.map((c, i) => ' ' + fitCell(c, widths[i], color, style) + ' ').join('│') + '│';
 
   const out = [paint(title, '1;36', null, color)];
@@ -182,10 +182,9 @@ function ciCell(ci) {
   return [{ t: ci, s }];
 }
 
-/** Recommended first, then not-in-progress, then planned, then by number. */
+/** Recommended first, then planned, then by number. */
 function issueSort(a, b) {
   return (Number(Boolean(b.recommended)) - Number(Boolean(a.recommended)))
-    || (Number(Boolean(a.inProgress)) - Number(Boolean(b.inProgress)))
     || (Number(Boolean(b.plan)) - Number(Boolean(a.plan)))
     || (a.number - b.number);
 }
