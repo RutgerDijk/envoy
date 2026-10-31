@@ -380,6 +380,124 @@ test('color:false emits no SGR and no OSC 8 sequences but keeps box chars', () =
 });
 
 // ═══════════════════════════════════════════════════════════════════
+section('render — escape injection');
+// ═══════════════════════════════════════════════════════════════════
+
+/** Remove the sequences the renderer itself emits: SGR and well-formed http(s) OSC 8 links. */
+function stripOwn(out) {
+  return out
+    .replace(/\x1b\]8;;(?:https?:\/\/[^\x00-\x1f\x7f-\x9f]*)?\x07/g, '')
+    .replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function hostileFixture() {
+  const snap = fixture();
+  snap.repo.url = 'https://github.com/acme/w\x07\x1b]0;pwned\x07';
+  snap.prs[0].title = 'evil\x1b]0;T\x07\x1b[2J';
+  snap.prs[1].url = `${REPO}/pull/102\x07\x1b]0;x\x07`;
+  snap.brainstorms[0].topic = 'line one\r\nline two\x9b2J';
+  snap.issues[0].url = 'javascript:alert(1)';
+  snap.issues[1].description = 'desc\x00\x7fwith\x1b[31mred';
+  snap.next = { kind: 'pr', ref: 101, label: 'go\x1b]0;T\x07\x1b[2J', action: 'hervat' };
+  return snap;
+}
+
+test('control characters in data never reach the output', () => {
+  const out = mod.render(hostileFixture(), { width: 140 });
+  const rest = stripOwn(out);
+  const bad = rest.match(/[\x00-\x09\x0b-\x1f\x7f-\x9f]/);
+  assert.ok(!bad, `injected control char ${bad && JSON.stringify(bad[0])} survived`);
+});
+
+test('every emitted OSC 8 URL is http(s) without control chars', () => {
+  const out = mod.render(hostileFixture(), { width: 140 });
+  const urls = [...out.matchAll(/\x1b\]8;;([^\x07]*)\x07/g)].map((m) => m[1]).filter(Boolean);
+  assert.ok(urls.length > 0, 'expected some links');
+  for (const u of urls) assert.match(u, /^https?:\/\/[^\x00-\x1f\x7f-\x9f]*$/, `bad url ${JSON.stringify(u)}`);
+});
+
+test('invalid URLs render the number as plain text', () => {
+  const out = mod.render(hostileFixture(), { width: 140 });
+  assert.ok(!out.includes('javascript:'), 'javascript: url emitted');
+  assert.ok(strip(out).includes('#7'), 'issue #7 text missing');
+  assert.ok(!/\x1b\]8;;[^\x07]*\x07#102/.test(out), 'PR #102 with bad url still linked');
+  assert.ok(!/\x1b\]8;;[^\x07]*\x07#93/.test(tables(out)[1].join('\n')), 'worktree #93 linked from bad repo.url');
+});
+
+test('alignment holds with hostile data', () => {
+  for (const width of [140, 60]) {
+    for (const t of tables(mod.render(hostileFixture(), { width }))) {
+      const widths = t.map((l) => mod.visibleWidth(l));
+      assert.ok(widths.every((w) => w === widths[0]), `misaligned at ${width}: ${widths.join(',')}`);
+    }
+  }
+});
+
+test('NEXT STEP label is sanitized', () => {
+  const out = mod.render(hostileFixture(), { width: 140 });
+  const line = out.split('\n').find((l) => strip(l).startsWith('NEXT STEP'));
+  assert.ok(!/[\x00-\x1f\x7f-\x9f]/.test(stripOwn(line)), 'control char in NEXT STEP');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+section('render — robustness');
+// ═══════════════════════════════════════════════════════════════════
+
+test('issue sort: recommended, then plan, then number (inProgress is not a tie-breaker)', () => {
+  const snap = fixture();
+  const mk = (number, plan, recommended, inProgress) => ({ number, title: `T${number}`, description: '', labels: [], url: `${REPO}/issues/${number}`, plan, recommended, inProgress });
+  snap.issues = [mk(4, false, false, false), mk(9, true, false, false), mk(3, true, false, true), mk(2, false, true, false), mk(1, false, false, true)];
+  const rows = dataRows(tables(mod.render(snap, { width: 140 }))[3]);
+  assert.deepStrictEqual(rows.map((r) => r[0].replace(/^>\s*/, '')), ['#2', '#3', '#9', '#1', '#4']);
+});
+
+test('MIN_WIDTH is exported and is 50', () => {
+  assert.strictEqual(mod.MIN_WIDTH, 50);
+});
+
+for (const width of [50, 60, 80]) {
+  test(`at width ${width} (>= MIN_WIDTH) every table fits`, () => {
+    for (const snap of [fixture(), emptyFixture()]) {
+      for (const t of tables(mod.render(snap, { width }))) {
+        for (const l of t) assert.ok(mod.visibleWidth(l) <= width, `line width ${mod.visibleWidth(l)} > ${width}`);
+      }
+    }
+  });
+}
+
+test('below MIN_WIDTH (30) tables stay aligned', () => {
+  for (const snap of [fixture(), emptyFixture()]) {
+    for (const t of tables(mod.render(snap, { width: 30 }))) {
+      const widths = t.map((l) => mod.visibleWidth(l));
+      assert.ok(widths.every((w) => w === widths[0]), `misaligned: ${widths.join(',')}`);
+    }
+  }
+});
+
+test('next.label null renders as empty, not "null"', () => {
+  const snap = fixture();
+  snap.next = { kind: 'pr', ref: 101, label: null, action: 'hervat' };
+  const line = strip(mod.render(snap, { width: 120 })).split('\n').find((l) => l.startsWith('NEXT STEP'));
+  assert.ok(!/null|undefined/.test(line), line);
+  assert.match(line, /hervat/);
+});
+
+test('unknown next.action is shown as —', () => {
+  const snap = fixture();
+  snap.next = { kind: 'pr', ref: 101, label: 'x', action: 'rm -rf' };
+  const line = strip(mod.render(snap, { width: 120 })).split('\n').find((l) => l.startsWith('NEXT STEP'));
+  assert.ok(!line.includes('rm -rf'), line);
+  assert.match(line, /NEXT STEP\s+—\s+x/);
+});
+
+test('missing brainstorm ageDays renders —', () => {
+  const snap = fixture();
+  delete snap.brainstorms[0].ageDays;
+  const rows = dataRows(tables(mod.render(snap, { width: 140 }))[0]);
+  assert.strictEqual(rows[0][1], '—');
+});
+
+// ═══════════════════════════════════════════════════════════════════
 section('main');
 // ═══════════════════════════════════════════════════════════════════
 
@@ -429,6 +547,29 @@ test('main returns a Promise', () => {
   const p = mod.main(['--json'], { collect: emptyFixture, stdout: capture(), stderr: capture(), env: {} });
   assert.ok(p && typeof p.then === 'function', 'main must return a Promise');
   return p;
+});
+
+test('--no-color disables colour and links', async () => {
+  const stdout = capture();
+  await mod.main(['--no-color'], { collect: fixture, stdout, stderr: capture(), env: {}, width: 120 });
+  assert.ok(!stdout.text().includes('\x1b'), 'escape sequence present under --no-color');
+  assert.ok(stdout.text().includes('NEXT STEP'));
+});
+
+test('empty NO_COLOR keeps colour (no-color.org)', async () => {
+  const stdout = capture();
+  await mod.main([], { collect: fixture, stdout, stderr: capture(), env: { NO_COLOR: '' }, width: 120 });
+  assert.ok(stdout.text().includes('\x1b['));
+});
+
+test('render throwing on a malformed snapshot: stderr, empty dashboard, exit 0', async () => {
+  const stdout = capture();
+  const stderr = capture();
+  const code = await mod.main([], { collect: () => ({ ...emptyFixture(), issues: [null] }), stdout, stderr, env: {}, width: 100 });
+  assert.strictEqual(code, 0);
+  assert.match(stderr.text(), /envoy-start/);
+  assert.strictEqual(tables(stdout.text()).length, 4);
+  assert.match(strip(stdout.text()), /nothing open/);
 });
 
 test('collect is called with the repo root option', async () => {
