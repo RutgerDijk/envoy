@@ -122,6 +122,7 @@ const CLAUDE_CODE_ONLY_SKILLS = [
   'prs',
   'receiving-code-review',
   'requesting-code-review',
+  'start',
   'systematic-debugging',
   'test-driven-development',
   'using-envoy',
