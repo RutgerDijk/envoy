@@ -143,6 +143,20 @@ test('worktree label uses issue title with Dutch verb; cleanup uses branch', () 
   assert.strictEqual(opts[1].action, 'cleanup');
 });
 
+test('cleanup description says why: PR merged vs stale idle days', () => {
+  const s = snapshot({ prs: [] });
+  s.worktrees.push({ path: '/repo/.worktrees/91-done', branch: 'feature/91-done', issue: 91, ahead: 9, dirty: false,
+    idleDays: 0, stale: false, merged: true, sessions: [] });
+  s.ranking = [
+    { kind: 'worktree', ref: 'feature/91-done', label: 'feature/91-done', action: 'cleanup' },
+    { kind: 'worktree', ref: 'feature/32-old', label: 'feature/32-old', action: 'cleanup' },
+  ];
+  const opts = choices.buildOptions(s);
+  assert.match(opts[0].description, /PR merged/);
+  assert.doesNotMatch(opts[0].description, /stale/);
+  assert.match(opts[1].description, /stale, idle 40 days/);
+});
+
 test('labels are capped at 60 chars', () => {
   const s = snapshot();
   s.issues[1].title = 'x'.repeat(200);
