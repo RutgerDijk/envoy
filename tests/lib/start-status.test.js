@@ -239,6 +239,48 @@ test('session with unknown cwd falls back to matching gitBranch', () => {
   }
 });
 
+test('session that started in main but moved into a worktree attaches to that worktree', () => {
+  const fx = makeFixture({ worktrees: [{ dir: '33-mv', branch: 'feature/33-mv' }] });
+  try {
+    const filler = [];
+    const big = 'q'.repeat(2000);
+    for (let i = 0; i < 300; i++) filler.push({ type: 'user', message: { content: big } });
+    writeTranscript(fx, fx.repoRoot, 'drift', {
+      branch: 'main',
+      modified: daysAgo(1),
+      lines: [
+        ...filler,
+        { type: 'user', cwd: fx.wtPath('33-mv'), gitBranch: 'feature/33-mv', sessionId: 'drift', message: { content: 'go' } },
+      ],
+    });
+    const snap = ss.collect(fx.opts);
+    const wt = snap.worktrees.find((w) => w.branch === 'feature/33-mv');
+    const main = snap.worktrees.find((w) => w.path === fx.repoRoot);
+    assert.deepStrictEqual(wt.sessions.map((s) => s.sessionId), ['drift']);
+    assert.strictEqual(wt.sessions[0].cwd, fx.wtPath('33-mv'));
+    assert.strictEqual(wt.sessions[0].gitBranch, 'feature/33-mv');
+    assert.deepStrictEqual(main.sessions, []);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('session summary is a clean single line without markup tags', () => {
+  const fx = makeFixture();
+  try {
+    writeTranscript(fx, fx.repoRoot, 'tags', {
+      modified: daysAgo(1),
+      prompt: '\n\n<command-message>envoy:pickup</command-message>\n<command-name>/envoy:pickup</command-name> 93',
+    });
+    const snap = ss.collect(fx.opts);
+    const s = snap.worktrees[0].sessions[0];
+    assert.ok(!/[<>\n]/.test(s.summary), JSON.stringify(s.summary));
+    assert.ok(s.summary.includes('envoy:pickup'), s.summary);
+  } finally {
+    fx.cleanup();
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // Brainstorms
 // ═══════════════════════════════════════════════════════════════════
@@ -371,6 +413,25 @@ test('fallback: issue created late in a large transcript is found (head+tail sca
       modified: daysAgo(1),
       lines: [skillUse('envoy:brainstorm'), ...filler, bashUse('gh issue create --title T')],
     });
+    const snap = ss.collect(fx.opts);
+    assert.deepStrictEqual(snap.brainstorms, []);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('issue created mid-transcript (outside head/tail windows) is found', () => {
+  const fx = makeFixture();
+  try {
+    const big = 'm'.repeat(2000);
+    const pad = () => Array.from({ length: 400 }, () => ({ type: 'user', message: { content: big } }));
+    writeTranscript(fx, fx.repoRoot, 'mid', {
+      modified: daysAgo(1),
+      lines: [skillUse('envoy:brainstorm'), ...pad(), bashUse('gh issue create --title T'), ...pad()],
+    });
+    writeLedger(fx.repoRoot, [
+      { ts: daysAgo(1).toISOString(), branch: 'main', type: 'skill-started', skill: 'brainstorm', sessionId: 'mid' },
+    ]);
     const snap = ss.collect(fx.opts);
     assert.deepStrictEqual(snap.brainstorms, []);
   } finally {
