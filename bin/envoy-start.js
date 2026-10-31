@@ -244,7 +244,6 @@ function render(snapshot, opts = {}) {
   ]);
 
   const worktrees = (snap.worktrees || []).map((w) => {
-    const verb = w.stale ? 'cleanup' : (w.ahead > 0 || w.dirty) ? 'hervat' : null;
     const issue = w.issue == null ? none() : numLink(w.issue, repoUrl ? `${repoUrl}/issues/${w.issue}` : null);
     const idle = w.idleDays == null ? none() : [{ t: `${w.idleDays}d`, s: w.stale ? '31' : '2' }];
     const sessions = (w.sessions || []).length;
@@ -255,7 +254,7 @@ function render(snapshot, opts = {}) {
       w.dirty ? [{ t: 'yes', s: '33' }] : dim('no'),
       idle,
       sessions > 0 ? String(sessions) : dim('0'),
-      actionCell(verb),
+      actionCell(w.action),
     ];
   });
 
