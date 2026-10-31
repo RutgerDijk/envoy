@@ -236,8 +236,19 @@ test('skills/start/SKILL.md has Announce-at-start and Integration with Envoy sec
 
 test('skills/start/SKILL.md references the renderer, collector, opener and titler', () => {
   const content = readStart();
-  for (const ref of ['bin/envoy-start.js', 'lib/start-status.js', 'lib/open-session.js', 'lib/tab-title.js']) {
+  for (const ref of ['bin/envoy-start.js', 'lib/start-status.js', 'lib/start-choices.js', 'lib/open-session.js', 'lib/tab-title.js']) {
     assert.ok(content.includes(ref), `expected skills/start/SKILL.md to reference ${ref}`);
+  }
+});
+
+test('skills/start/SKILL.md drives choices through lib/start-choices.js, not inline node -e programs', () => {
+  const content = readStart();
+  assert.ok(!/node -e/.test(content), 'expected no inline `node -e` programs in skills/start/SKILL.md');
+  for (const sub of ['options', 'resume', 'dir']) {
+    assert.ok(
+      new RegExp(`start-choices\\.js"? ${sub} "\\$SNAP"`).test(content),
+      `expected a \`start-choices.js ${sub} "$SNAP"\` invocation`
+    );
   }
 });
 
