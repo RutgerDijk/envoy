@@ -12,9 +12,14 @@
  * Usage:
  *   node bin/envoy-start.js          # dashboard
  *   node bin/envoy-start.js --json   # raw snapshot
+ *   node bin/envoy-start.js --no-color
  *
- * `NO_COLOR` (any value) disables both SGR colours and OSC 8 links; box
- * characters stay. Read-only and fail-soft: if collecting throws, the error
+ * Colour and OSC 8 links are on by default (also when stdout is not a TTY:
+ * Claude Code `!` output and cmux splits render them). A non-empty `NO_COLOR`
+ * or `--no-color` disables both; box characters stay.
+ *
+ * All snapshot text is sanitized: C0/C1 control characters are stripped and
+ * links are emitted only for http(s) URLs, so data cannot inject escapes. Read-only and fail-soft: if collecting throws, the error
  * goes to stderr and an empty dashboard is printed (exit 0).
  *
  * Zero external dependencies.
@@ -27,6 +32,35 @@ const OSC8_RE = /\x1b\]8;;[^\x07\x1b]*(?:\x07|\x1b\\)/g;
 const ELLIPSIS = '…';
 const DASH = '—';
 const MIN_COL = 3;
+/** Documented minimum: at or above this width every table fits; below it tables may overflow but stay aligned. */
+const MIN_WIDTH = 50;
+const DEFAULT_WIDTH = 100;
+const VERBS = new Set(['hervat', 'pickup', 'brainstorm', 'cleanup']);
+const CONTROL_RE = /[\x00-\x1f\x7f-\x9f]/g;
+const SAFE_URL_RE = /^https?:\/\/[^\x00-\x20\x7f-\x9f]+$/;
+
+/**
+ * Strip C0 and C1 control characters (ESC, BEL, CR, LF, CSI, …) from text.
+ * @param {*} value
+ * @returns {string}
+ */
+function clean(value) {
+  return value == null ? '' : String(value).replace(CONTROL_RE, '');
+}
+
+/**
+ * Return the URL when it is a plain http(s) URL without control characters, else null.
+ * @param {*} url
+ * @returns {string|null}
+ */
+function safeUrl(url) {
+  return typeof url === 'string' && SAFE_URL_RE.test(url) ? url : null;
+}
+
+/** Terminal width fallback shared by render and main. */
+function defaultWidth() {
+  return (process.stdout && process.stdout.columns) || DEFAULT_WIDTH;
+}
 
 /**
  * A cell is a list of segments; each segment is plain text with an optional
@@ -58,7 +92,8 @@ function link(text, url) {
 /** @param {Cell} cell @returns {Segment[]} */
 function segs(cell) {
   if (cell == null) return [];
-  return typeof cell === 'string' ? [{ t: cell }] : cell;
+  const list = typeof cell === 'string' ? [{ t: cell }] : cell;
+  return list.map((seg) => ({ t: clean(seg.t), s: seg.s, u: safeUrl(seg.u) || undefined }));
 }
 
 /** @param {Cell} cell @returns {number} */
@@ -76,7 +111,7 @@ function cellWidth(cell) {
  */
 function fitCell(cell, w, color, rowStyle) {
   const list = segs(cell);
-  const overflow = cellWidth(cell) > w;
+  const overflow = list.reduce((n, seg) => n + Array.from(seg.t).length, 0) > w;
   let budget = overflow ? w - 1 : w;
   let out = '';
   let used = 0;
@@ -172,7 +207,7 @@ function actionCell(verb) {
 
 function numLink(n, url, prefix = '') {
   const seg = { t: `#${n}`, s: '36' };
-  if (url) seg.u = url;
+  if (safeUrl(url)) seg.u = url;
   return prefix ? [{ t: prefix }, seg] : [seg];
 }
 
@@ -197,14 +232,14 @@ function issueSort(a, b) {
  */
 function render(snapshot, opts = {}) {
   const color = opts.color !== false;
-  const width = opts.width || (process.stdout && process.stdout.columns) || 100;
+  const width = opts.width || defaultWidth();
   const snap = snapshot || {};
-  const repoUrl = snap.repo && snap.repo.url;
+  const repoUrl = safeUrl(snap.repo && snap.repo.url);
   const t = { color, width };
 
   const brainstorms = (snap.brainstorms || []).map((b) => [
     b.topic ? b.topic : dim(b.sessionId || '(untitled)'),
-    `${b.ageDays}d`,
+    b.ageDays == null ? none() : `${b.ageDays}d`,
     actionCell('hervat'),
   ]);
 
@@ -253,8 +288,9 @@ function render(snapshot, opts = {}) {
   ];
 
   const next = snap.next;
+  const verb = next && VERBS.has(next.action) ? next.action : null;
   const nextLine = next
-    ? `${paint('NEXT STEP', '1;36', null, color)}  ${paint(next.action, ACTION_STYLE[next.action] || '1', null, color)}  ${paint(next.label, '1', null, color)}`
+    ? `${paint('NEXT STEP', '1;36', null, color)}  ${verb ? paint(verb, ACTION_STYLE[verb], null, color) : paint(DASH, '2', null, color)}  ${paint(clean(next.label), '1', null, color)}`
     : `${paint('NEXT STEP', '1;36', null, color)}  ${paint(`nothing open ${DASH} run /envoy:brainstorm`, '2', null, color)}`;
 
   return parts.join('\n\n') + '\n\n' + nextLine + '\n';
@@ -270,10 +306,11 @@ function emptySnapshot(root) {
 
 /**
  * CLI entry point.
- * @param {string[]} argv  Arguments after the script name.
+ * @param {string[]} argv  Arguments after the script name (`--json`, `--no-color`).
  * @param {{collect?: Function, stdout?: {write: Function}, stderr?: {write: Function},
  *          env?: Object, cwd?: string, width?: number}} [deps]
  *   `collect` may be sync or return a Promise.
+ *   Fail-soft: a throwing `collect` or `render` prints an empty dashboard.
  * @returns {Promise<number>} Exit code (always 0).
  */
 async function main(argv = [], deps = {}) {
@@ -296,14 +333,27 @@ async function main(argv = [], deps = {}) {
     return 0;
   }
 
-  const color = !env.NO_COLOR; // no-color.org: set and non-empty
-  const width = deps.width || (process.stdout && process.stdout.columns) || 100;
-  stdout.write(render(snapshot, { color, width }));
+  // Not gated on isTTY: `!` output and cmux splits are non-TTY but render colour + OSC 8.
+  const color = !env.NO_COLOR && !argv.includes('--no-color'); // no-color.org: set and non-empty
+  const width = deps.width || defaultWidth();
+  let out;
+  try {
+    out = render(snapshot, { color, width });
+  } catch (err) {
+    stderr.write(`envoy-start: could not render status: ${err && err.message ? err.message : err}\n`);
+    out = render(emptySnapshot(cwd), { color, width });
+  }
+  stdout.write(out);
   return 0;
 }
 
 if (require.main === module) {
-  main(process.argv.slice(2)).then((code) => { process.exitCode = code; });
+  main(process.argv.slice(2))
+    .then((code) => { process.exitCode = code; })
+    .catch((err) => {
+      process.stderr.write(`envoy-start: ${err && err.message ? err.message : err}\n`);
+      process.exitCode = 0;
+    });
 }
 
-module.exports = { render, table, visibleWidth, link, main };
+module.exports = { render, table, visibleWidth, link, main, MIN_WIDTH };
