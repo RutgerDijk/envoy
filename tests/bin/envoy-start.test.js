@@ -59,11 +59,11 @@ function fixture() {
       { sessionId: 'aaaa-1111', startedAt: '2026-10-29T10:00:00.000Z', ageDays: 2, topic: 'Design a caching layer for the API gateway', cwd: '/repo' },
     ],
     worktrees: [
-      { path: '/repo', branch: 'main', issue: null, ahead: 0, dirty: false, lastActivityAt: '2026-10-31T09:00:00.000Z', idleDays: 0, stale: false, sessions: [] },
-      { path: '/repo/.worktrees/93-start', branch: 'feature/93-start-dashboard', issue: 93, ahead: 4, dirty: true, lastActivityAt: '2026-10-31T09:00:00.000Z', idleDays: 0, stale: false,
+      { path: '/repo', branch: 'main', issue: null, ahead: 0, dirty: false, lastActivityAt: '2026-10-31T09:00:00.000Z', idleDays: 0, stale: false, action: null, sessions: [] },
+      { path: '/repo/.worktrees/93-start', branch: 'feature/93-start-dashboard', issue: 93, ahead: 4, dirty: true, lastActivityAt: '2026-10-31T09:00:00.000Z', idleDays: 0, stale: false, action: 'hervat',
         sessions: [{ sessionId: 's1', summary: 'x', modified: '2026-10-31T09:00:00.000Z', cwd: '/repo/.worktrees/93-start', gitBranch: 'feature/93-start-dashboard' },
           { sessionId: 's2', summary: 'y', modified: '2026-10-30T09:00:00.000Z', cwd: null, gitBranch: 'unknown' }] },
-      { path: '/repo/.worktrees/12-old', branch: 'fix/12-old-thing', issue: 12, ahead: 0, dirty: false, lastActivityAt: '2026-08-01T09:00:00.000Z', idleDays: 91, stale: true, sessions: [] },
+      { path: '/repo/.worktrees/12-old', branch: 'fix/12-old-thing', issue: 12, ahead: 0, dirty: false, lastActivityAt: '2026-08-01T09:00:00.000Z', idleDays: 91, stale: true, action: 'cleanup', sessions: [] },
     ],
     prs: [
       { number: 101, title: 'feat: start dashboard', url: `${REPO}/pull/101`, branch: 'feature/93-start-dashboard', issue: 93, ci: 'failure', unresolved: 2, needsAttention: true },
@@ -281,6 +281,15 @@ test('worktree actions: hervat when ahead/dirty, cleanup when stale, — otherwi
   assert.strictEqual(byBranch['main'], '—');
   assert.strictEqual(byBranch['feature/93-start-dashboard'], 'hervat');
   assert.strictEqual(byBranch['fix/12-old-thing'], 'cleanup');
+});
+
+test('worktree Action comes from the collector: a stale worktree with an open PR is not cleanup', () => {
+  const snap = fixture();
+  snap.worktrees.push({ path: '/repo/.worktrees/83-pr', branch: 'feature/83-has-pr', issue: 83, ahead: 52, dirty: false,
+    lastActivityAt: '2026-09-01T09:00:00.000Z', idleDays: 60, stale: true, pr: 84, action: null, sessions: [] });
+  const rows = dataRows(tables(mod.render(snap, { width: 140 }))[1]);
+  const row = rows.find((r) => r[0] === 'feature/83-has-pr');
+  assert.strictEqual(row[row.length - 1], '—');
 });
 
 test('worktree sessions column shows the count', () => {

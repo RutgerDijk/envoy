@@ -102,6 +102,10 @@ function makeFixture(spec = {}) {
   const gh = (args) => {
     if (spec.ghThrows) throw new Error('gh missing');
     const a = args.join(' ');
+    if (a.startsWith('pr list') && a.includes('--state merged')) {
+      if (spec.mergedThrows) throw new Error('gh merged list failed');
+      return JSON.stringify(spec.mergedPrs || []);
+    }
     if (a.startsWith('pr list')) return JSON.stringify(spec.prs || []);
     if (a.startsWith('issue list')) return JSON.stringify(spec.issues || []);
     return '[]';
@@ -961,6 +965,80 @@ test('main worktree is never ranked, even when dirty', async () => {
     const snap = await ss.collect(fx.opts);
     assert.strictEqual(snap.worktrees[0].dirty, true);
     assert.deepStrictEqual(snap.ranking, []);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('worktree action: open PR → null (even when stale), stale → cleanup, work → hervat, else null', async () => {
+  const fx = makeFixture({
+    worktrees: [
+      { dir: '80-pr', branch: 'feature/80-pr', ahead: 5, lastCommit: daysAgo(40) },
+      { dir: '81-old', branch: 'feature/81-old', lastCommit: daysAgo(40) },
+      { dir: '82-work', branch: 'feature/82-work', ahead: 1 },
+      { dir: '83-idle', branch: 'feature/83-idle' },
+    ],
+    prs: [{ number: 8, title: 'pr', headRefName: 'feature/80-pr', url: '' }],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const by = Object.fromEntries(snap.worktrees.map((w) => [w.branch, w]));
+    assert.strictEqual(by['feature/80-pr'].action, null);
+    assert.strictEqual(by['feature/80-pr'].pr, 8);
+    assert.strictEqual(by['feature/81-old'].action, 'cleanup');
+    assert.strictEqual(by['feature/82-work'].action, 'hervat');
+    assert.strictEqual(by['feature/83-idle'].action, null);
+    assert.strictEqual(by['main'].action, null);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('worktree whose PR is merged gets cleanup (not hervat), ranked in the cleanup bucket', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '91-done', branch: 'feature/91-done', ahead: 9 }],
+    mergedPrs: [{ number: 92, headRefName: 'feature/91-done' }],
+    issues: [{ number: 5, title: 'next', body: '', labels: [], url: '' }],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const w = snap.worktrees.find((x) => x.branch === 'feature/91-done');
+    assert.strictEqual(w.merged, true);
+    assert.strictEqual(w.action, 'cleanup');
+    const seq = snap.ranking.map((r) => `${r.kind}:${r.ref}:${r.action}`);
+    assert.deepStrictEqual(seq, ['issue:5:brainstorm', 'worktree:feature/91-done:cleanup']);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('an open PR wins over a merged PR on the same branch', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '95-again', branch: 'feature/95-again', ahead: 2 }],
+    prs: [{ number: 97, title: 'again', headRefName: 'feature/95-again', url: '' }],
+    mergedPrs: [{ number: 96, headRefName: 'feature/95-again' }],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const w = snap.worktrees.find((x) => x.branch === 'feature/95-again');
+    assert.strictEqual(w.merged, false);
+    assert.strictEqual(w.action, null);
+    assert.deepStrictEqual(snap.ranking, []);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('merged PR lookup failing is fail-soft: worktree keeps its normal action', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '98-work', branch: 'feature/98-work', ahead: 1 }],
+    mergedThrows: true,
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const w = snap.worktrees.find((x) => x.branch === 'feature/98-work');
+    assert.strictEqual(w.merged, false);
+    assert.strictEqual(w.action, 'hervat');
   } finally {
     fx.cleanup();
   }
