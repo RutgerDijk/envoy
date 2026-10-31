@@ -89,18 +89,19 @@ for (const r of items) {
   }
   out.push({ label: cut(label, 70), description: cut(why || r.label, 120), kind: r.kind, ref: r.ref, action: r.action });
 }
+if (out.length < 2) out.push({ label: "Brainstorm something new", description: "Start a new idea with envoy:brainstorm", kind: "new", ref: null, action: "brainstorm" });
+if (out.length < 2) out.push({ label: "Nothing for now", description: "Close the dashboard without starting anything", kind: "none", ref: null, action: "none" });
 console.log(JSON.stringify(out, null, 2));
 '
 ```
 
 ### Step 3: Ask the user
 
-Call **AskUserQuestion** with one question ("What do you want to work on?"),
-one option per entry above: `label` → option label, `description` → option
-description. Keep the order.
+Call **AskUserQuestion** with one question ("What do you want to work on?",
+`header: "Next"`), one option per entry above (2–4; the script pads with
+`Brainstorm something new` / `Nothing for now` when fewer than 2 are open): `label` → option
+label, `description` → option description. Keep the order.
 
-- **Empty list** (nothing open) → offer a single option `Brainstorm something
-  new`, which dispatches to `envoy:brainstorm` with no issue.
 - **Free-text answer** ("Other") → match it against the labels, issue numbers,
   branch names and brainstorm topics in the snapshot. If it names nothing in the
   snapshot, say so and stop — never guess an item.
@@ -111,8 +112,9 @@ description. Keep the order.
 |---|---|
 | `hervat` (`kind` pr / worktree / brainstorm) | Resolve and open the session — Step 4a |
 | `pickup` | Invoke Skill `envoy:pickup` with args `<issue number>` |
-| `brainstorm` | Invoke Skill `envoy:brainstorm` with args `#<issue number> <issue title>` (or none for "something new") |
-| `cleanup` | Invoke Skill `envoy:cleanup`; tell it the branch and worktree path from the snapshot |
+| `brainstorm` | Invoke Skill `envoy:brainstorm` with args `#<issue number> <issue title>` (no args when `kind` is `new`) |
+| `none` | Stop |
+| `cleanup` | cleanup acts on the current branch: in Bash `cd '<worktree path from snapshot>'`, then invoke Skill `envoy:cleanup` |
 
 #### Step 4a: Resume a session
 
