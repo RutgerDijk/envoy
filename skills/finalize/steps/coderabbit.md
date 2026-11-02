@@ -16,6 +16,11 @@ and `formatHandoffMessage(resetsAt)` — the SAME shared helper `envoy:babysit` 
 its own rate-limit re-trigger decision (Task 8). This is the ONE place the
 wait/retrigger/handoff decision lives; do not re-derive it in prose here or in babysit.
 
+Helper module: `lib/pr-poll.js` is the ONE backgrounded wait for both CodeRabbit (Step 3a)
+and CI (`steps/ci.md`). It owns the backoff table, calls `shouldReTrigger` itself, and
+exits 0 settled / 1 deadline / 2 handoff / 3 probe unavailable. Every wait in finalize
+is a single Bash call to it with `run_in_background: true`. There are no foreground wait loops.
+
 ### Step 3: Collect — Poll CodeRabbit AND Diagnose CI (Combined Fix List)
 
 Announce: `Running Step 3: Collect CodeRabbit findings and diagnose CI failures...`
@@ -25,129 +30,53 @@ PR_URL=$(jq -r '.prUrl // empty' .envoy/finalize/state.json 2>/dev/null || true)
 echo "PR: $PR_URL"
 ```
 
-**3a. Poll CodeRabbit for unresolved threads (exponential backoff, unchanged):**
+**3a. Wait for CodeRabbit in the background (`lib/pr-poll.js`):**
 
-GitHub CodeRabbit App reviews the PR asynchronously. Poll with exponential backoff (22-minute max).
+The GitHub CodeRabbit App reviews the PR asynchronously. Do NOT wait in the
+foreground. Run this as ONE Bash call with `run_in_background: true`. The
+session stays free, and Claude is re-invoked when the poller exits:
 
 ```bash
-# CodeRabbit: 22min max (async review — GitHub App processes PR asynchronously)
+# Run with run_in_background: true. Claude is re-invoked when it exits.
 PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
-
-# One snapshot source for the CodeRabbit signal: GraphQL unresolved review
-# threads (REST comment counts miss inline threads, #25) plus rate-limit state.
-PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
-
-# Exponential backoff in seconds — 22min (1320s) max, extendable per
-# lib/coderabbit-retrigger.js when a rate-limit reset is close (see below).
-# intervals = [120s, 120s, 240s, 360s, 480s]
-# cumulative =  2     4     8    14    22 min
-ELAPSED=0
-DEADLINE=1320
 RETRIGGER_COUNT=$(jq -r '.retriggerCount // 0' .envoy/finalize/state.json 2>/dev/null || echo 0)
-for WAIT in 120 120 240 360 480; do
-  sleep $WAIT
-  ELAPSED=$((ELAPSED + WAIT))
-
-  # Probe is non-fatal: a pr-status failure must not abort the step under set -e/pipefail.
-  SNAP=$($PR_STATUS "$PR_NUMBER" 2>/dev/null || true)
-
-  # A missing snapshot (status probe failed) — keep polling, don't misread as clean.
-  # Check before jq so jq never runs on empty input.
-  if [ -z "$SNAP" ]; then
-    echo "CodeRabbit status unavailable. $((ELAPSED / 60))min elapsed; retrying..."
-    if [ "$ELAPSED" -ge "$DEADLINE" ]; then break; fi
-    continue
-  fi
-
-  CR_STATE=$(echo "$SNAP" | jq -r '.coderabbit.checkState // empty')
-  UNRESOLVED=$(echo "$SNAP" | jq -r '.coderabbit.unresolvedThreads // empty')
-  RATE_LIMITED=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.rateLimited // empty')
-  RESETS_AT=$(echo "$SNAP" | jq -r '.coderabbit.rateLimit.resetsAt // empty')
-
-  # A rate-limited review is NOT a clean review. Consult the SHARED helper
-  # (lib/coderabbit-retrigger.js — the SAME one envoy:babysit uses) for the
-  # wait / retrigger / handoff decision. Max 2 re-triggers per finalize run.
-  if [ "$RATE_LIMITED" = "true" ]; then
-    DECISION=$(node -e '
-      const { shouldReTrigger, formatHandoffMessage } = require("${CLAUDE_SKILL_DIR}/../../lib/coderabbit-retrigger.js");
-      const result = shouldReTrigger(
-        { rateLimited: true, resetsAt: process.env.RESETS_AT || null },
-        new Date(),
-        { currentDeadlineSeconds: Number(process.env.DEADLINE), retriggerCount: Number(process.env.RETRIGGER_COUNT), maxRetriggers: 2 }
-      );
-      if (result.action === "handoff") result.message = formatHandoffMessage(result.resetsAt);
-      console.log(JSON.stringify(result));
-    ' RESETS_AT="$RESETS_AT" DEADLINE="$DEADLINE" RETRIGGER_COUNT="$RETRIGGER_COUNT")
-
-    ACTION=$(echo "$DECISION" | jq -r '.action')
-
-    case "$ACTION" in
-      handoff)
-        # resetsAt is more than 10min away — do NOT block waiting. Exit
-        # finalize with the explicit babysit handoff message.
-        echo "$(echo "$DECISION" | jq -r '.message')"
-        exit 0
-        ;;
-      wait)
-        # resetsAt is <=10min away — extend the deadline (resetsAt+2min,
-        # 60min hard ceiling) and keep polling.
-        DEADLINE=$(echo "$DECISION" | jq -r '.extendedDeadlineSeconds')
-        echo "CodeRabbit is rate-limited (resets $RESETS_AT). $((ELAPSED / 60))min elapsed; waiting (deadline now ${DEADLINE}s)..."
-        if [ "$ELAPSED" -ge "$DEADLINE" ]; then break; fi
-        continue
-        ;;
-      retrigger)
-        # resetsAt has passed — re-trigger and reset the poll clock.
-        gh pr comment "$PR_NUMBER" --body "@coderabbitai review"
-        RETRIGGER_COUNT=$((RETRIGGER_COUNT + 1))
-        jq --argjson n "$RETRIGGER_COUNT" '.retriggerCount = $n' .envoy/finalize/state.json > .envoy/finalize/state.json.tmp \
-          && mv .envoy/finalize/state.json.tmp .envoy/finalize/state.json
-        ELAPSED=0
-        DEADLINE=1320
-        echo "Re-triggered CodeRabbit (retrigger $RETRIGGER_COUNT/2). Poll clock reset."
-        continue
-        ;;
-      capped)
-        # Already used the max 2 re-triggers this run — stop asking it to
-        # review again; surface and move on with whatever we have.
-        echo "CodeRabbit re-trigger cap (2/2) reached this run. Not re-triggering again."
-        break
-        ;;
-    esac
-  fi
-
-  # Unresolved CodeRabbit threads present — go address them.
-  if [ "$UNRESOLVED" -gt 0 ]; then
-    echo "CodeRabbit left $UNRESOLVED unresolved thread(s) after $((ELAPSED / 60))min. Addressing..."
-    break
-  fi
-
-  # Terminal CodeRabbit check with zero unresolved threads — clean review.
-  case "$CR_STATE" in
-    SUCCESS|FAILURE|COMPLETED|NEUTRAL|SKIPPED|CANCELLED|TIMED_OUT|ACTION_REQUIRED)
-      echo "CodeRabbit review settled ($CR_STATE), no unresolved threads after $((ELAPSED / 60))min."
-      break
-      ;;
-  esac
-
-  echo "CodeRabbit review still pending. $((ELAPSED / 60))min elapsed."
-  if [ "$ELAPSED" -ge "$DEADLINE" ]; then break; fi
-done
+node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit --retrigger-count "$RETRIGGER_COUNT"
 ```
+
+The poller owns the backoff table (probes at 2, 4, 8, 14 and 22 min; 1320s default
+deadline). Each probe reads one `lib/pr-status.js` snapshot (GraphQL
+`unresolvedThreads` plus `rateLimit`), and the rate-limit decision comes from
+`shouldReTrigger`. It prints one line per probe. When it exits, branch on the exit
+code and the last line:
+
+- **Exit 0 (settled).** The last line gives the reason:
+  - `settled: unresolved=N`: CodeRabbit left N unresolved threads. Add them to the combined fix list.
+  - `settled: clean (...)`: the review finished with no unresolved threads. No CodeRabbit findings this cycle.
+  - `settled: retrigger`: the rate-limit reset has passed. Post the re-trigger, bump `retriggerCount`, then run the background wait above again (a fresh run resets the poll clock):
+    ```bash
+    PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
+    gh pr comment "$PR_NUMBER" --body "@coderabbitai review"
+    jq '.retriggerCount = ((.retriggerCount // 0) + 1)' .envoy/finalize/state.json > .envoy/finalize/state.json.tmp \
+      && mv .envoy/finalize/state.json.tmp .envoy/finalize/state.json
+    ```
+  - `settled: capped`: the 2 re-triggers for this run are used up. Do not re-trigger again. Proceed with whatever CodeRabbit state exists.
+- **Exit 1 (deadline).** The deadline passed with the review still pending. Report this and proceed without CodeRabbit:
+  ```
+  CodeRabbit did not comment within 22 minutes. Proceeding without CodeRabbit.
+  (CodeRabbit may not be installed, or the PR is clean.)
+  ```
+- **Exit 2 (handoff).** The rate limit resets more than 10 min out. Relay the line's `run /envoy:babysit after HH:MM` message verbatim and STOP finalize. Do not wait.
+- **Exit 3 (probe unavailable).** `pr-status.js` could not be read. Never treat this as a clean review. Re-run the background wait once. If it exits 3 again, report "CodeRabbit status unavailable" and stop for the user.
 
 **Rate-limit re-trigger cap:** at most 2 re-triggers per finalize run, tracked via
-`retriggerCount` in `.envoy/finalize/state.json`. Once capped, finalize stops
-re-triggering and proceeds with whatever CodeRabbit state it has.
-
-**If 22 minutes pass with no comments:**
-```
-CodeRabbit did not comment within 22 minutes. Proceeding without CodeRabbit.
-(CodeRabbit may not be installed, or the PR is clean.)
-```
+`retriggerCount` in `.envoy/finalize/state.json` and passed to the poller as
+`--retrigger-count`. Once capped, finalize stops re-triggering and proceeds with
+whatever CodeRabbit state it has.
 
 **3b. Diagnose CI failures (no commit/push yet — diagnosis only):**
 
-Run the CI diagnosis helper described in `steps/ci.md` (poll `gh pr checks`, classify
+Run the CI diagnosis helper described in `steps/ci.md` (wait for CI in the background via
+`lib/pr-poll.js --target ci`, read `gh pr checks`, classify
 each failure using the same classify table `envoy:fix-ci` uses — `test-failure` /
 `build-error` / `lint-violation` / `infra-issue` — and work out the fix for each).
 This is diagnosis only: do NOT commit or push here, and do NOT invoke
