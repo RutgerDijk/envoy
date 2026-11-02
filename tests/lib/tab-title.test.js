@@ -479,6 +479,42 @@ test('refresh writes nothing to stdout', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// hook profiles (hook-runner.js is the single source of truth)
+// ═══════════════════════════════════════════════════════════════════
+
+section('hook profiles');
+
+const hookRunner = require('../../hooks/hook-runner');
+
+test('tab-title is registered in HOOK_PROFILES for standard and strict only', () => {
+  assert.deepStrictEqual(hookRunner.HOOK_PROFILES['tab-title'], ['standard', 'strict']);
+});
+
+test('shouldRun accepts an injected env', () => {
+  assert.strictEqual(hookRunner.shouldRun('tab-title', { ENVOY_HOOK_PROFILE: 'minimal' }), false);
+  assert.strictEqual(hookRunner.shouldRun('tab-title', {}), true);
+  assert.strictEqual(hookRunner.shouldRun('tab-title', { ENVOY_DISABLED_HOOKS: 'foo, tab-title' }), false);
+});
+
+test('minimal profile: refresh does nothing', () => {
+  const { deps, calls } = fakeDeps({
+    env: { ...CMUX_ENV, ENVOY_HOOK_PROFILE: 'minimal' },
+    responses: { [GIT_BRANCH]: 'feature/83-x', [GH_ISSUE]: 'T', [GH_PR]: '', cmux: '' }
+  });
+  assert.strictEqual(tt.refresh(deps), null);
+  assert.strictEqual(calls.length, 0);
+});
+
+test('ENVOY_DISABLED_HOOKS=tab-title: refresh does nothing', () => {
+  const { deps, calls } = fakeDeps({
+    env: { ...CMUX_ENV, ENVOY_DISABLED_HOOKS: 'tab-title' },
+    responses: { [GIT_BRANCH]: 'feature/83-x', [GH_ISSUE]: 'T', [GH_PR]: '', cmux: '' }
+  });
+  assert.strictEqual(tt.refresh(deps), null);
+  assert.strictEqual(calls.length, 0);
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
 
