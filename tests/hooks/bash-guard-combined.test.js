@@ -152,6 +152,12 @@ const WRITE_CASES = [
   ['ls; echo {} > .eslintrc.json', '.eslintrc.json'],
   ['FOO=1 sed -i s/a/b/ .eslintrc.json', '.eslintrc.json'],
   ['sudo tee .editorconfig < /dev/null', '.editorconfig'],
+  // GNU: -i ends the cluster; the rest is the backup suffix, not -e/-f.
+  ["sed -ie 's/error/off/' .eslintrc.json", '.eslintrc.json'],
+  ["sed -if 's/error/off/' .prettierrc", '.prettierrc'],
+  ["sed -Eie 's/error/off/' biome.json", 'biome.json'],
+  // -e first: it takes the next arg as the script; -i follows separately.
+  ["sed -e 's/a/b/' -i .eslintrc.json", '.eslintrc.json'],
 ];
 
 for (const [cmd, expected] of WRITE_CASES) {
@@ -325,6 +331,30 @@ test('Edit/Write path matching is unchanged (prefix .eslintrc.bak still blocked 
   withTmp((tmp) => {
     const r = runScript(EDIT_GUARD_COMBINED, tmp, { tool_name: 'Edit', tool_input: { file_path: '/repo/.eslintrc.bak' } });
     assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+  });
+});
+
+section('targets resolve against the payload cwd, project root stays the hook cwd');
+
+test('payload cwd in a subdir: ../.eslintrc.json lands in the project and blocks', () => {
+  withTmp((tmp) => {
+    fs.mkdirSync(path.join(tmp, 'sub'));
+    const event = { ...bashEvent('echo {} > ../.eslintrc.json'), cwd: path.join(tmp, 'sub') };
+    const r = runScript(BASH_GUARD_COMBINED, tmp, event);
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+  });
+});
+
+test('payload cwd outside the project: .eslintrc.json there does not block', () => {
+  withTmp((tmp) => {
+    const outside = mkTmp();
+    try {
+      const event = { ...bashEvent('echo {} > .eslintrc.json'), cwd: outside };
+      const r = runScript(BASH_GUARD_COMBINED, tmp, event);
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
 
