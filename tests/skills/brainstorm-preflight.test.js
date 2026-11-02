@@ -167,9 +167,34 @@ test('brainstorm SKILL.md writes the approval marker before the first issue crea
   const writeAt = writeBlock.start + writeBlock.body.search(writeRe);
   const createAt = createBlock.start + createBlock.body.search(/gh issue create/);
   assert.ok(writeAt < createAt, 'marker write precedes the issue create command');
-  assert.ok(/"\\?\$schemaVersion"\s*:\s*"1"/.test(writeBlock.body), 'marker carries $schemaVersion "1"');
-  assert.ok(/"approved"\s*:\s*true/.test(writeBlock.body), 'marker carries approved: true');
-  assert.ok(/"approvedAt"/.test(writeBlock.body), 'marker carries approvedAt');
+});
+
+test('brainstorm SKILL.md marker bash block is flush-left and produces a valid marker', () => {
+  const marker = guardApprovalPath();
+  const content = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'brainstorm', 'SKILL.md'), 'utf8');
+  const fence = [...content.matchAll(/^([ \t]*)```bash\n([\s\S]*?)^[ \t]*```/gm)]
+    .find((b) => b[2].includes(`> ${marker}`));
+  assert.ok(fence, `bash block writing ${marker} found`);
+  assert.strictEqual(fence[1], '', 'marker bash block is not indented (heredoc EOF must be flush left)');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brainstorm-marker-'));
+  try {
+    execFileSync('bash', ['-c', fence[2]], { cwd: dir, encoding: 'utf8' });
+    const data = JSON.parse(fs.readFileSync(path.join(dir, marker), 'utf8'));
+    assert.strictEqual(data.$schemaVersion, '1');
+    assert.strictEqual(data.approved, true);
+    assert.ok(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(data.approvedAt), `approvedAt is ISO: ${data.approvedAt}`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('brainstorm Phase 3.5 requires explicit confirmation and re-presents after edits', () => {
+  const content = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'brainstorm', 'SKILL.md'), 'utf8');
+  const phase = content.split('### Phase 3.5')[1].split('### Phase 4')[0];
+  assert.ok(!/confirms or edits/.test(phase), 'ambiguous "confirms or edits" wording removed');
+  assert.ok(/explicitly confirms/i.test(phase), 'requires explicit confirmation');
+  assert.ok(/re-present the revised scope/i.test(phase), 're-presents the scope after an edit');
+  assert.ok(/never on an edit request/i.test(phase), 'marker is not written on an edit request alone');
 });
 
 for (const d of tmpRoots) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
