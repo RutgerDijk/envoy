@@ -2,26 +2,24 @@
 
 ### Step 9: Initialize Session State
 
-Initialize session state for cross-session continuity:
+Session state lives in `.envoy/pickup/session.json` (schema `lib/schemas/session.json`). Preflight already seeded it with every task `pending` and `branch: "unknown"`; `session.save()` validates against the schema and throws on an invalid shape. Decisions are stored as `decisions[].note` (via `session.addDecision`).
 
 ```javascript
 const session = require('../../lib/session-state');
-const state = session.exists() ? session.load() : session.createEmpty();
+const state = session.load(); // reads .envoy/pickup/session.json (preflight seed)
 
-if (state.tasks.length > 0) {
+if (state.branch === 'unknown') state.branch = currentBranch;
+for (const task of planTasks) {
+  if (!state.tasks.some(t => t.id === task.id)) session.updateTask(state, task.id, 'pending');
+}
+
+if (state.tasks.some(t => t.status !== 'pending')) {
   // Resuming — report progress
   const done = state.tasks.filter(t => t.status === 'done').length;
   console.log(`Resuming: ${done}/${state.tasks.length} tasks complete`);
-  console.log('Recent decisions:', state.decisions.slice(-3));
-} else {
-  // Fresh start
-  state.branch = currentBranch;
-  state.plan = `issue #${issueNumber}`;
-  for (const task of planTasks) {
-    session.updateTask(state, task.id, 'pending');
-  }
-  session.save(state);
+  console.log('Recent decisions:', state.decisions.slice(-3).map(d => d.note));
 }
+session.save(state);
 ```
 
 ### Step 10: Parse Issue Body for Tasks

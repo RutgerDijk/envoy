@@ -65,7 +65,7 @@ Next steps:
 2. `/envoy:finalize` — Prepare PR (clears session state)
 ```
 
-Update session state with next steps:
+Update session state (`.envoy/pickup/session.json`, schema-validated on save) with next steps:
 
 ```javascript
 const session = require('../../lib/session-state');

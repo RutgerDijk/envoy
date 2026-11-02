@@ -65,7 +65,7 @@ Override individual hooks: `export ENVOY_DISABLED_HOOKS=learning-extractor`
 
 ## Session State Restoration
 
-When `session-start.sh` runs, it checks for `.envoy-session.json` in the working directory. If found, it surfaces task progress, recent decisions, and next steps — enabling seamless continuation across context compactions and session restarts. See [[Context Efficiency]] for details.
+When `session-start.sh` runs, it checks for `.envoy/pickup/session.json` (pickup's session state, schema `lib/schemas/session.json`) in the working directory. If found, it surfaces task progress, recent decisions (`decisions[].note`), and next steps — enabling seamless continuation across context compactions and session restarts. See [[Context Efficiency]] for details.
 
 ## Cost Tracking
 

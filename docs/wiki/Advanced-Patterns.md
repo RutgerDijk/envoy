@@ -94,7 +94,7 @@ The orchestrator checks `scratchpad.getConflicts(pad)` after agents complete, be
 
 **Lib:** `lib/session-state.js`
 
-Persists task progress, decisions, files modified, and test results to `.envoy-session.json`. Survives context compaction and session restarts.
+Persists task progress, decisions (`decisions[].note`), and next steps to `.envoy/pickup/session.json`, validated against `lib/schemas/session.json` on every save. Survives context compaction and session restarts.
 
 `session-start.sh` auto-detects this file and surfaces progress (~300-500 tokens vs 10K+ cold start). `finalize` clears it when the branch ships.
 

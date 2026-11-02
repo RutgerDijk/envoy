@@ -15,24 +15,24 @@ Libraries inspired by [lean-ctx](https://github.com/yvgude/lean-ctx) that reduce
 
 ## Session State
 
-**File:** `.envoy-session.json` (gitignored, per-worktree)
+**File:** `.envoy/pickup/session.json` (gitignored, per-worktree; schema `lib/schemas/session.json`)
 
 Persists between context compactions and session restarts:
-- Current branch and plan path
+- Current branch and plan (e.g. `issue #94`)
 - Task progress (pending/in_progress/done/blocked)
-- Key decisions made during implementation
-- Files modified and why
-- Last test results
+- Key decisions made during implementation (`decisions[].note`)
 - Next steps
 
+`session.save()` validates against the schema and throws on an invalid shape, so nothing malformed reaches disk.
+
 **Lifecycle:**
-1. `pickup` creates/updates state during execution
+1. `pickup` preflight seeds the file; pickup updates it during execution
 2. `session-start.sh` detects and surfaces state on session startup (~300-500 tokens)
 3. `finalize` clears state when the branch ships
 
 ```javascript
 const session = require('../../lib/session-state');
-const state = session.load();           // Resume or create
+const state = session.load();           // Resume (preflight seed) or empty
 session.updateTask(state, 'task-1', 'done', 'Added User entity');
 session.addDecision(state, 'Used Guid PK — matches existing entities');
 session.save(state);

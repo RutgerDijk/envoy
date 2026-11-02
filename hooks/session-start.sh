@@ -90,10 +90,10 @@ DETECTED_STACKS=$(node "$PLUGIN_DIR/lib/stack-loader.js" .)
 
 # Detect session state (cross-session continuity)
 SESSION_STATE=""
-if [ -f ".envoy-session.json" ]; then
+if [ -f ".envoy/pickup/session.json" ]; then
     # Extract all fields in a single Node process
     eval "$(node -e "
-      const s=JSON.parse(require('fs').readFileSync('.envoy-session.json','utf8'));
+      const s=JSON.parse(require('fs').readFileSync('.envoy/pickup/session.json','utf8'));
       const esc=v=>(v||'').replace(/'/g,\"'\\\\''\");
       console.log('SESSION_BRANCH=\'' + esc(s.branch||'unknown') + '\'');
       console.log('SESSION_PLAN=\'' + esc(s.plan||'') + '\'');
@@ -102,13 +102,13 @@ if [ -f ".envoy-session.json" ]; then
       console.log('SESSION_UPDATED=\'' + esc(s.updatedAt||'') + '\'');
       const ns=(s.nextSteps||[]).slice(0,3).map(n=>'- '+n).join('\n');
       console.log('SESSION_NEXTSTEPS=\'' + esc(ns) + '\'');
-      const dc=(s.decisions||[]).slice(-3).map(d=>'- '+d.text).join('\n');
+      const dc=(s.decisions||[]).slice(-3).map(d=>'- '+d.note).join('\n');
       console.log('SESSION_DECISIONS=\'' + esc(dc) + '\'');
     " 2>/dev/null)"
 
     SESSION_STATE="---
 
-**Session state detected** (from \`.envoy-session.json\`, last updated: $SESSION_UPDATED)
+**Session state detected** (from \`.envoy/pickup/session.json\`, last updated: $SESSION_UPDATED)
 
 **Branch:** $SESSION_BRANCH"
 
