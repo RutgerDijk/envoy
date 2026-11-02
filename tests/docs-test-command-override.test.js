@@ -29,9 +29,17 @@ function read(rel) {
 function sectionBody(content, headingRe) {
   const m = content.match(headingRe);
   if (!m) return '';
-  const rest = content.slice(m.index + m[0].length);
-  const next = rest.search(/^## /m);
-  return next === -1 ? rest : rest.slice(0, next);
+  // Stop at the next `## ` heading OUTSIDE fenced code — the format example
+  // itself contains a `## Test Command` line.
+  const lines = content.slice(m.index + m[0].length).split('\n');
+  const out = [];
+  let inFence = false;
+  for (const line of lines) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    else if (!inFence && /^## /.test(line)) break;
+    out.push(line);
+  }
+  return out.join('\n');
 }
 
 console.log('skills/using-envoy/SKILL.md — Test Command override');
