@@ -57,6 +57,7 @@ test('documents last-step timing', () => assert.ok(/last step/i.test(doc) && /no
 test('documents readiness: unresolved threads and rate limit', () => assert.ok(/unresolved review threads/i.test(doc) && /rate.?limit/i.test(doc)));
 test('documents that unresolved threads from any reviewer (human too) block readiness', () => assert.ok(/any reviewer/i.test(doc) && /human/i.test(doc)));
 test('documents readiness: CodeRabbit status success, absent is not done', () => assert.ok(/statusState/.test(doc) && /absent/i.test(doc)));
+test('documents readiness: without a status, a completed CodeRabbit check run (checkState success, neutral or skipped) is done', () => assert.ok(/checkState[^.]*success, neutral or skipped/i.test(doc)));
 test('exit 3 maps to NOT READY / re-poll in the same clause', () => assert.ok(/(?:^|[,:] )3 NOT READY: re-poll/.test(doc)));
 test('exit 3 is no writes, never a failure or escalation', () => assert.ok(/no writes/i.test(doc) && /never a failure or escalation/i.test(doc)));
 test('exit 2 / 3 cycles wording still exists', () => assert.ok(/2 blocked after 3 cycles/.test(doc)))
