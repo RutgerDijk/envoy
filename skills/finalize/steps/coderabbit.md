@@ -66,7 +66,7 @@ code and the last line:
   (CodeRabbit may not be installed, or the PR is clean.)
   ```
 - **Exit 2 (handoff).** The rate limit resets more than 10 min out. Relay the line's `run /envoy:babysit after HH:MM` message verbatim and STOP finalize. Do not wait.
-- **Exit 3 (probe unavailable).** `pr-status.js` could not be read. Never treat this as a clean review. Re-run the background wait once. If it exits 3 again, report "CodeRabbit status unavailable" and stop for the user.
+- **Exit 3 (persistently unavailable).** `pr-status.js` failed on 3 consecutive probes (the poller already tolerates 1-2 transient failures and retries them itself), or the poller crashed. Never treat this as a clean review. Do not re-run the wait. Report "CodeRabbit status unavailable" with the poller's last line and stop for the user.
 
 **Rate-limit re-trigger cap:** at most 2 re-triggers per finalize run, tracked via
 `retriggerCount` in `.envoy/finalize/state.json` and passed to the poller as
@@ -222,6 +222,11 @@ triggers exactly one new CI run. Check both.
 **CodeRabbit — completion signal pattern (async, unchanged from before):**
 
 A settled review — not rate-limited AND zero unresolved CodeRabbit threads — must be confirmed 3 consecutive times before the loop stops; a single check could miss threads still being posted. Output `ENVOY_LOOP_COMPLETE` on each settled check; reset the counter when threads remain unresolved (or the status is rate-limited/unavailable).
+
+Space the confirmations. Before each check below, wait with one background
+`node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit --retrigger-count "$RETRIGGER_COUNT"`
+call (`run_in_background: true`; derive `PR_NUMBER` and `RETRIGGER_COUNT` from state.json as in Step 3a).
+That call is only the spacing. Whatever it returns, run the check below next. Never wait in the foreground.
 
 ```bash
 # Each step is a separate shell invocation — re-derive PR_NUMBER and PR_STATUS here.

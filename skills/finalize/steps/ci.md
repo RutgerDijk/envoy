@@ -31,9 +31,10 @@ the exit code:
   "Read CI Status" anyway. Pending checks are not failures: `FAILED` counts only
   fail/cancel, and the Step 8 re-poll picks up the rest.
 - **Exit 2 (handoff).** Only the `coderabbit` target produces this. If it ever appears here, treat it as exit 3.
-- **Exit 3 (probe unavailable).** `pr-status.js` could not be read. Re-run the background
-  wait once. If it exits 3 again, run "Read CI Status" anyway. An unreadable `gh pr checks`
-  makes `FAILED` "unknown", which fails closed (never treated as green).
+- **Exit 3 (persistently unavailable).** `pr-status.js` failed on 3 consecutive probes (the
+  poller already tolerates 1-2 transient failures and retries them itself), or the poller crashed.
+  Do not re-run the wait. Report the poller's last line, then run "Read CI Status" anyway. An
+  unreadable `gh pr checks` makes `FAILED` "unknown", which fails closed (never treated as green).
 
 ### Read CI Status (after the wait)
 
@@ -112,9 +113,11 @@ Exit codes: 0 = rerun triggered (re-poll CI); 1 = report only, do not loop; if t
 **Bounded re-poll for exit 3 and exit 1:** there is no real "next pass" inside one finalize session, so
 re-poll at most 3 polls. Space each one with one background `pr-poll.js` call (`run_in_background: true`), then
 re-run the snapshot and this step. Pick the target from the NOT READY reason. If it names CodeRabbit, use
-`node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit`, whose first probe always
-waits 120s. Otherwise use the CI wait above. When only the gate is red, a `--target ci` wait settles at once
-and would not space the re-polls. If it is still exit 3 or 1 after the 3rd poll, end the CI step with this STATUS REPORT line and continue
+`node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit --retrigger-count "$RETRIGGER_COUNT"`
+(`RETRIGGER_COUNT=$(jq -r '.retriggerCount // 0' .envoy/finalize/state.json 2>/dev/null || echo 0)`), whose first
+probe always waits 120s. Otherwise use the CI wait above. When only the gate is red, a `--target ci` wait settles
+at once and would not space the re-polls. Here any exit code or settle reason from the poller only counts as spacing.
+Ignore it and re-read the snapshot. If it is still exit 3 or 1 after the 3rd poll, end the CI step with this STATUS REPORT line and continue
 to finalize's remaining steps:
 
 ```
