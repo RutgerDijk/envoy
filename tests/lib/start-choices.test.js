@@ -132,6 +132,14 @@ test('recommended issue already in the top 3 is not added twice', () => {
   assert.strictEqual(opts.length, 3);
 });
 
+test('an in-progress recommended issue (all issues in flight) is not re-added as Pickup/Brainstorm', () => {
+  const s = snapshot();
+  s.issues = s.issues.map((i) => ({ ...i, inProgress: true }));
+  s.ranking = s.ranking.filter((r) => r.kind !== 'issue');
+  const opts = choices.buildOptions(s);
+  assert.deepStrictEqual(opts.filter((o) => o.kind === 'issue'), []);
+});
+
 test('worktree label uses issue title with Dutch verb; cleanup uses branch', () => {
   const s = snapshot({ prs: [] });
   s.ranking = s.ranking.filter((r) => r.kind !== 'pr');
