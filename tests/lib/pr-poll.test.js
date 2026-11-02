@@ -260,6 +260,19 @@ test('failure, success, failure, failure -> no exit 3 (success resets the counte
   assert.strictEqual(h.probes, 5);
 });
 
+test('no probe ever succeeded and the deadline is reached -> exit 3, not 1', async () => {
+  const h = harness([new Error('blip')]);
+  const code = await poll({ pr: 7, target: 'ci', deadlineSec: 30, ...h.deps });
+  assert.strictEqual(h.probes, 2, 'probe at 0s and at the 30s deadline');
+  assert.strictEqual(code, 3);
+});
+
+test('a failed probe at the deadline after an earlier success still exits 1', async () => {
+  const h = harness([ciSnap(['PENDING']), new Error('blip')]);
+  const code = await poll({ pr: 7, target: 'ci', deadlineSec: 30, ...h.deps });
+  assert.strictEqual(code, 1);
+});
+
 test('getSnapshot returns null persistently -> exit 3 (never misread as clean)', async () => {
   const h = harness([null]);
   const code = await poll({ pr: 7, target: 'ci', ...h.deps });

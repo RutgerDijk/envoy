@@ -139,6 +139,29 @@ test('Step 8 spaces each of the 3 confirmations with a background pr-poll codera
   assert.ok(/run_in_background: true/.test(para));
 });
 
+test('both spacing calls pass a short --deadline so a missing CodeRabbit cannot hold them for 22 minutes', () => {
+  const step8 = md.slice(md.indexOf('### Step 8'));
+  const s8 = step8.slice(step8.indexOf('confirmed 3 consecutive'), step8.indexOf('```bash', step8.indexOf('confirmed 3 consecutive')));
+  const repoll = ciMd.slice(ciMd.indexOf('**Bounded re-poll'), ciMd.indexOf('ready except full-suite run'));
+  for (const [name, sec] of [['coderabbit.md Step 8', s8], ['ci.md bounded re-poll', repoll]]) {
+    assert.ok(/pr-poll\.js[^`]*--target coderabbit[^`]*--deadline 180/.test(sec), `${name} spacing call must pass --deadline 180`);
+  }
+});
+
+test('finalize SKILL.md frontmatter does not use context: fork (background waits need the main session)', () => {
+  const skill = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'finalize', 'SKILL.md'), 'utf8');
+  const fm = (skill.match(/^---\n([\s\S]*?)\n---/) || [])[1] || '';
+  assert.ok(fm.length > 0, 'SKILL.md must have frontmatter');
+  assert.ok(!/^context:\s*fork/m.test(fm), 'finalize must not fork: a forked skill is not reliably re-invoked when its run_in_background call exits');
+});
+
+test('CLAUDE.md mentions context: fork only for review and says why finalize does not fork', () => {
+  const claude = fs.readFileSync(path.join(REPO_ROOT, 'CLAUDE.md'), 'utf8');
+  const line = claude.split('\n').find((l) => l.includes('`context: fork`')) || '';
+  assert.ok(/\(review\)/.test(line), 'context: fork bullet must list only review');
+  assert.ok(/finalize/.test(line) && /background/i.test(line) && /main session/i.test(line), 'must explain finalize waits via background Bash and needs the main session');
+});
+
 test('coderabbit.md polls --target coderabbit; ci.md polls --target ci', () => {
   assert.ok(/--target coderabbit/.test(md));
   assert.ok(/--target ci/.test(ciMd));
