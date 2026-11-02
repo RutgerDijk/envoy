@@ -226,6 +226,23 @@ test('old session on the default branch is dropped; recent one is kept', async (
   }
 });
 
+test('indexed session uses the transcript mtime, not a stale sessions-index modified', async () => {
+  const fx = makeFixture();
+  try {
+    const file = writeTranscript(fx, fx.repoRoot, 'idx-main', { branch: 'main', modified: daysAgo(1) });
+    fs.writeFileSync(path.join(path.dirname(file), 'sessions-index.json'), JSON.stringify({
+      entries: [{ sessionId: 'idx-main', fullPath: file, summary: 'indexed', modified: daysAgo(20).toISOString(), gitBranch: 'main' }],
+    }));
+    const snap = await ss.collect(fx.opts);
+    const main = snap.worktrees.find((w) => w.path === fx.repoRoot);
+    const s = main.sessions.find((x) => x.sessionId === 'idx-main');
+    assert.ok(s, 'fresh transcript must be kept despite a 20-day-old index entry');
+    assert.strictEqual(s.modified, daysAgo(1).toISOString());
+  } finally {
+    fx.cleanup();
+  }
+});
+
 test('old session whose branch is alive (open PR) is kept', async () => {
   const fx = makeFixture({
     worktrees: [{ dir: '20-bar', branch: 'feature/20-bar' }],
