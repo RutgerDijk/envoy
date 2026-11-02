@@ -1,0 +1,56 @@
+{
+  "skill": "brainstorm",
+  "scenarios": [
+    {
+      "name": "no issue ref → ok, new-issue mode (unchanged)",
+      "setup": { "files": {} },
+      "env": { "ENVOY_GH_AUTH_STATUS_FAKE": "ok" },
+      "expected": {
+        "status": "ok",
+        "stdout_matches": "Phase 1",
+        "artifacts_missing": [".envoy/brainstorm/session.json"]
+      }
+    },
+    {
+      "name": "existing open issue #82 → ok, MODE: existing-issue; duplicate-create guard armed",
+      "setup": {
+        "files": {
+          "issue-view.json": "{\"number\":82,\"title\":\"Session dashboard should show stale worktrees\",\"body\":\"Original problem statement.\",\"state\":\"OPEN\",\"labels\":[]}"
+        }
+      },
+      "env": { "ENVOY_GH_AUTH_STATUS_FAKE": "ok", "ENVOY_BRAINSTORM_ISSUE": "#82", "ENVOY_GH_ISSUE_VIEW_FILE": "issue-view.json" },
+      "expected": {
+        "status": "ok",
+        "stdout_matches": "MODE: existing-issue #82",
+        "artifacts_created": [".envoy/brainstorm/session.json"]
+      }
+    },
+    {
+      "name": "existing issue is closed → fatal",
+      "setup": {
+        "files": {
+          "issue-view.json": "{\"number\":82,\"title\":\"Old idea\",\"body\":\"x\",\"state\":\"CLOSED\",\"labels\":[]}"
+        }
+      },
+      "env": { "ENVOY_GH_AUTH_STATUS_FAKE": "ok", "ENVOY_BRAINSTORM_ISSUE": "82", "ENVOY_GH_ISSUE_VIEW_FILE": "issue-view.json" },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "closed",
+        "artifacts_missing": [".envoy/brainstorm/session.json"]
+      }
+    },
+    {
+      "name": "existing issue already has an envoy tasks block → fatal, use pickup",
+      "setup": {
+        "files": {
+          "issue-view.json": "{\"number\":82,\"title\":\"Planned\",\"body\":\"x\\n\\n<!-- envoy:tasks:begin -->\\n```json\\n{\\\"tasks\\\":[]}\\n```\\n<!-- envoy:tasks:end -->\",\"state\":\"OPEN\",\"labels\":[]}"
+        }
+      },
+      "env": { "ENVOY_GH_AUTH_STATUS_FAKE": "ok", "ENVOY_BRAINSTORM_ISSUE": "#82", "ENVOY_GH_ISSUE_VIEW_FILE": "issue-view.json" },
+      "expected": {
+        "status": "fatal",
+        "stdout_matches": "/envoy:pickup 82"
+      }
+    }
+  ]
+}
