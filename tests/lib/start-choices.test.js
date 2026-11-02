@@ -157,6 +157,19 @@ test('cleanup description says why: PR merged vs stale idle days', () => {
   assert.match(opts[1].description, /stale, idle 40 days/);
 });
 
+test('hervat description of a stale worktree mentions it is stale', () => {
+  const s = snapshot({ prs: [] });
+  s.worktrees.push({ path: '/repo/.worktrees/60-sw', branch: 'feature/60-stale-work', issue: null, ahead: 1, dirty: false,
+    idleDays: 115, stale: true, sessions: [] });
+  s.ranking = [
+    { kind: 'worktree', ref: 'feature/83-koppel', label: 'feature/83-koppel', action: 'hervat' },
+    { kind: 'worktree', ref: 'feature/60-stale-work', label: 'feature/60-stale-work', action: 'hervat' },
+  ];
+  const opts = choices.buildOptions(s);
+  assert.doesNotMatch(opts[0].description, /stale/);
+  assert.match(opts[1].description, /1 commits? ahead, idle 115d \(stale\)/);
+});
+
 test('labels are capped at 60 chars', () => {
   const s = snapshot();
   s.issues[1].title = 'x'.repeat(200);

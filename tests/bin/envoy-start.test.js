@@ -483,6 +483,43 @@ test('below MIN_WIDTH (30) tables stay aligned', () => {
   }
 });
 
+test('NEXT STEP prefers next.display over the raw label', () => {
+  const snap = fixture();
+  snap.next = { kind: 'worktree', ref: 'feature/93-start-dashboard', label: 'feature/93-start-dashboard', display: '#93 · Start dashboard', action: 'hervat' };
+  const line = strip(mod.render(snap, { width: 120 })).split('\n').find((l) => l.startsWith('NEXT STEP'));
+  assert.match(line, /NEXT STEP\s+hervat\s+#93 · Start dashboard$/);
+  assert.ok(!line.includes('feature/93-start-dashboard'), line);
+});
+
+for (const color of [true, false]) {
+  test(`long NEXT STEP line is truncated to the width with an ellipsis (color ${color})`, () => {
+    const snap = fixture();
+    snap.next = { kind: 'pr', ref: 101, label: 'x', display: `PR #101 · ${'very long title '.repeat(10)}\x1b[31mend`, action: 'hervat' };
+    const raw = mod.render(snap, { width: 60, color }).split('\n').find((l) => strip(l).startsWith('NEXT STEP'));
+    assert.ok(mod.visibleWidth(raw) <= 60, `visible width ${mod.visibleWidth(raw)} > 60`);
+    assert.ok(strip(raw).endsWith('…'), strip(raw));
+    assert.ok(!/[\x00-\x1f\x7f-\x9f]/.test(strip(raw).replace(/\x1b\[[0-9;]*m/g, '')), 'control char leaked');
+  });
+}
+
+test('stale worktree with work shows hervat and a stale marker in the Idle cell, aligned', () => {
+  const snap = fixture();
+  snap.worktrees.push({ path: '/repo/.worktrees/60-sw', branch: 'feature/60-stale-work', issue: 60, ahead: 1, dirty: false,
+    lastActivityAt: '2026-07-08T09:00:00.000Z', idleDays: 115, stale: true, pr: null, action: 'hervat', sessions: [] });
+  const rows = dataRows(tables(mod.render(snap, { width: 140 }))[1]);
+  const row = rows.find((r) => r[0] === 'feature/60-stale-work');
+  assert.strictEqual(row[4], '115d stale');
+  assert.strictEqual(row[row.length - 1], 'hervat');
+  const cleanupRow = rows.find((r) => r[0] === 'fix/12-old-thing');
+  assert.strictEqual(cleanupRow[4], '91d');
+  for (const width of [140, 80, 60]) {
+    for (const t of tables(mod.render(snap, { width }))) {
+      const widths = t.map((l) => mod.visibleWidth(l));
+      assert.ok(widths.every((w) => w === widths[0]), `misaligned at ${width}: ${widths.join(',')}`);
+    }
+  }
+});
+
 test('next.label null renders as empty, not "null"', () => {
   const snap = fixture();
   snap.next = { kind: 'pr', ref: 101, label: null, action: 'hervat' };

@@ -636,12 +636,13 @@ test('without plan issues, lowest number is recommended', async () => {
 
 section('ranking');
 
-test('order: attention PR > worktree with work > brainstorm > plan issue > issue > stale cleanup', async () => {
+test('order: attention PR > fresh worktree with work > stale worktree with work > brainstorm > plan issue > issue > cleanup', async () => {
   const fx = makeFixture({
     worktrees: [
+      { dir: '72-stale', branch: 'feature/72-stale', ahead: 5, lastCommit: daysAgo(60) },
       { dir: '70-work', branch: 'feature/70-work', ahead: 2, lastCommit: daysAgo(1) },
       { dir: '71-idle', branch: 'feature/71-idle', ahead: 0, lastCommit: daysAgo(1) },
-      { dir: '72-stale', branch: 'feature/72-stale', ahead: 5, lastCommit: daysAgo(60) },
+      { dir: '73-empty', branch: 'feature/73-empty', ahead: 0, lastCommit: daysAgo(60) },
     ],
     prs: [
       { number: 8, title: 'Red PR', headRefName: 'feature/80-red', url: '' },
@@ -662,10 +663,11 @@ test('order: attention PR > worktree with work > brainstorm > plan issue > issue
     assert.deepStrictEqual(seq, [
       'pr:8:hervat',
       'worktree:feature/70-work:hervat',
+      'worktree:feature/72-stale:hervat',
       'brainstorm:bs-r:hervat',
       'issue:91:pickup',
       'issue:90:brainstorm',
-      'worktree:feature/72-stale:cleanup',
+      'worktree:feature/73-empty:cleanup',
     ]);
     for (const r of snap.ranking) assert.ok(typeof r.label === 'string' && r.label.length > 0);
     assert.deepStrictEqual(snap.next, snap.ranking[0]);
@@ -989,6 +991,57 @@ test('worktree action: open PR → null (even when stale), stale → cleanup, wo
     assert.strictEqual(by['feature/82-work'].action, 'hervat');
     assert.strictEqual(by['feature/83-idle'].action, null);
     assert.strictEqual(by['main'].action, null);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('stale worktree with unmerged commits and no PR: hervat, stays stale, not cleanup', async () => {
+  const fx = makeFixture({
+    worktrees: [
+      { dir: '60-stale-work', branch: 'feature/60-stale-work', ahead: 1, lastCommit: daysAgo(115) },
+      { dir: '61-stale-dirty', branch: 'feature/61-stale-dirty', ahead: 0, dirty: true, lastCommit: daysAgo(115) },
+      { dir: '62-stale-empty', branch: 'feature/62-stale-empty', ahead: 0, lastCommit: daysAgo(115) },
+    ],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const by = Object.fromEntries(snap.worktrees.map((w) => [w.branch, w]));
+    assert.strictEqual(by['feature/60-stale-work'].stale, true);
+    assert.strictEqual(by['feature/60-stale-work'].action, 'hervat');
+    assert.strictEqual(by['feature/61-stale-dirty'].stale, true);
+    assert.strictEqual(by['feature/61-stale-dirty'].action, 'hervat');
+    assert.strictEqual(by['feature/62-stale-empty'].action, 'cleanup');
+    const cleanups = snap.ranking.filter((r) => r.action === 'cleanup').map((r) => r.ref);
+    assert.deepStrictEqual(cleanups, ['feature/62-stale-empty']);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('ranking items carry a display label: #N · issue title, PR #N · title, else the label', async () => {
+  const fx = makeFixture({
+    worktrees: [
+      { dir: '93-start', branch: 'feature/93-envoystart-session-dashboard-with-resume', ahead: 3 },
+      { dir: '94-gone', branch: 'feature/94-closed-issue', ahead: 1 },
+      { dir: 'spike', branch: 'spike/no-issue', ahead: 1 },
+    ],
+    prs: [{ number: 91, title: 'Red PR title', headRefName: 'feature/80-red', url: '' }],
+    snapshots: { 91: { ci: { state: 'FAILURE' }, threads: { unresolved: 0 } } },
+    issues: [
+      { number: 93, title: '/envoy:start session dashboard', body: '', labels: [], url: '' },
+      { number: 5, title: 'Free issue', body: '', labels: [], url: '' },
+    ],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const by = Object.fromEntries(snap.ranking.map((r) => [`${r.kind}:${r.ref}`, r]));
+    assert.strictEqual(by['pr:91'].display, 'PR #91 · Red PR title');
+    assert.strictEqual(by['worktree:feature/93-envoystart-session-dashboard-with-resume'].display, '#93 · /envoy:start session dashboard');
+    assert.strictEqual(by['worktree:feature/94-closed-issue'].display, 'feature/94-closed-issue');
+    assert.strictEqual(by['worktree:spike/no-issue'].display, 'spike/no-issue');
+    assert.strictEqual(by['issue:5'].display, '#5 · Free issue');
+    assert.strictEqual(snap.next.display, 'PR #91 · Red PR title');
   } finally {
     fx.cleanup();
   }
