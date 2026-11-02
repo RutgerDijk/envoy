@@ -245,7 +245,9 @@ function render(snapshot, opts = {}) {
 
   const worktrees = (snap.worktrees || []).map((w) => {
     const issue = w.issue == null ? none() : numLink(w.issue, repoUrl ? `${repoUrl}/issues/${w.issue}` : null);
-    const idle = w.idleDays == null ? none() : [{ t: `${w.idleDays}d`, s: w.stale ? '31' : '2' }];
+    let idle = w.idleDays == null ? none() : [{ t: `${w.idleDays}d`, s: w.stale ? '31' : '2' }];
+    // Stale but still has work: resumable, so flag staleness next to the idle days.
+    if (w.idleDays != null && w.stale && w.action === 'hervat') idle = [...idle, { t: ' stale', s: '2' }];
     const sessions = (w.sessions || []).length;
     return [
       w.branch || dim('(detached)'),
@@ -286,11 +288,16 @@ function render(snapshot, opts = {}) {
     table('Open issues', ['Issue', 'Title', 'Plan', 'Action'], issues, { ...t, placeholder: 'no open issues' }),
   ];
 
+  // NEXT STEP: collector `display` (issue/PR title) preferred over the raw label;
+  // the whole line is truncated to the render width.
   const next = snap.next;
   const verb = next && VERBS.has(next.action) ? next.action : null;
-  const nextLine = next
-    ? `${paint('NEXT STEP', '1;36', null, color)}  ${verb ? paint(verb, ACTION_STYLE[verb], null, color) : paint(DASH, '2', null, color)}  ${paint(clean(next.label), '1', null, color)}`
-    : `${paint('NEXT STEP', '1;36', null, color)}  ${paint(`nothing open ${DASH} run /envoy:brainstorm`, '2', null, color)}`;
+  const head = { t: 'NEXT STEP', s: '1;36' };
+  const nextSegs = next
+    ? [head, { t: '  ' }, verb ? { t: verb, s: ACTION_STYLE[verb] } : { t: DASH, s: '2' }, { t: '  ' },
+      { t: next.display || next.label || '', s: '1' }]
+    : [head, { t: '  ' }, { t: `nothing open ${DASH} run /envoy:brainstorm`, s: '2' }];
+  const nextLine = fitCell(nextSegs, Math.min(width, cellWidth(nextSegs)), color);
 
   return parts.join('\n\n') + '\n\n' + nextLine + '\n';
 }
