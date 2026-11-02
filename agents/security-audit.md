@@ -1,3 +1,8 @@
+---
+name: security-audit
+description: Security auditor agent. Use before deployment or when reviewing changes that touch auth, input handling, secrets, data access, or dependencies — audits against the OWASP Top 10 and reports vulnerabilities with severity and fixes.
+---
+
 # Security Audit Agent
 
 ## Purpose
