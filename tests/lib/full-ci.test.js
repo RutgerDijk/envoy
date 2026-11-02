@@ -313,6 +313,21 @@ test('a real pr-status buildSnapshot of a ready PR is ready (no hand-built snaps
   assert.strictEqual(fullCi.notReadyReason(real, true), null);
 });
 
+test('a real pr-status buildSnapshot with only a successful CodeRabbit check run is ready', () => {
+  const prStatus = require(path.join(__dirname, '..', '..', 'lib', 'pr-status.js'));
+  const real = prStatus.buildSnapshot({
+    pr: 7,
+    ci: { state: 'FAILURE', checks: [], fullSuiteSkipped: true, fullSuiteOwed: true, pinned: true },
+    coderabbitCheckState: 'success',
+    coderabbitStatusState: null,
+    reviewThreads: { nodes: [] },
+    rateLimitCommentBody: null,
+    reviewers: [],
+    lastActivityAt: null,
+  });
+  assert.strictEqual(fullCi.notReadyReason(real, true), null);
+});
+
 test('snapshot reader receives the PR number; read error is exit 1 and never writes', () => {
   const gh = fakeGh();
   let seen;
@@ -333,6 +348,17 @@ notReady('auto with .coderabbit.yaml present, status absent', snap({ coderabbit:
   { env: {}, exists: (f) => f === '/repo/.coderabbit.yaml' });
 notReady('auto with .coderabbit.yml present, status absent', snap({ coderabbit: { statusState: null } }), /absent/i,
   { env: { ENVOY_CODERABBIT: 'auto' }, exists: (f) => f === '/repo/.coderabbit.yml' });
+
+notReady('CodeRabbit on, no status, check run in progress', snap({ coderabbit: { statusState: null, checkState: 'IN_PROGRESS' } }), /CodeRabbit check is in_progress/i, crOn);
+notReady('CodeRabbit on, no status, check run failure', snap({ coderabbit: { statusState: null, checkState: 'failure' } }), /CodeRabbit check is failure/i, crOn);
+notReady('CodeRabbit on, status pending wins over a successful check run', snap({ coderabbit: { statusState: 'pending', checkState: 'success' } }), /status is pending/i, crOn);
+
+for (const done of ['SUCCESS', 'neutral', 'skipped']) {
+  test(`CodeRabbit on, no status, check run ${done}: proceeds, exit 0`, () => {
+    const res = go({ pr: 7, gh: fakeGh(), cwd: tmp(), ...crOn, snapshot: () => snap({ coderabbit: { statusState: null, checkState: done } }) });
+    assert.strictEqual(res.code, 0, res.message);
+  });
+}
 
 test('CodeRabbit on, success (any case): proceeds, exit 0', () => {
   const gh = fakeGh();
