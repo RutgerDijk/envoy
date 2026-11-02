@@ -63,7 +63,7 @@ function fixture() {
       { path: '/repo/.worktrees/93-start', branch: 'feature/93-start-dashboard', issue: 93, ahead: 4, dirty: true, lastActivityAt: '2026-10-31T09:00:00.000Z', idleDays: 0, stale: false, action: 'hervat',
         sessions: [{ sessionId: 's1', summary: 'x', modified: '2026-10-31T09:00:00.000Z', cwd: '/repo/.worktrees/93-start', gitBranch: 'feature/93-start-dashboard' },
           { sessionId: 's2', summary: 'y', modified: '2026-10-30T09:00:00.000Z', cwd: null, gitBranch: 'unknown' }] },
-      { path: '/repo/.worktrees/12-old', branch: 'fix/12-old-thing', issue: 12, ahead: 0, dirty: false, lastActivityAt: '2026-08-01T09:00:00.000Z', idleDays: 91, stale: true, action: 'cleanup', sessions: [] },
+      { path: '/repo/.worktrees/12-old', branch: 'fix/12-old-thing', issue: 12, ahead: 0, dirty: false, lastActivityAt: '2026-08-01T09:00:00.000Z', idleDays: 91, stale: true, merged: true, action: 'cleanup', sessions: [] },
     ],
     prs: [
       { number: 101, title: 'feat: start dashboard', url: `${REPO}/pull/101`, branch: 'feature/93-start-dashboard', issue: 93, ci: 'failure', unresolved: 2, needsAttention: true },
@@ -275,7 +275,7 @@ test('Action verbs stay whole at narrow widths (split pane)', () => {
   }
 });
 
-test('worktree actions: hervat when ahead/dirty, cleanup when stale, — otherwise', () => {
+test('worktree actions from the collector: hervat, cleanup (merged), — otherwise', () => {
   const rows = dataRows(tables(mod.render(fixture(), { width: 140 }))[1]);
   const byBranch = Object.fromEntries(rows.map((r) => [r[0], r[r.length - 1]]));
   assert.strictEqual(byBranch['main'], '—');
@@ -518,6 +518,27 @@ test('stale worktree with work shows hervat and a stale marker in the Idle cell,
       assert.ok(widths.every((w) => w === widths[0]), `misaligned at ${width}: ${widths.join(',')}`);
     }
   }
+});
+
+test('unknown ahead/dirty (null) render as a dimmed ?, not 0/no', () => {
+  const snap = fixture();
+  snap.worktrees.push({ path: '/repo/.worktrees/40-u', branch: 'feature/40-unknown', issue: 40, ahead: null, dirty: null,
+    lastActivityAt: '2026-10-30T09:00:00.000Z', idleDays: 1, stale: false, pr: null, action: null, sessions: [] });
+  const t = tables(mod.render(snap, { width: 140 }))[1];
+  const row = dataRows(t).find((r) => r[0] === 'feature/40-unknown');
+  assert.strictEqual(row[2], '?');
+  assert.strictEqual(row[3], '?');
+  const raw = t.find((l) => strip(l).includes('feature/40-unknown'));
+  assert.ok(/\x1b\[2m\?/.test(raw), 'expected ? to be dimmed');
+});
+
+test('stale worktree without work shows — with a stale marker', () => {
+  const snap = fixture();
+  snap.worktrees.push({ path: '/repo/.worktrees/62-se', branch: 'feature/62-stale-empty', issue: 62, ahead: 0, dirty: false,
+    lastActivityAt: '2026-07-08T09:00:00.000Z', idleDays: 115, stale: true, pr: null, action: null, sessions: [] });
+  const row = dataRows(tables(mod.render(snap, { width: 140 }))[1]).find((r) => r[0] === 'feature/62-stale-empty');
+  assert.strictEqual(row[4], '115d stale');
+  assert.strictEqual(row[row.length - 1], '—');
 });
 
 test('next.label null renders as empty, not "null"', () => {

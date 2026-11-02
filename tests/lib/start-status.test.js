@@ -93,8 +93,20 @@ function makeFixture(spec = {}) {
       return 'deadbeef\n';
     }
     const w = worktrees.find((x) => x.path === cwd) || {};
-    if (a.startsWith('rev-list --count')) return `${w.ahead || 0}\n`;
-    if (a.includes('status --porcelain')) return w.dirty ? ' M file.js\n' : '';
+    if (a === 'rev-parse HEAD') return `${w.head || 'abc123'}\n`;
+    if (a.startsWith('merge-base --is-ancestor HEAD ')) {
+      // exit 0 when HEAD is an ancestor; otherwise git exits non-zero (1, or 128 for an unknown oid)
+      if ((w.ancestorOf || []).includes(args[3])) return '';
+      throw new Error('not an ancestor');
+    }
+    if (a.startsWith('rev-list --count')) {
+      if (w.aheadThrows) throw new Error('git timed out');
+      return `${w.ahead || 0}\n`;
+    }
+    if (a.includes('status --porcelain')) {
+      if (w.statusThrows) throw new Error('git timed out');
+      return w.dirty ? ' M file.js\n' : '';
+    }
     if (a.startsWith('log -1')) return `${(w.lastCommit || NOW).toISOString()}\n`;
     return '';
   };
@@ -653,14 +665,16 @@ test('without plan issues, lowest number is recommended', async () => {
 
 section('ranking');
 
-test('order: attention PR > fresh worktree with work > stale worktree with work > brainstorm > plan issue > issue > cleanup', async () => {
+test('order: attention PR > fresh worktree with work > stale worktree with work > brainstorm > plan issue > issue > merged cleanup', async () => {
   const fx = makeFixture({
     worktrees: [
       { dir: '72-stale', branch: 'feature/72-stale', ahead: 5, lastCommit: daysAgo(60) },
       { dir: '70-work', branch: 'feature/70-work', ahead: 2, lastCommit: daysAgo(1) },
       { dir: '71-idle', branch: 'feature/71-idle', ahead: 0, lastCommit: daysAgo(1) },
       { dir: '73-empty', branch: 'feature/73-empty', ahead: 0, lastCommit: daysAgo(60) },
+      { dir: '74-merged', branch: 'feature/74-merged', ahead: 3, head: 'm74' },
     ],
+    mergedPrs: [{ number: 75, headRefName: 'feature/74-merged', headRefOid: 'm74' }],
     prs: [
       { number: 8, title: 'Red PR', headRefName: 'feature/80-red', url: '' },
       { number: 9, title: 'Green PR', headRefName: 'feature/81-green', url: '' },
@@ -684,7 +698,7 @@ test('order: attention PR > fresh worktree with work > stale worktree with work 
       'brainstorm:bs-r:hervat',
       'issue:91:pickup',
       'issue:90:brainstorm',
-      'worktree:feature/73-empty:cleanup',
+      'worktree:feature/74-merged:cleanup',
     ]);
     for (const r of snap.ranking) assert.ok(typeof r.label === 'string' && r.label.length > 0);
     assert.deepStrictEqual(snap.next, snap.ranking[0]);
@@ -989,7 +1003,7 @@ test('main worktree is never ranked, even when dirty', async () => {
   }
 });
 
-test('worktree action: open PR → null (even when stale), stale → cleanup, work → hervat, else null', async () => {
+test('worktree action: open PR → null (even when stale), stale-empty → null, work → hervat, else null', async () => {
   const fx = makeFixture({
     worktrees: [
       { dir: '80-pr', branch: 'feature/80-pr', ahead: 5, lastCommit: daysAgo(40) },
@@ -1004,7 +1018,8 @@ test('worktree action: open PR → null (even when stale), stale → cleanup, wo
     const by = Object.fromEntries(snap.worktrees.map((w) => [w.branch, w]));
     assert.strictEqual(by['feature/80-pr'].action, null);
     assert.strictEqual(by['feature/80-pr'].pr, 8);
-    assert.strictEqual(by['feature/81-old'].action, 'cleanup');
+    assert.strictEqual(by['feature/81-old'].stale, true);
+    assert.strictEqual(by['feature/81-old'].action, null);
     assert.strictEqual(by['feature/82-work'].action, 'hervat');
     assert.strictEqual(by['feature/83-idle'].action, null);
     assert.strictEqual(by['main'].action, null);
@@ -1013,7 +1028,7 @@ test('worktree action: open PR → null (even when stale), stale → cleanup, wo
   }
 });
 
-test('stale worktree with unmerged commits and no PR: hervat, stays stale, not cleanup', async () => {
+test('stale worktree without a merged PR is never cleanup: work → hervat, empty → null', async () => {
   const fx = makeFixture({
     worktrees: [
       { dir: '60-stale-work', branch: 'feature/60-stale-work', ahead: 1, lastCommit: daysAgo(115) },
@@ -1028,9 +1043,10 @@ test('stale worktree with unmerged commits and no PR: hervat, stays stale, not c
     assert.strictEqual(by['feature/60-stale-work'].action, 'hervat');
     assert.strictEqual(by['feature/61-stale-dirty'].stale, true);
     assert.strictEqual(by['feature/61-stale-dirty'].action, 'hervat');
-    assert.strictEqual(by['feature/62-stale-empty'].action, 'cleanup');
-    const cleanups = snap.ranking.filter((r) => r.action === 'cleanup').map((r) => r.ref);
-    assert.deepStrictEqual(cleanups, ['feature/62-stale-empty']);
+    assert.strictEqual(by['feature/62-stale-empty'].stale, true);
+    assert.strictEqual(by['feature/62-stale-empty'].action, null);
+    assert.deepStrictEqual(snap.ranking.filter((r) => r.action === 'cleanup'), []);
+    assert.ok(!snap.ranking.some((r) => r.ref === 'feature/62-stale-empty'), 'stale-empty is not ranked');
   } finally {
     fx.cleanup();
   }
@@ -1064,10 +1080,10 @@ test('ranking items carry a display label: #N · issue title, PR #N · title, el
   }
 });
 
-test('worktree whose PR is merged gets cleanup (not hervat), ranked in the cleanup bucket', async () => {
+test('worktree whose PR is merged at its HEAD gets cleanup (not hervat), ranked in the cleanup bucket', async () => {
   const fx = makeFixture({
-    worktrees: [{ dir: '91-done', branch: 'feature/91-done', ahead: 9 }],
-    mergedPrs: [{ number: 92, headRefName: 'feature/91-done' }],
+    worktrees: [{ dir: '91-done', branch: 'feature/91-done', ahead: 9, head: 'm92' }],
+    mergedPrs: [{ number: 92, headRefName: 'feature/91-done', headRefOid: 'm92' }],
     issues: [{ number: 5, title: 'next', body: '', labels: [], url: '' }],
   });
   try {
@@ -1116,14 +1132,120 @@ test('merged PR lookup failing is fail-soft: worktree keeps its normal action', 
 
 test('merged PR but uncommitted changes: hervat, never cleanup (would lose work)', async () => {
   const fx = makeFixture({
-    worktrees: [{ dir: '91-done', branch: 'feature/91-done', ahead: 9, dirty: true }],
-    mergedPrs: [{ number: 92, headRefName: 'feature/91-done' }],
+    worktrees: [{ dir: '91-done', branch: 'feature/91-done', ahead: 9, dirty: true, head: 'm92' }],
+    mergedPrs: [{ number: 92, headRefName: 'feature/91-done', headRefOid: 'm92' }],
   });
   try {
     const snap = await ss.collect(fx.opts);
     const w = snap.worktrees.find((x) => x.branch === 'feature/91-done');
     assert.strictEqual(w.merged, true);
     assert.strictEqual(w.action, 'hervat');
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('merged PR lookup asks gh for headRefOid', async () => {
+  const calls = [];
+  const fx = makeFixture();
+  const gh = fx.opts.gh;
+  try {
+    await ss.collect({ ...fx.opts, gh: (args, cwd) => { calls.push(args.join(' ')); return gh(args, cwd); } });
+    const merged = calls.find((c) => c.includes('--state merged'));
+    assert.ok(merged && /headRefOid/.test(merged), merged);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('merged PR whose head HEAD is an ancestor of gets cleanup', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '91-done', branch: 'feature/91-done', ahead: 4, head: 'h-old', ancestorOf: ['m92'] }],
+    mergedPrs: [{ number: 92, headRefName: 'feature/91-done', headRefOid: 'm92' }],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    assert.strictEqual(snap.worktrees.find((x) => x.branch === 'feature/91-done').action, 'cleanup');
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('follow-up commits after a merged PR: hervat, not cleanup', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '91-done', branch: 'feature/91-done', ahead: 10, head: 'h-followup' }],
+    mergedPrs: [{ number: 92, headRefName: 'feature/91-done', headRefOid: 'm92' }],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const w = snap.worktrees.find((x) => x.branch === 'feature/91-done');
+    assert.strictEqual(w.merged, true);
+    assert.strictEqual(w.action, 'hervat');
+    assert.deepStrictEqual(snap.ranking.filter((r) => r.action === 'cleanup'), []);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('merged PR without a headRefOid never yields cleanup', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '91-done', branch: 'feature/91-done', ahead: 9 }],
+    mergedPrs: [{ number: 92, headRefName: 'feature/91-done' }],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    assert.strictEqual(snap.worktrees.find((x) => x.branch === 'feature/91-done').action, 'hervat');
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('failed git status → dirty null and no cleanup, even when merged at HEAD', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '91-done', branch: 'feature/91-done', ahead: 9, head: 'm92', statusThrows: true }],
+    mergedPrs: [{ number: 92, headRefName: 'feature/91-done', headRefOid: 'm92' }],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const w = snap.worktrees.find((x) => x.branch === 'feature/91-done');
+    assert.strictEqual(w.dirty, null);
+    assert.notStrictEqual(w.action, 'cleanup');
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('failed ahead count → ahead null and no cleanup, even when merged at HEAD', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '91-done', branch: 'feature/91-done', head: 'm92', aheadThrows: true }],
+    mergedPrs: [{ number: 92, headRefName: 'feature/91-done', headRefOid: 'm92' }],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const w = snap.worktrees.find((x) => x.branch === 'feature/91-done');
+    assert.strictEqual(w.ahead, null);
+    assert.strictEqual(w.action, null);
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('unknown git state: null action unless known work (ahead > 0 or dirty)', async () => {
+  const fx = makeFixture({
+    worktrees: [
+      { dir: '40-unknown', branch: 'feature/40-unknown', aheadThrows: true, statusThrows: true, lastCommit: daysAgo(60) },
+      { dir: '41-ahead', branch: 'feature/41-ahead', ahead: 2, statusThrows: true },
+      { dir: '42-dirty', branch: 'feature/42-dirty', dirty: true, aheadThrows: true },
+    ],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const by = Object.fromEntries(snap.worktrees.map((w) => [w.branch, w]));
+    assert.strictEqual(by['feature/40-unknown'].ahead, null);
+    assert.strictEqual(by['feature/40-unknown'].dirty, null);
+    assert.strictEqual(by['feature/40-unknown'].action, null);
+    assert.strictEqual(by['feature/41-ahead'].action, 'hervat');
+    assert.strictEqual(by['feature/42-dirty'].action, 'hervat');
   } finally {
     fx.cleanup();
   }

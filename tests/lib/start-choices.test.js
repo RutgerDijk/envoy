@@ -62,7 +62,7 @@ function snapshot(over = {}) {
           { sessionId: SID_NEW, modified: '2026-10-31T03:00:00+02:00', cwd: '/repo/.worktrees/83-koppel' },
         ],
       },
-      { path: '/repo/.worktrees/32-old', branch: 'feature/32-old', issue: 32, ahead: 1, dirty: false, idleDays: 40, stale: true, sessions: [] },
+      { path: '/repo/.worktrees/32-old', branch: 'feature/32-old', issue: 32, ahead: 1, dirty: false, idleDays: 40, stale: true, merged: true, sessions: [] },
     ],
     prs: [
       { number: 91, title: 'Koppel PR', url: 'u', branch: 'feature/83-koppel', issue: 83, ci: 'failure', unresolved: 2, needsAttention: true },
@@ -151,7 +151,7 @@ test('worktree label uses issue title with Dutch verb; cleanup uses branch', () 
   assert.strictEqual(opts[1].action, 'cleanup');
 });
 
-test('cleanup description says why: PR merged vs stale idle days', () => {
+test('cleanup description says PR merged (cleanup is merged-only)', () => {
   const s = snapshot({ prs: [] });
   s.worktrees.push({ path: '/repo/.worktrees/91-done', branch: 'feature/91-done', issue: 91, ahead: 9, dirty: false,
     idleDays: 0, stale: false, merged: true, sessions: [] });
@@ -162,7 +162,17 @@ test('cleanup description says why: PR merged vs stale idle days', () => {
   const opts = choices.buildOptions(s);
   assert.match(opts[0].description, /PR merged/);
   assert.doesNotMatch(opts[0].description, /stale/);
-  assert.match(opts[1].description, /stale, idle 40 days/);
+  assert.match(opts[1].description, /PR merged/);
+});
+
+test('hervat description with unknown ahead count does not print "null"', () => {
+  const s = snapshot({ prs: [] });
+  s.worktrees.push({ path: '/repo/.worktrees/41-u', branch: 'feature/41-unknown', issue: null, ahead: null, dirty: true,
+    idleDays: 1, stale: false, sessions: [] });
+  s.ranking = [{ kind: 'worktree', ref: 'feature/41-unknown', label: 'feature/41-unknown', action: 'hervat' }];
+  const opts = choices.buildOptions(s);
+  assert.doesNotMatch(opts[0].description, /null/);
+  assert.match(opts[0].description, /ahead unknown/);
 });
 
 test('hervat description of a stale worktree mentions it is stale', () => {
