@@ -112,6 +112,11 @@ for (const [name, body] of [['coderabbit.md', md], ['ci.md', ciMd]]) {
   });
 }
 
+test('ci.md bounded full-ci re-poll waits on coderabbit when the NOT READY reason names CodeRabbit', () => {
+  const sec = ciMd.slice(ciMd.indexOf('**Bounded re-poll'));
+  assert.ok(/--target coderabbit/.test(sec), 'a ci-target wait settles at once when only the gate is red, so the re-poll must wait on coderabbit');
+});
+
 test('coderabbit.md polls --target coderabbit; ci.md polls --target ci', () => {
   assert.ok(/--target coderabbit/.test(md));
   assert.ok(/--target ci/.test(ciMd));

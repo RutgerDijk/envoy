@@ -239,6 +239,22 @@ test('getSnapshot returns null -> exit 3 (never misread as clean)', async () => 
   assert.strictEqual(code, 3);
 });
 
+test('a throw while evaluating the probe -> exit 3, never a rejection (which would read as exit 1)', async () => {
+  const h = harness([crSnap({ rateLimited: true, resetsAt: new Date(START).toISOString() })], {
+    shouldReTrigger: () => {
+      throw new Error('boom');
+    },
+  });
+  const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
+  assert.strictEqual(code, 3);
+  assert.ok(/unavailable/.test(h.lines[0]));
+});
+
+test('CLI wrapper exits 3 (not 1) when poll itself rejects', () => {
+  const src = require('fs').readFileSync(MODULE, 'utf8');
+  assert.ok(/main\(\)\.catch\([\s\S]*?EXIT\.UNAVAILABLE/.test(src), 'main() must catch and exit EXIT.UNAVAILABLE');
+});
+
 test('snapshot missing the target block -> exit 3', async () => {
   const h = harness([{ pr: 7 }]);
   const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
