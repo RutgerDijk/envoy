@@ -24,7 +24,8 @@ Hooks receive JSON on stdin describing the event. They control behavior via exit
 | Hook | Event | Purpose |
 |------|-------|---------|
 | `session-start.sh` | SessionStart | Loads Envoy skills, detects tech stacks, restores session state |
-| `config-protection.js` | PreToolUse (Edit/Write) | Blocks linter/formatter config modifications |
+| `config-protection.js` | PreToolUse (Edit/Write/Bash) | Blocks linter/formatter config modifications |
+| `bash-guard-combined.js` | PreToolUse (Bash) | Runs issue-create-guard and config-protection's Bash check (writes via `>`, `tee`, `sed -i`, `cp`/`mv`/`install`) in one spawn |
 | `post-edit-accumulator.js` | PostToolUse (Edit/Write) | Tracks edited files for batched processing |
 | `post-pr-poll.js` | PostToolUse (Bash) | Triggers CodeRabbit polling after `gh pr create` |
 | `stop-batch-lint.js` | Stop | Runs lint once across all session edits |
