@@ -190,7 +190,7 @@ test('brainstorm SKILL.md marker bash block is flush-left and produces a valid m
 
 test('brainstorm Phase 3.5 requires explicit confirmation and re-presents after edits', () => {
   const content = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'brainstorm', 'SKILL.md'), 'utf8');
-  const phase = content.split('### Phase 3.5')[1].split('### Phase 4')[0];
+  const phase = content.split('### Phase 3.5')[1].split('### Phase 4')[0].replace(/\s+/g, ' ');
   assert.ok(!/confirms or edits/.test(phase), 'ambiguous "confirms or edits" wording removed');
   assert.ok(/explicitly confirms/i.test(phase), 'requires explicit confirmation');
   assert.ok(/re-present the revised scope/i.test(phase), 're-presents the scope after an edit');
