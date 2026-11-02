@@ -151,7 +151,7 @@ const WRITE_CASES = [
   ['false || echo {} > .eslintrc.json', '.eslintrc.json'],
   ['ls; echo {} > .eslintrc.json', '.eslintrc.json'],
   ['FOO=1 sed -i s/a/b/ .eslintrc.json', '.eslintrc.json'],
-  ['sudo tee /repo/.editorconfig < /dev/null', '/repo/.editorconfig'],
+  ['sudo tee .editorconfig < /dev/null', '.editorconfig'],
 ];
 
 for (const [cmd, expected] of WRITE_CASES) {
@@ -268,6 +268,152 @@ test('parser never executes the command (command substitution is inert)', () => 
     assert.ok(!fs.existsSync(marker), 'parser must not execute anything');
   });
 });
+
+section('I1: Bash path matches only real config names (anchored), not prefixes');
+
+const PREFIX_LOOKALIKES = [
+  'cp .eslintrc.json .eslintrc.json.bak',
+  'mv .eslintrc.json .eslintrc.json.old',
+  'git diff > .eslintrc.patch',
+  'npm test > .prettierrc.log',
+  'echo x > .eslintrc.bak',
+  'echo x > eslint.config.js.bak',
+  'echo x > prettier.config.notes',
+  'echo x > biome.json.orig',
+  'echo x > .editorconfig.bak',
+];
+for (const cmd of PREFIX_LOOKALIKES) {
+  test(`allows look-alike: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+const REAL_CONFIG_NAMES = [
+  '.eslintrc', '.eslintrc.json', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.yaml', '.eslintrc.yml',
+  'eslint.config.js', 'eslint.config.cjs', 'eslint.config.mjs', 'eslint.config.ts', 'eslint.config.cts', 'eslint.config.mts',
+  '.prettierrc', '.prettierrc.json', '.prettierrc.js', '.prettierrc.cjs', '.prettierrc.mjs', '.prettierrc.yaml',
+  '.prettierrc.yml', '.prettierrc.toml', '.prettierrc.json5',
+  'prettier.config.js', 'prettier.config.cjs', 'prettier.config.mjs', 'prettier.config.ts',
+  'biome.json', 'biome.jsonc', '.editorconfig',
+];
+for (const name of REAL_CONFIG_NAMES) {
+  test(`still blocks real config name via Bash: ${name}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(`echo x > ${name}`));
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+      const reason = JSON.parse(r.stderr.trim().split('\n').pop()).reason;
+      assert.strictEqual(reason, `BLOCKED: Cannot modify ${name}. Fix source code instead of weakening linter/formatter config.`);
+    });
+  });
+}
+
+test('tsconfig.build.json via Bash still warns; tsconfig.json.bak does not', () => {
+  withTmp((tmp) => {
+    const w = runScript(BASH_GUARD_COMBINED, tmp, bashEvent('echo {} > tsconfig.build.json'));
+    assert.strictEqual(w.status, 0);
+    assert.ok(/WARNING/.test(w.stderr), w.stderr);
+    const n = runScript(BASH_GUARD_COMBINED, tmp, bashEvent('echo {} > tsconfig.json.bak'));
+    assert.strictEqual(n.status, 0);
+    assert.ok(!/WARNING/.test(n.stderr), n.stderr);
+  });
+});
+
+test('Edit/Write path matching is unchanged (prefix .eslintrc.bak still blocked there)', () => {
+  withTmp((tmp) => {
+    const r = runScript(EDIT_GUARD_COMBINED, tmp, { tool_name: 'Edit', tool_input: { file_path: '/repo/.eslintrc.bak' } });
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+  });
+});
+
+section('M1: targets outside the project do not block');
+
+for (const cmd of [
+  'cp .eslintrc.json /tmp/.eslintrc.json',
+  'git show HEAD:.eslintrc.json > /tmp/.eslintrc.json',
+  'echo x > ../other/.eslintrc',
+  'echo x > ~/.editorconfig',
+]) {
+  test(`allows outside-project target: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+for (const cmd of ['echo x > ./.eslintrc.json', 'echo x > sub/.eslintrc.json', 'echo x > sub/../.prettierrc']) {
+  test(`blocks inside-project target: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+test('absolute path that resolves INSIDE the project still blocks', () => {
+  withTmp((tmp) => {
+    const real = fs.realpathSync(tmp);
+    const r = runScript(BASH_GUARD_COMBINED, real, bashEvent(`echo x > ${real}/.eslintrc.json`));
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+  });
+});
+
+section('M2: > inside [[ ... ]] is a comparison, not a redirect');
+
+for (const cmd of [
+  '[[ "$a" > .eslintrc.json ]] && echo yes',
+  'if [[ $x > .prettierrc ]]; then echo y; fi',
+]) {
+  test(`allows: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+test('redirect after a closed [[ ]] still blocks', () => {
+  withTmp((tmp) => {
+    const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent('[[ -f x ]] && echo {} > .eslintrc.json'));
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+  });
+});
+
+section('M4: wrapper options are skipped to find the real command');
+
+for (const cmd of [
+  'sudo -u root tee .eslintrc.json',
+  'sudo -E -g staff tee .eslintrc.json',
+  'env -i FOO=1 tee .eslintrc.json',
+  'env -u HOME tee .prettierrc',
+  'time -p sed -i s/a/b/ .eslintrc.json',
+  'nohup cp x.json biome.json',
+  'command -p tee .editorconfig',
+]) {
+  test(`blocks through wrapper options: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+section('M5: ENVOY_OVERRIDE inside the command text is NOT an override');
+
+for (const cmd of [
+  'ENVOY_OVERRIDE=1 echo x > .eslintrc.json',
+  'export ENVOY_OVERRIDE=1; echo x > .eslintrc.json',
+]) {
+  test(`still blocked: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
 
 section('ENVOY_OVERRIDE: lets a protected write through on both paths');
 
