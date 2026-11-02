@@ -41,6 +41,8 @@ The most impactful hook. When Claude is in an autonomous review-fix loop, it mig
 
 When Claude tries to edit `.eslintrc.js`, it sees: "BLOCKED: Fix source code instead of weakening linter config." and adjusts its approach.
 
+Setting `ENVOY_OVERRIDE=1` in the environment (not in the command text) unblocks config-protection on both the Edit/Write and the Bash path. `ENVOY_DISABLED_HOOKS=config-protection` turns off only the Bash check; the Edit/Write check stays active unless `edit-guard-combined` is disabled.
+
 ## Batch Lint
 
 Without hooks: Claude runs `npm run lint` after every edit → N lint outputs in context.
