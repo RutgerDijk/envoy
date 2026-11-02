@@ -31,8 +31,8 @@ Persists between context compactions and session restarts:
 3. `cleanup` removes it (`git clean -fdx -- .envoy`) when the worktree is torn down after merge
 
 ```javascript
-const session = require('../../lib/session-state');
-const state = session.load();           // Resume (preflight seed) or empty
+const session = require(path.join(process.env.CLAUDE_PLUGIN_ROOT, 'lib', 'session-state'));
+const state = session.load();  // preflight seed, or empty if missing; throws on corrupt/invalid file
 session.updateTask(state, 'task-1', 'done', 'Added User entity');
 session.addDecision(state, 'Used Guid PK — matches existing entities');
 session.save(state);
