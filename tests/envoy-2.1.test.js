@@ -393,6 +393,12 @@ section('session-state: CRUD');
 
 const { validate: validateSchema } = require(path.join(LIB, 'validate-schema'));
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-test-'));
+const sessionTmpDirs = [tmpDir];
+const freshDir = () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-test-'));
+  sessionTmpDirs.push(d);
+  return d;
+};
 const sessionFileIn = dir => path.join(dir, '.envoy', 'pickup', 'session.json');
 
 test('createEmpty returns a schema-valid state', () => {
@@ -447,7 +453,7 @@ test('load returns a schema-valid empty state when file missing', () => {
 });
 
 test('save rejects an invalid task status and writes nothing', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-test-'));
+  const dir = freshDir();
   const s = session.createEmpty();
   s.tasks.push({ id: 't1', status: 'bogus' });
   assert.throws(() => session.save(s, dir), /session/i);
@@ -455,11 +461,65 @@ test('save rejects an invalid task status and writes nothing', () => {
 });
 
 test('save rejects a state missing branch', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-test-'));
+  const dir = freshDir();
   const s = session.createEmpty();
   delete s.branch;
   assert.throws(() => session.save(s, dir));
   assert(!fs.existsSync(sessionFileIn(dir)));
+});
+
+test('load throws naming the path on corrupt JSON (never silently returns empty)', () => {
+  const dir = freshDir();
+  fs.mkdirSync(path.dirname(sessionFileIn(dir)), { recursive: true });
+  fs.writeFileSync(sessionFileIn(dir), '{ not json');
+  assert.throws(() => session.load(dir), err =>
+    err.message.includes(sessionFileIn(dir)) && /json/i.test(err.message));
+});
+
+test('load throws naming the path and the schema error on an invalid shape', () => {
+  const dir = freshDir();
+  fs.mkdirSync(path.dirname(sessionFileIn(dir)), { recursive: true });
+  fs.writeFileSync(sessionFileIn(dir), JSON.stringify({ $schemaVersion: '1', tasks: [] }));
+  assert.throws(() => session.load(dir), err =>
+    err.message.includes(sessionFileIn(dir)) && err.message.includes('branch'));
+});
+
+test('rejected save does not mutate the caller object', () => {
+  const dir = freshDir();
+  const s = session.createEmpty();
+  s.updatedAt = 'sentinel';
+  delete s.branch;
+  assert.throws(() => session.save(s, dir));
+  assert.strictEqual(s.updatedAt, 'sentinel');
+});
+
+test('successful save updates the caller object updatedAt', () => {
+  const dir = freshDir();
+  const s = session.createEmpty();
+  s.updatedAt = 'sentinel';
+  session.save(s, dir);
+  assert.notStrictEqual(s.updatedAt, 'sentinel');
+});
+
+test('schema declares the optional task fields updateTask writes (summary, updatedAt)', () => {
+  const { loadSchema } = require(path.join(LIB, 'validate-schema'));
+  const props = loadSchema('session').properties.tasks.items.properties;
+  assert.ok(props.summary, 'summary must be declared');
+  assert.ok(props.updatedAt, 'updatedAt must be declared');
+  const s = session.createEmpty();
+  session.updateTask(s, 't1', 'pending');
+  assert(validateSchema('session', s).valid);
+});
+
+test('schema description no longer names the retired root-level file', () => {
+  const { loadSchema } = require(path.join(LIB, 'validate-schema'));
+  assert.ok(!loadSchema('session').description.includes('.envoy-' + 'session'));
+});
+
+test('session-state.js is strict mode', () => {
+  const src = fs.readFileSync(path.join(LIB, 'session-state.js'), 'utf8');
+  assert.ok(/^\s*(\/\*[\s\S]*?\*\/\s*)?'use strict';/.test(src), "missing 'use strict'");
+  assert.ok(!src.includes('Prefers worktree root'), 'stale JSDoc');
 });
 
 section('session-state: mutations');
@@ -474,7 +534,7 @@ test('addDecision stores decisions[].note (not text)', () => {
 });
 
 test('state with a decision and tasks saves as schema-valid', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-test-'));
+  const dir = freshDir();
   const s = session.createEmpty();
   session.addDecision(s, 'Use Guid for PK');
   session.updateTask(s, 'task-1', 'done', 'Completed');
@@ -534,6 +594,11 @@ test('Shows next steps', () => {
   s.nextSteps = ['Run review', 'Create PR'];
   const f = session.formatForPrompt(s);
   assert(f.includes('Run review'));
+});
+
+test('cleanup: session temp dirs removed', () => {
+  for (const d of sessionTmpDirs) fs.rmSync(d, { recursive: true, force: true });
+  assert(sessionTmpDirs.every(d => !fs.existsSync(d)));
 });
 
 // ═══════════════════════════════════════════════════════════════════
