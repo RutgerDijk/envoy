@@ -66,16 +66,59 @@ test('section stays short (<= 25 lines)', () => {
   assert.ok(lines <= 25, `section is ${lines} lines`);
 });
 
-console.log('docs/wiki/Stack-Profiles.md — Test Command override');
+// Shared precision assertions (#94 task-6 polish): all three docs say the same.
+function precisionTests(label, sec) {
+  test(`${label}: override replaces all stack defaults (not merged per line)`, () =>
+    assert.ok(/replaces all/i.test(sec), 'missing "replaces all"'));
+  test(`${label}: unsafe override falls back to stack-profile commands`, () =>
+    assert.ok(/falls back/i.test(sec), 'missing "falls back"'));
+  test(`${label}: one unsafe line drops both lines`, () =>
+    assert.ok(/drops both/i.test(sec), 'missing "drops both"'));
+  test(`${label}: newline listed as a metacharacter`, () =>
+    assert.ok(/newline/i.test(sec), 'missing newline'));
+}
+
+precisionTests('using-envoy', skillSec);
+test('using-envoy: example fence tagged markdown', () => assert.ok(skillSec.includes('```markdown')));
+
+console.log('docs/wiki/Stack-Profiles.md — Test Command subsection');
 const wiki = read('docs/wiki/Stack-Profiles.md');
-test('mentions ## Test Command section', () => assert.ok(wiki.includes('## Test Command')));
-test('mentions {{test}} placeholder', () => assert.ok(wiki.includes('{{test}}')));
-test('mentions project CLAUDE.md override', () => assert.ok(/CLAUDE\.md[^\n]*overrid|overrid[^\n]*CLAUDE\.md/i.test(wiki)));
+const wikiSec = (() => {
+  const m = wiki.match(/^### Test Command \(optional\)\s*$/m);
+  if (!m) return '';
+  const lines = wiki.slice(m.index + m[0].length).split('\n');
+  const out = [];
+  let inFence = false;
+  for (const line of lines) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    else if (!inFence && /^#{2,3} /.test(line)) break;
+    out.push(line);
+  }
+  return out.join('\n');
+})();
+test('has a "### Test Command (optional)" subsection', () => assert.ok(wikiSec.trim().length > 0));
+test('mentions ## Test Command section', () => assert.ok(wikiSec.includes('## Test Command')));
+test('mentions {{test}} placeholder', () => assert.ok(wikiSec.includes('{{test}}')));
+test('mentions project CLAUDE.md override', () => assert.ok(/CLAUDE\.md[^\n]*overrid|overrid[^\n]*CLAUDE\.md/i.test(wikiSec)));
 test('mentions metacharacter rejection', () => {
-  assert.ok(/metacharacter/i.test(wiki), 'missing metacharacter mention');
-  assert.ok(/reject/i.test(wiki), 'missing rejection mention');
+  assert.ok(/metacharacter/i.test(wikiSec), 'missing metacharacter mention');
+  assert.ok(/reject/i.test(wikiSec), 'missing rejection mention');
 });
-test('mentions lib/test-commands.js', () => assert.ok(wiki.includes('lib/test-commands.js')));
+test('mentions lib/test-commands.js', () => assert.ok(wikiSec.includes('lib/test-commands.js')));
+test('wiki: example fence tagged markdown', () => assert.ok(wikiSec.includes('```markdown')));
+precisionTests('wiki', wikiSec);
+
+console.log('CLAUDE.md — Stack Profiles Test Command bullet');
+const claude = read('CLAUDE.md');
+const claudeSec = (() => {
+  const i = claude.indexOf('May include an optional `## Test Command` section');
+  if (i === -1) return '';
+  const rest = claude.slice(i);
+  const end = rest.search(/\n- Detection patterns/);
+  return end === -1 ? rest : rest.slice(0, end);
+})();
+test('CLAUDE.md Test Command bullet found', () => assert.ok(claudeSec.length > 0));
+precisionTests('CLAUDE.md', claudeSec);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
