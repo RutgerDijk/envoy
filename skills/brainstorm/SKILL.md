@@ -15,7 +15,7 @@ description: Use when starting any new feature, significant change, or when you 
 - [ ] Phase 3: Presenting the Design
 - [ ] Phase 3.5: Scope Confirmation (BLOCKING) — on approval, write `.envoy/brainstorm/issue-plan-approved.json`
 - [ ] Phase 4: Create GitHub Issue and Task Handoff
-- [ ] Phase 5: Final Handoff
+- [ ] Phase 5: Final Handoff — clear `.envoy/brainstorm/`, then hand off to pickup
 
 ## Overview
 
@@ -164,6 +164,17 @@ $TASKS_MD"
 ```
 
 ### Phase 5: Final Handoff
+
+First clear this run's brainstorm state. The issue and `.envoy-tasks/<n>.json`
+are written by now, and a leftover `.envoy/brainstorm/session.json` would make
+the issue-create guard block the next brainstorm in this checkout as a
+duplicate create:
+
+```bash
+rm -rf .envoy/brainstorm
+```
+
+Then announce:
 
 "**Design complete!**
 
