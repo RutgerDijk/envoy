@@ -44,9 +44,10 @@ function harness(snapshots, extra = {}) {
     now: () => new Date(clock),
     wait: async (sec) => {
       waits.push(sec);
-      clock += sec * 1000;
+      clock += Math.round(sec * 1000);
     },
     getSnapshot: () => {
+      clock += extra.snapshotMs || 0;
       const entry = snapshots[Math.min(probes, snapshots.length - 1)];
       probes++;
       if (entry instanceof Error) throw entry;
@@ -54,7 +55,7 @@ function harness(snapshots, extra = {}) {
     },
     shouldReTrigger,
     log: (line) => lines.push(line),
-    ...extra,
+    ...Object.fromEntries(Object.entries(extra).filter(([k]) => k !== 'snapshotMs')),
   };
   return {
     deps,
@@ -226,17 +227,50 @@ test('handoff decision comes from the injected shouldReTrigger', async () => {
 // ─────────────────────────────────────────────────────────────────────
 section('exit 3 — probe unavailable');
 
-test('getSnapshot throws -> exit 3', async () => {
+test('getSnapshot throws on 3 consecutive probes -> exit 3', async () => {
   const h = harness([new Error('gh: not authenticated')]);
   const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
   assert.strictEqual(code, 3);
-  assert.ok(/unavailable/.test(h.lines[0]));
+  assert.strictEqual(h.probes, 3);
+  assert.strictEqual(h.lines.length, 3, 'one line per probe, tolerated failures included');
+  assert.ok(/unavailable/.test(h.lines[0]) && /retrying/.test(h.lines[0]));
+  assert.ok(/unavailable/.test(h.lines[2]) && !/retrying/.test(h.lines[2]));
 });
 
-test('getSnapshot returns null -> exit 3 (never misread as clean)', async () => {
+test('tolerated failures wait per the backoff table before the next probe', async () => {
+  const h = harness([new Error('blip')]);
+  await poll({ pr: 7, target: 'ci', ...h.deps });
+  assert.deepStrictEqual(h.waits, [30, 60]);
+});
+
+test('1 failure then success -> no exit 3', async () => {
+  const h = harness([new Error('blip'), crSnap({ unresolved: 1 })]);
+  assert.strictEqual(await poll({ pr: 7, target: 'coderabbit', ...h.deps }), 0);
+});
+
+test('2 failures then success -> no exit 3', async () => {
+  const h = harness([new Error('blip'), null, crSnap({ unresolved: 1 })]);
+  assert.strictEqual(await poll({ pr: 7, target: 'coderabbit', ...h.deps }), 0);
+  assert.strictEqual(h.probes, 3);
+});
+
+test('failure, success, failure, failure -> no exit 3 (success resets the counter)', async () => {
+  const h = harness([new Error('a'), crSnap(), new Error('b'), new Error('c'), crSnap({ unresolved: 2 })]);
+  assert.strictEqual(await poll({ pr: 7, target: 'coderabbit', ...h.deps }), 0);
+  assert.strictEqual(h.probes, 5);
+});
+
+test('getSnapshot returns null persistently -> exit 3 (never misread as clean)', async () => {
   const h = harness([null]);
   const code = await poll({ pr: 7, target: 'ci', ...h.deps });
   assert.strictEqual(code, 3);
+});
+
+test('a multi-line probe error is collapsed onto one log line', async () => {
+  const h = harness([new Error('gh: HTTP 502\n  Bad Gateway\n\n  retry later  ')]);
+  await poll({ pr: 7, target: 'ci', ...h.deps });
+  for (const line of h.lines) assert.ok(!/\n/.test(line), JSON.stringify(line));
+  assert.ok(/gh: HTTP 502 Bad Gateway retry later/.test(h.lines[0]), h.lines[0]);
 });
 
 test('a throw while evaluating the probe -> exit 3, never a rejection (which would read as exit 1)', async () => {
@@ -255,7 +289,7 @@ test('CLI wrapper exits 3 (not 1) when poll itself rejects', () => {
   assert.ok(/main\(\)\.catch\([\s\S]*?EXIT\.UNAVAILABLE/.test(src), 'main() must catch and exit EXIT.UNAVAILABLE');
 });
 
-test('snapshot missing the target block -> exit 3', async () => {
+test('snapshot persistently missing the target block -> exit 3', async () => {
   const h = harness([{ pr: 7 }]);
   const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
   assert.strictEqual(code, 3);
@@ -277,6 +311,15 @@ test('ci: probes immediately then waits [30,60,120,240,240], clamped to the dead
   // 0,30,90,210,450,690 then clamp 210 -> 900
   assert.deepStrictEqual(h.waits, [30, 60, 120, 240, 240, 210]);
   assert.strictEqual(h.probes, 7);
+});
+
+test('the last wait is clamped to the exact remaining time (ms), so probe time causes no extra probe', async () => {
+  // Each probe costs 700ms. The second probe must land exactly on the 30s deadline.
+  const h = harness([ciSnap(['PENDING'])], { snapshotMs: 700 });
+  const code = await poll({ pr: 7, target: 'ci', deadlineSec: 30, ...h.deps });
+  assert.strictEqual(code, 1);
+  assert.deepStrictEqual(h.waits, [29.3]);
+  assert.strictEqual(h.probes, 2);
 });
 
 test('past the end of the table the last delay repeats', async () => {
@@ -306,6 +349,21 @@ test('parseArgs reads <pr> --target --deadline --retrigger-count', () => {
 test('parseArgs rejects a bad target or missing pr', () => {
   assert.throws(() => parseArgs(['12', '--target', 'nope']));
   assert.throws(() => parseArgs(['--target', 'ci']));
+});
+
+test('parseArgs rejects a non-numeric pr like 12abc, accepts #12', () => {
+  assert.throws(() => parseArgs(['12abc', '--target', 'ci']));
+  assert.throws(() => parseArgs(['1.5', '--target', 'ci']));
+  assert.strictEqual(parseArgs(['#12', '--target', 'ci']).pr, 12);
+});
+
+test('CLI exits 64 on a malformed pr', () => {
+  const r = require('child_process').spawnSync(process.execPath, [MODULE, '12abc', '--target', 'ci'], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 64, r.stderr);
+});
+
+test('lib/pr-poll.js starts with a node shebang', () => {
+  assert.ok(require('fs').readFileSync(MODULE, 'utf8').startsWith('#!/usr/bin/env node\n'));
 });
 
 // ─────────────────────────────────────────────────────────────────────

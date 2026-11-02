@@ -117,6 +117,28 @@ test('ci.md bounded full-ci re-poll waits on coderabbit when the NOT READY reaso
   assert.ok(/--target coderabbit/.test(sec), 'a ci-target wait settles at once when only the gate is red, so the re-poll must wait on coderabbit');
 });
 
+test('ci.md bounded re-poll passes --retrigger-count and treats any poller result as spacing', () => {
+  const sec = ciMd.slice(ciMd.indexOf('**Bounded re-poll'), ciMd.indexOf('ready except full-suite run'));
+  assert.ok(/--target coderabbit --retrigger-count "\$RETRIGGER_COUNT"/.test(sec), 'coderabbit re-poll must pass the retrigger count');
+  assert.ok(/any exit code[^\n]*spacing/i.test(sec), 'must say any exit code / settle reason only counts as spacing');
+});
+
+test('poller exit 3 means persistently unavailable: neither step file re-runs the wait on exit 3', () => {
+  for (const [name, body] of [['coderabbit.md', md], ['ci.md', ciMd]]) {
+    const line = body.split('\n').find((l) => /\*\*Exit 3/.test(l)) || '';
+    const para = body.slice(body.indexOf(line), body.indexOf(line) + 500).split('\n- ')[0];
+    assert.ok(/3 consecutive/.test(para), `${name} exit 3 must say the poller already tolerated failures`);
+    assert.ok(!/re-run the background\s+wait once/i.test(para), `${name} must not re-run the wait on exit 3`);
+  }
+});
+
+test('Step 8 spaces each of the 3 confirmations with a background pr-poll coderabbit call', () => {
+  const step8 = md.slice(md.indexOf('### Step 8'));
+  const para = step8.slice(step8.indexOf('confirmed 3 consecutive'), step8.indexOf('```bash', step8.indexOf('confirmed 3 consecutive')));
+  assert.ok(/pr-poll\.js[^\n]*--target coderabbit/.test(para), 'confirmations must be spaced by pr-poll.js --target coderabbit');
+  assert.ok(/run_in_background: true/.test(para));
+});
+
 test('coderabbit.md polls --target coderabbit; ci.md polls --target ci', () => {
   assert.ok(/--target coderabbit/.test(md));
   assert.ok(/--target ci/.test(ciMd));
