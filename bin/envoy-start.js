@@ -195,8 +195,6 @@ function table(title, headers, rows, opts = {}) {
   return out.join('\n');
 }
 
-// ── Cell builders ──────────────────────────────────────────────────────────
-
 const dim = (t) => [{ t, s: '2' }];
 const none = () => dim(DASH);
 
