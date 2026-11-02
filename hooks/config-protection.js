@@ -422,16 +422,24 @@ function extractWriteTargets(command) {
 }
 
 /**
- * True when a write target resolves inside cwd (lexically). `~` paths are
- * outside by definition; absolute paths count only if they land under cwd.
+ * True when a write target resolves inside the project root (lexically).
+ * `~` paths are outside by definition; absolute paths count only if they
+ * land under the root.
  * @param {string} target
- * @param {string} cwd
+ * @param {string} cwd project root
+ * @param {string} [base] directory the command runs in (defaults to cwd)
  * @returns {boolean}
  */
-function insideProject(target, cwd) {
+function insideProject(target, cwd, base = cwd) {
   if (!target || target.startsWith('~')) return false;
-  const rel = path.relative(cwd, path.resolve(cwd, target));
+  const rel = path.relative(cwd, path.resolve(base, target));
   return rel !== '' && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel);
+}
+
+// process.cwd() is already a realpath (macOS /var -> /private/var); the
+// payload cwd may not be, so normalize it before comparing.
+function realpathOr(p) {
+  try { return require('fs').realpathSync(p); } catch { return p; }
 }
 
 function emit(decision, reason) {
@@ -452,8 +460,11 @@ function runBash(rawInput) {
 
     let warned = null;
     const cwd = process.cwd();
+    // The payload's cwd is where the command runs; relative targets resolve
+    // there, but "inside the project" is still judged against the hook cwd.
+    const base = typeof input.cwd === 'string' && input.cwd ? realpathOr(input.cwd) : cwd;
     for (const target of extractWriteTargets(command)) {
-      if (!insideProject(target, cwd)) continue;
+      if (!insideProject(target, cwd, base)) continue;
       const result = evaluateBasename(target, BASH_BLOCKED_PATTERNS, BASH_WARN_PATTERNS);
       if (!result) continue;
       if (result.decision === 'block') {
