@@ -30,6 +30,22 @@ const WARN_PATTERNS = [
   /^tsconfig\..+\.json$/,
 ];
 
+// Bash path only: anchored to real config file names, so look-alikes such
+// as `.eslintrc.json.bak`, `.eslintrc.patch` or `.prettierrc.log` written by
+// ordinary commands are not blocked. The Edit/Write path keeps the broader
+// prefix patterns above (unchanged behaviour).
+const BASH_BLOCKED_PATTERNS = [
+  /^\.eslintrc(\.(json|js|cjs|yaml|yml))?$/,
+  /^eslint\.config\.(js|cjs|mjs|ts|cts|mts)$/,
+  /^\.prettierrc(\.(json|js|cjs|mjs|ts|cts|mts|yaml|yml|toml|json5))?$/,
+  /^prettier\.config\.(js|cjs|mjs|ts|cts|mts)$/,
+  /^biome\.jsonc?$/,
+  /^\.editorconfig$/,
+];
+
+// WARN_PATTERNS are already end-anchored (`tsconfig.json.bak` never matches).
+const BASH_WARN_PATTERNS = WARN_PATTERNS;
+
 function blockReason(basename) {
   return `BLOCKED: Cannot modify ${basename}. Fix source code instead of weakening linter/formatter config.`;
 }
@@ -46,15 +62,17 @@ function overrideActive() {
 /**
  * Classify a file path by basename.
  * @param {string} filePath
+ * @param {RegExp[]} [blocked] defaults to BLOCKED_PATTERNS (Edit/Write)
+ * @param {RegExp[]} [warn] defaults to WARN_PATTERNS (Edit/Write)
  * @returns {{decision: 'block'|'warn', reason: string} | null}
  */
-function evaluateBasename(filePath) {
+function evaluateBasename(filePath, blocked = BLOCKED_PATTERNS, warn = WARN_PATTERNS) {
   const basename = path.basename(filePath);
   if (!basename) return null;
-  for (const pattern of BLOCKED_PATTERNS) {
+  for (const pattern of blocked) {
     if (pattern.test(basename)) return { decision: 'block', reason: blockReason(basename) };
   }
-  for (const pattern of WARN_PATTERNS) {
+  for (const pattern of warn) {
     if (pattern.test(basename)) return { decision: 'warn', reason: warnReason(basename) };
   }
   return null;
@@ -76,8 +94,12 @@ function evaluateBasename(filePath) {
 //     inside them is never mistaken for a redirect
 // Chains split on `;`, `&&`, `||`, `|`, `&`, newlines and `( )`. Quotes
 // ('...', "...", backslash) are honoured. Leading `VAR=val` assignments and
-// `sudo`/`env`/`command`/`nohup`/`time` wrappers are skipped. `#` comments
-// are ignored.
+// `sudo`/`env`/`command`/`nohup`/`time`/`exec` wrappers (and their options,
+// see WRAPPER_ARG_OPTS) are skipped. `#` comments are ignored. Inside
+// `[[ ... ]]`, `>` / `<` are string comparisons, not redirects.
+// runBash only blocks targets that resolve inside the project (cwd); `~...`
+// and absolute paths outside cwd pass. Names are matched with the anchored
+// BASH_* patterns.
 //
 // Known limits (deliberate false negatives — prefer these over blocking
 // normal commands): command substitution `$(...)` / backticks and
@@ -87,13 +109,16 @@ function evaluateBasename(filePath) {
 // `python -c`, `npx prettier --write` etc. are not detected; `cp`/`mv` into a
 // directory operand (e.g. `cp x/.eslintrc.json ./`) is checked by the
 // operand's own basename only (only `-t DIR` maps source basenames); a `<<`
-// inside a quoted string may over-strip following lines.
+// inside a quoted string (or arithmetic `$(( a << 2 ))`) may over-strip
+// following lines; symlinked paths are compared lexically, not via realpath;
+// a target starting with `$VAR` is resolved literally, relative to cwd.
 // ---------------------------------------------------------------------------
 
 /**
  * Remove heredoc BODY lines from the raw command before tokenizing, wherever
  * the heredoc appears (top level, inside "$(...)", inside quotes). The opener
- * and terminator lines are kept so `cat > f <<EOF` still yields its redirect.
+ * line is kept so `cat > f <<EOF` still yields its redirect; body and
+ * terminator lines are dropped.
  * Without this, a body containing `"` or `)` (e.g. a commit message passed as
  * "$(cat <<'EOF' ... EOF)") desynchronises quote / paren scanning and body
  * text gets parsed as commands. Over-stripping only causes false negatives.
@@ -117,14 +142,24 @@ function stripHeredocBodies(s) {
       while (k < lines.length) {
         const body = strip ? lines[k].replace(/^\t+/, '') : lines[k];
         k++;
-        if (body === delim) { out.push(lines[k - 1]); break; }
+        if (body === delim) break;
       }
     }
   }
   return out.join('\n');
 }
 
-const WRAPPERS = new Set(['sudo', 'env', 'command', 'nohup', 'time', 'exec']);
+// Wrapper commands and which of their options consume a following argument.
+// Unknown options are skipped as flags (conservative: at worst we look at the
+// wrong word and miss a write — a false negative).
+const WRAPPER_ARG_OPTS = {
+  sudo: new Set(['-u', '-g', '-U', '-C', '-p', '-r', '-t', '-D', '-h']),
+  env: new Set(['-u', '-C', '-S', '--unset', '--chdir', '--split-string']),
+  command: new Set(),
+  nohup: new Set(),
+  time: new Set(['-f', '-o', '--format', '--output']),
+  exec: new Set(['-a']),
+};
 
 /**
  * Tokenize a shell command into segments of words and redirects.
@@ -136,9 +171,7 @@ function tokenize(command) {
   let current = { words: [], redirects: [] };
   let word = null; // null = no word in progress
   let pendingRedirect = null; // redirect awaiting its target word
-  const pendingHeredocs = []; // { strip: bool } awaiting delimiter word / body
-  let heredocDelimiterNext = null;
-  const heredocQueue = [];
+  let heredocDelimiterNext = false; // next word is a heredoc delimiter (body already stripped)
 
   const s = stripHeredocBodies(command);
   let i = 0;
@@ -148,8 +181,7 @@ function tokenize(command) {
     const w = word;
     word = null;
     if (heredocDelimiterNext) {
-      heredocQueue.push({ delim: w, strip: heredocDelimiterNext.strip });
-      heredocDelimiterNext = null;
+      heredocDelimiterNext = false;
       return;
     }
     if (pendingRedirect) {
@@ -168,19 +200,8 @@ function tokenize(command) {
     current = { words: [], redirects: [] };
   }
 
-  function skipHeredocBodies() {
-    // i points just past a newline; consume body lines for each queued heredoc.
-    while (heredocQueue.length) {
-      const { delim, strip } = heredocQueue.shift();
-      while (i < s.length) {
-        let end = s.indexOf('\n', i);
-        if (end === -1) end = s.length;
-        let line = s.slice(i, end);
-        i = end + 1;
-        if (strip) line = line.replace(/^\t+/, '');
-        if (line === delim) break;
-      }
-    }
+  function inDoubleBracket() {
+    return current.words.lastIndexOf('[[') > current.words.lastIndexOf(']]');
   }
 
   while (i < s.length) {
@@ -188,9 +209,8 @@ function tokenize(command) {
 
     if (c === '\n') {
       finishSegment();
-      heredocDelimiterNext = null;
+      heredocDelimiterNext = false;
       i++;
-      skipHeredocBodies();
       continue;
     }
     if (c === ' ' || c === '\t') { finishWord(); i++; continue; }
@@ -258,6 +278,13 @@ function tokenize(command) {
       i += s[i + 1] === '&' ? 2 : 1;
       continue;
     }
+    if ((c === '>' || c === '<') && inDoubleBracket()) {
+      // `[[ a > b ]]` is a string comparison, not a redirect.
+      finishWord();
+      current.words.push(c);
+      i++;
+      continue;
+    }
     if (c === '>' || c === '<') {
       // A word consisting only of digits right before the operator is an fd.
       let fd = c === '>' ? '1' : '0';
@@ -266,9 +293,8 @@ function tokenize(command) {
       if (c === '<') {
         if (s.startsWith('<<<', i)) { pendingRedirect = { op: '<<<', fd, target: null }; i += 3; continue; }
         if (s.startsWith('<<', i)) {
-          const strip = s[i + 2] === '-';
-          heredocDelimiterNext = { strip };
-          i += strip ? 3 : 2;
+          heredocDelimiterNext = true;
+          i += s[i + 2] === '-' ? 3 : 2;
           continue;
         }
         if (s[i + 1] === '>') { pendingRedirect = { op: '<>', fd, target: null }; i += 2; continue; }
@@ -297,7 +323,15 @@ function commandWords(words) {
   while (k < words.length) {
     const w = words[k];
     if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) { k++; continue; }
-    if (WRAPPERS.has(w)) { k++; continue; }
+    if (Object.prototype.hasOwnProperty.call(WRAPPER_ARG_OPTS, w)) {
+      const argOpts = WRAPPER_ARG_OPTS[w];
+      k++;
+      while (k < words.length && words[k].startsWith('-') && words[k] !== '-') {
+        if (words[k] === '--') { k++; break; }
+        k += argOpts.has(words[k]) ? 2 : 1;
+      }
+      continue;
+    }
     break;
   }
   return words.slice(k);
@@ -387,6 +421,19 @@ function extractWriteTargets(command) {
   return targets;
 }
 
+/**
+ * True when a write target resolves inside cwd (lexically). `~` paths are
+ * outside by definition; absolute paths count only if they land under cwd.
+ * @param {string} target
+ * @param {string} cwd
+ * @returns {boolean}
+ */
+function insideProject(target, cwd) {
+  if (!target || target.startsWith('~')) return false;
+  const rel = path.relative(cwd, path.resolve(cwd, target));
+  return rel !== '' && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel);
+}
+
 function emit(decision, reason) {
   process.stderr.write(JSON.stringify({ decision, reason }) + '\n');
 }
@@ -404,8 +451,10 @@ function runBash(rawInput) {
     if (!command) return 0;
 
     let warned = null;
+    const cwd = process.cwd();
     for (const target of extractWriteTargets(command)) {
-      const result = evaluateBasename(target);
+      if (!insideProject(target, cwd)) continue;
+      const result = evaluateBasename(target, BASH_BLOCKED_PATTERNS, BASH_WARN_PATTERNS);
       if (!result) continue;
       if (result.decision === 'block') {
         if (overrideActive()) continue;
@@ -462,7 +511,10 @@ module.exports = {
   runBash,
   evaluateBasename,
   extractWriteTargets,
+  insideProject,
   blockReason,
   BLOCKED_PATTERNS,
   WARN_PATTERNS,
+  BASH_BLOCKED_PATTERNS,
+  BASH_WARN_PATTERNS,
 };
