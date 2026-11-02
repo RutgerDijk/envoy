@@ -72,7 +72,8 @@ function evaluateBasename(filePath) {
 //   - `cp` / `mv` / `install` — last operand; with `-t DIR` /
 //     `--target-directory=DIR`, DIR/<basename of each source>
 //   - heredoc redirects (`cat > f <<EOF`) via the redirect; heredoc BODIES are
-//     skipped so text inside them is never mistaken for a redirect
+//     stripped first (stripHeredocBodies), even inside "$(...)", so text
+//     inside them is never mistaken for a redirect
 // Chains split on `;`, `&&`, `||`, `|`, `&`, newlines and `( )`. Quotes
 // ('...', "...", backslash) are honoured. Leading `VAR=val` assignments and
 // `sudo`/`env`/`command`/`nohup`/`time` wrappers are skipped. `#` comments
@@ -84,9 +85,44 @@ function evaluateBasename(filePath) {
 // expansion is not performed (only the literal basename is checked);
 // `rm`, `mv` SOURCES (rename-away), `ln`, `dd of=`, `truncate`, `perl -i`,
 // `python -c`, `npx prettier --write` etc. are not detected; `cp`/`mv` into a
-// plain directory operand without trailing `/` (e.g. `cp x .`) is checked by
-// the operand's own basename only.
+// directory operand (e.g. `cp x/.eslintrc.json ./`) is checked by the
+// operand's own basename only (only `-t DIR` maps source basenames); a `<<`
+// inside a quoted string may over-strip following lines.
 // ---------------------------------------------------------------------------
+
+/**
+ * Remove heredoc BODY lines from the raw command before tokenizing, wherever
+ * the heredoc appears (top level, inside "$(...)", inside quotes). The opener
+ * and terminator lines are kept so `cat > f <<EOF` still yields its redirect.
+ * Without this, a body containing `"` or `)` (e.g. a commit message passed as
+ * "$(cat <<'EOF' ... EOF)") desynchronises quote / paren scanning and body
+ * text gets parsed as commands. Over-stripping only causes false negatives.
+ * @param {string} s
+ * @returns {string}
+ */
+function stripHeredocBodies(s) {
+  const lines = String(s || '').split('\n');
+  const out = [];
+  const opener = /(?<!<)<<(?!<)(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
+  let k = 0;
+  while (k < lines.length) {
+    const line = lines[k];
+    out.push(line);
+    k++;
+    const pending = [];
+    let m;
+    opener.lastIndex = 0;
+    while ((m = opener.exec(line)) !== null) pending.push({ strip: m[1] === '-', delim: m[3] });
+    for (const { strip, delim } of pending) {
+      while (k < lines.length) {
+        const body = strip ? lines[k].replace(/^\t+/, '') : lines[k];
+        k++;
+        if (body === delim) { out.push(lines[k - 1]); break; }
+      }
+    }
+  }
+  return out.join('\n');
+}
 
 const WRAPPERS = new Set(['sudo', 'env', 'command', 'nohup', 'time', 'exec']);
 
@@ -104,7 +140,7 @@ function tokenize(command) {
   let heredocDelimiterNext = null;
   const heredocQueue = [];
 
-  const s = String(command || '');
+  const s = stripHeredocBodies(command);
   let i = 0;
 
   function finishWord() {
@@ -322,11 +358,7 @@ function copyTargets(args) {
     return operands.map((src) => path.posix.join(targetDir, path.basename(src)));
   }
   if (operands.length < 2) return [];
-  const dest = operands[operands.length - 1];
-  if (/\/$/.test(dest)) {
-    return operands.slice(0, -1).map((src) => path.posix.join(dest, path.basename(src)));
-  }
-  return [dest];
+  return [operands[operands.length - 1]];
 }
 
 /**
