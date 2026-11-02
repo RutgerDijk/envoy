@@ -224,8 +224,8 @@ triggers exactly one new CI run. Check both.
 A settled review — not rate-limited AND zero unresolved CodeRabbit threads — must be confirmed 3 consecutive times before the loop stops; a single check could miss threads still being posted. Output `ENVOY_LOOP_COMPLETE` on each settled check; reset the counter when threads remain unresolved (or the status is rate-limited/unavailable).
 
 Space the confirmations. Before each check below, wait with one background
-`node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit --retrigger-count "$RETRIGGER_COUNT"`
-call (`run_in_background: true`; derive `PR_NUMBER` and `RETRIGGER_COUNT` from state.json as in Step 3a).
+`node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit --retrigger-count "$RETRIGGER_COUNT" --deadline 180`
+call (`run_in_background: true`; the short deadline keeps a missing CodeRabbit from holding it for 22 minutes; derive `PR_NUMBER` and `RETRIGGER_COUNT` from state.json as in Step 3a).
 That call is only the spacing. Whatever it returns, run the check below next. Never wait in the foreground.
 
 ```bash

@@ -159,7 +159,7 @@ test('CLAUDE.md mentions context: fork only for review and says why finalize doe
   const claude = fs.readFileSync(path.join(REPO_ROOT, 'CLAUDE.md'), 'utf8');
   const line = claude.split('\n').find((l) => l.includes('`context: fork`')) || '';
   assert.ok(/\(review\)/.test(line), 'context: fork bullet must list only review');
-  assert.ok(/finalize/.test(line) && /background/i.test(line) && /main session/i.test(line), 'must explain finalize waits via background Bash and needs the main session');
+  assert.ok(/finalize/i.test(line) && /background/i.test(line) && /main session/i.test(line), 'must explain finalize waits via background Bash and needs the main session');
 });
 
 test('coderabbit.md polls --target coderabbit; ci.md polls --target ci', () => {

@@ -113,8 +113,8 @@ Exit codes: 0 = rerun triggered (re-poll CI); 1 = report only, do not loop; if t
 **Bounded re-poll for exit 3 and exit 1:** there is no real "next pass" inside one finalize session, so
 re-poll at most 3 polls. Space each one with one background `pr-poll.js` call (`run_in_background: true`), then
 re-run the snapshot and this step. Pick the target from the NOT READY reason. If it names CodeRabbit, use
-`node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit --retrigger-count "$RETRIGGER_COUNT"`
-(`RETRIGGER_COUNT=$(jq -r '.retriggerCount // 0' .envoy/finalize/state.json 2>/dev/null || echo 0)`), whose first
+`node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit --retrigger-count "$RETRIGGER_COUNT" --deadline 180`
+(the short deadline keeps a missing CodeRabbit from holding it for 22 minutes; `RETRIGGER_COUNT=$(jq -r '.retriggerCount // 0' .envoy/finalize/state.json 2>/dev/null || echo 0)`), whose first
 probe always waits 120s. Otherwise use the CI wait above. When only the gate is red, a `--target ci` wait settles
 at once and would not space the re-polls. Here any exit code or settle reason from the poller only counts as spacing.
 Ignore it and re-read the snapshot. If it is still exit 3 or 1 after the 3rd poll, end the CI step with this STATUS REPORT line and continue
