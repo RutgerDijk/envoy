@@ -110,8 +110,11 @@ fi
 Exit codes: 0 = rerun triggered (re-poll CI); 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass; 2 = blocked after 3 cycles per head commit, which applies only once the PR is otherwise ready (exit 3 takes precedence over exit 2) — stop and surface to the user (unblock: `node ${CLAUDE_SKILL_DIR}/../../lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`); exit 3 = `NOT READY: <reason>` (CodeRabbit not yet resolved or the gate is not marker-only) — re-poll on the next pass, never a failure and never an escalation (no writes, no cycle consumed).
 
 **Bounded re-poll for exit 3 and exit 1:** there is no real "next pass" inside one finalize session, so
-re-poll at most 3 polls. Space each one by re-running the background CI wait above (one `pr-poll.js` call with
-`run_in_background: true`), then re-run the snapshot and this step. If it is still exit 3 or 1 after the 3rd poll, end the CI step with this STATUS REPORT line and continue
+re-poll at most 3 polls. Space each one with one background `pr-poll.js` call (`run_in_background: true`), then
+re-run the snapshot and this step. Pick the target from the NOT READY reason. If it names CodeRabbit, use
+`node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit`, whose first probe always
+waits 120s. Otherwise use the CI wait above. When only the gate is red, a `--target ci` wait settles at once
+and would not space the re-polls. If it is still exit 3 or 1 after the 3rd poll, end the CI step with this STATUS REPORT line and continue
 to finalize's remaining steps:
 
 ```
