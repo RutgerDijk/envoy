@@ -244,14 +244,15 @@ function render(snapshot, opts = {}) {
   const worktrees = (snap.worktrees || []).map((w) => {
     const issue = w.issue == null ? none() : numLink(w.issue, repoUrl ? `${repoUrl}/issues/${w.issue}` : null);
     let idle = w.idleDays == null ? none() : [{ t: `${w.idleDays}d`, s: w.stale ? '31' : '2' }];
-    // Stale but still has work: resumable, so flag staleness next to the idle days.
-    if (w.idleDays != null && w.stale && w.action === 'hervat') idle = [...idle, { t: ' stale', s: '2' }];
+    // Stale but not offered for cleanup (has work, or nothing to do): flag it next to the idle days.
+    if (w.idleDays != null && w.stale && w.action !== 'cleanup') idle = [...idle, { t: ' stale', s: '2' }];
     const sessions = (w.sessions || []).length;
     return [
       w.branch || dim('(detached)'),
       issue,
-      w.ahead > 0 ? [{ t: String(w.ahead), s: '33' }] : dim('0'),
-      w.dirty ? [{ t: 'yes', s: '33' }] : dim('no'),
+      // null = the git inspection failed: unknown, not 0 / clean.
+      w.ahead == null ? dim('?') : w.ahead > 0 ? [{ t: String(w.ahead), s: '33' }] : dim('0'),
+      w.dirty == null ? dim('?') : w.dirty ? [{ t: 'yes', s: '33' }] : dim('no'),
       idle,
       sessions > 0 ? String(sessions) : dim('0'),
       actionCell(w.action),
