@@ -252,6 +252,18 @@ test('skills/start/SKILL.md drives choices through lib/start-choices.js, not inl
   }
 });
 
+test('skills/start/SKILL.md gives each invocation its own immutable snapshot (no shared path)', () => {
+  const content = readStart();
+  assert.ok(!/\.envoy\/start\/snapshot\.json/.test(content), 'expected no fixed .envoy/start/snapshot.json path');
+  assert.ok(/mktemp "[^"]*\.envoy\/start\/snapshot\.XXXXXX"/.test(content), 'expected a mktemp-created unique snapshot');
+  assert.ok(/echo "SNAP=\$SNAP"/.test(content), 'expected Step 2 to print SNAP=<path>');
+  const literalSnaps = content.match(/^SNAP='<[^>]+>'/gm) || [];
+  assert.strictEqual(literalSnaps.length, 2, 'expected resume and cleanup blocks to set SNAP to the printed literal path');
+  assert.ok(!/SNAP="\$\(git rev-parse/.test(content), 'resume/cleanup must not recompute a shared SNAP path');
+  assert.ok(/find "[^"]*\.envoy\/start" -maxdepth 1 -name 'snapshot\.\*' -mtime \+1 -delete/.test(content),
+    'expected bounded pruning of old snapshots');
+});
+
 test('skills/start/SKILL.md stays well under 200 lines', () => {
   const lines = readStart().split('\n').length;
   assert.ok(lines < 200, `expected under 200 lines, got ${lines}`);
