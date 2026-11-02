@@ -326,7 +326,7 @@ async function main(argv = [], deps = {}) {
 
   let snapshot;
   try {
-    snapshot = await collect({ repoRoot: cwd });
+    snapshot = await collect({ cwd });
   } catch (err) {
     stderr.write(`envoy-start: could not collect status: ${err && err.message ? err.message : err}\n`);
     snapshot = emptySnapshot(cwd);

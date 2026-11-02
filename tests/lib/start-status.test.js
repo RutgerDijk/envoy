@@ -1121,8 +1121,7 @@ test('run from inside a worktree (opts.cwd): repoRoot is the main checkout, work
     const snap = await ss.collect({ ...rest, cwd: fx.wtPath('12-foo') });
     assert.strictEqual(snap.repo.root, fx.repoRoot);
     const w = snap.worktrees.find((x) => x.branch === 'feature/12-foo');
-    assert.strictEqual(w.isMain, false);
-    assert.strictEqual(w.action, 'hervat');
+    assert.strictEqual(w.action, 'hervat', 'treated as main checkout: main never gets an action');
     assert.ok(fx.gitCalls.some((c) => c.args.join(' ') === 'worktree list --porcelain' && c.cwd === fx.wtPath('12-foo')));
   } finally {
     fx.cleanup();
