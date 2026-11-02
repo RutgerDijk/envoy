@@ -62,14 +62,18 @@ When all tasks complete:
 
 Next steps:
 1. `/envoy:review` — Run comprehensive review (invoked above)
-2. `/envoy:finalize` — Prepare PR (clears session state)
+2. `/envoy:finalize` — Prepare PR
 ```
 
 Update session state (`.envoy/pickup/session.json`, schema-validated on save) with next steps:
 
-```javascript
-const session = require('../../lib/session-state');
+```bash
+node - "${CLAUDE_PLUGIN_ROOT:-${CLAUDE_SKILL_DIR}/../..}/lib/session-state" <<'EOF'
+const session = require(process.argv[2]);
 const state = session.load();
 state.nextSteps = ['Run envoy:review', 'Run envoy:finalize'];
 session.save(state);
+EOF
 ```
+
+The file is removed by `/envoy:cleanup` (`git clean -fdx -- .envoy`) when the worktree is torn down; finalize does not touch it.

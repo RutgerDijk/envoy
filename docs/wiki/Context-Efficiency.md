@@ -6,7 +6,7 @@ Libraries inspired by [lean-ctx](https://github.com/yvgude/lean-ctx) that reduce
 
 | Library | Purpose | Used By |
 |---------|---------|---------|
-| `lib/session-state.js` | Cross-session task continuity | pickup, finalize |
+| `lib/session-state.js` | Cross-session task continuity | pickup, session-start hook |
 | `lib/agent-scratchpad.js` | Multi-agent coordination | envoy-authoring (dispatching-parallel-agents step), finalize |
 | `lib/context-budget.js` | LITM-aware prompt structuring | envoy-authoring (dispatching-parallel-agents step), pickup |
 | `lib/relevance-scorer.js` | Task-aware file scoring | pickup, review |
@@ -28,7 +28,7 @@ Persists between context compactions and session restarts:
 **Lifecycle:**
 1. `pickup` preflight seeds the file; pickup updates it during execution
 2. `session-start.sh` detects and surfaces state on session startup (~300-500 tokens)
-3. `finalize` clears state when the branch ships
+3. `cleanup` removes it (`git clean -fdx -- .envoy`) when the worktree is torn down after merge
 
 ```javascript
 const session = require('../../lib/session-state');

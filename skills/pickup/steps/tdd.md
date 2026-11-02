@@ -2,24 +2,36 @@
 
 ### Step 9: Initialize Session State
 
-Session state lives in `.envoy/pickup/session.json` (schema `lib/schemas/session.json`). Preflight already seeded it with every task `pending` and `branch: "unknown"`; `session.save()` validates against the schema and throws on an invalid shape. Decisions are stored as `decisions[].note` (via `session.addDecision`).
+Session state lives in `.envoy/pickup/session.json` (schema `lib/schemas/session.json`). Preflight already seeded it with every task `pending`, `issueNumber`, and `branch: "unknown"`. `session.load()` throws (naming the path) if the file is corrupt or schema-invalid — stop and surface that error rather than recreating the file. `session.save()` validates and throws on an invalid shape. Decisions are stored as `decisions[].note` (via `session.addDecision`).
 
-```javascript
-const session = require('../../lib/session-state');
-const state = session.load(); // reads .envoy/pickup/session.json (preflight seed)
+Run from the worktree root (self-contained — the lib is resolved from the plugin root, the branch from git, the tasks from `.envoy-tasks/<issue>.json`):
 
-if (state.branch === 'unknown') state.branch = currentBranch;
-for (const task of planTasks) {
-  if (!state.tasks.some(t => t.id === task.id)) session.updateTask(state, task.id, 'pending');
+```bash
+node - "${CLAUDE_PLUGIN_ROOT:-${CLAUDE_SKILL_DIR}/../..}/lib/session-state" <<'EOF'
+const fs = require('fs');
+const { execSync } = require('child_process');
+const session = require(process.argv[2]);
+const state = session.load(); // .envoy/pickup/session.json (preflight seed)
+
+if (state.branch === 'unknown') {
+  state.branch = execSync('git branch --show-current', { encoding: 'utf8' }).trim() || 'unknown';
+}
+const tasksFile = `.envoy-tasks/${state.issueNumber}.json`;
+if (state.issueNumber && fs.existsSync(tasksFile)) {
+  for (const task of JSON.parse(fs.readFileSync(tasksFile, 'utf8')).tasks || []) {
+    if (!state.tasks.some(t => t.id === task.id)) {
+      state.tasks.push({ id: task.id, name: task.title, status: 'pending' });
+    }
+  }
 }
 
 if (state.tasks.some(t => t.status !== 'pending')) {
-  // Resuming — report progress
   const done = state.tasks.filter(t => t.status === 'done').length;
   console.log(`Resuming: ${done}/${state.tasks.length} tasks complete`);
   console.log('Recent decisions:', state.decisions.slice(-3).map(d => d.note));
 }
 session.save(state);
+EOF
 ```
 
 ### Step 10: Parse Issue Body for Tasks
