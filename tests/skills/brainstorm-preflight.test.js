@@ -197,6 +197,30 @@ test('brainstorm Phase 3.5 requires explicit confirmation and re-presents after 
   assert.ok(/never on an edit request/i.test(phase), 'marker is not written on an edit request alone');
 });
 
+test('brainstorm Phase 5 removes .envoy/brainstorm/ so a stale session.json does not arm the duplicate-create block', () => {
+  const content = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'brainstorm', 'SKILL.md'), 'utf8');
+  const phase5 = content.split('### Phase 5')[1].split(/\n## /)[0];
+  const fence = [...phase5.matchAll(/^([ \t]*)```bash\n([\s\S]*?)^[ \t]*```/gm)]
+    .find((b) => /\.envoy\/brainstorm/.test(b[2]));
+  assert.ok(fence, 'Phase 5 has a bash block that clears .envoy/brainstorm');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brainstorm-phase5-'));
+  try {
+    fs.mkdirSync(path.join(dir, '.envoy', 'brainstorm'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.envoy', 'brainstorm', 'session.json'), '{"$schemaVersion":"1","issueNumber":1}');
+    fs.writeFileSync(path.join(dir, '.envoy', 'brainstorm', 'issue-plan-approved.json'), '{}');
+    fs.mkdirSync(path.join(dir, '.envoy-tasks'));
+    fs.writeFileSync(path.join(dir, '.envoy-tasks', '1.json'), '{}');
+    execFileSync('bash', ['-c', fence[2]], { cwd: dir, encoding: 'utf8' });
+    assert.ok(!fs.existsSync(path.join(dir, '.envoy', 'brainstorm')), '.envoy/brainstorm removed');
+    assert.ok(fs.existsSync(path.join(dir, '.envoy-tasks', '1.json')), 'task handoff left intact');
+    const { evaluateIssueCreateGuard } = require(path.join(REPO_ROOT, 'lib', 'contract-guard.js'));
+    const r = evaluateIssueCreateGuard(dir, 'gh issue create --title x');
+    assert.ok(!r.unconditional, 'next brainstorm is not blocked as a duplicate create');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 for (const d of tmpRoots) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
