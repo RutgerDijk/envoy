@@ -391,24 +391,44 @@ const session = require(path.join(LIB, 'session-state'));
 
 section('session-state: CRUD');
 
+const { validate: validateSchema } = require(path.join(LIB, 'validate-schema'));
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-test-'));
+const sessionFileIn = dir => path.join(dir, '.envoy', 'pickup', 'session.json');
 
-test('createEmpty returns valid state', () => {
+test('createEmpty returns a schema-valid state', () => {
   const s = session.createEmpty();
-  assert.strictEqual(s.version, 1);
+  const r = validateSchema('session', s);
+  assert(r.valid, r.errors.join('; '));
+  assert.strictEqual(s.$schemaVersion, '1');
   assert(Array.isArray(s.tasks));
   assert(Array.isArray(s.decisions));
-  assert(Array.isArray(s.filesModified));
   assert(Array.isArray(s.nextSteps));
-  assert.strictEqual(s.testResults, null);
 });
 
-test('save and load roundtrip', () => {
+test('createEmpty has no version, filesModified or testResults fields', () => {
+  const s = session.createEmpty();
+  assert(!('version' in s), 'version must be gone');
+  assert(!('filesModified' in s), 'filesModified must be gone');
+  assert(!('testResults' in s), 'testResults must be gone');
+});
+
+test('save writes .envoy/pickup/session.json and load roundtrips', () => {
   const s = session.createEmpty();
   s.branch = 'feature/test';
   session.save(s, tmpDir);
+  assert(fs.existsSync(sessionFileIn(tmpDir)), 'expected .envoy/pickup/session.json');
   const loaded = session.load(tmpDir);
   assert.strictEqual(loaded.branch, 'feature/test');
+});
+
+test('saved file validates against lib/schemas/session.json', () => {
+  const r = validateSchema('session', JSON.parse(fs.readFileSync(sessionFileIn(tmpDir), 'utf8')));
+  assert(r.valid, r.errors.join('; '));
+});
+
+test('save writes no legacy root-level session file', () => {
+  const legacy = fs.readdirSync(tmpDir).filter(n => n.startsWith('.envoy-' + 'session'));
+  assert.deepStrictEqual(legacy, []);
 });
 
 test('exists returns true after save', () => {
@@ -420,20 +440,47 @@ test('clear removes file', () => {
   assert(!session.exists(tmpDir));
 });
 
-test('load returns empty state when file missing', () => {
+test('load returns a schema-valid empty state when file missing', () => {
   const s = session.load(tmpDir);
-  assert.strictEqual(s.version, 1);
-  assert.strictEqual(s.branch, null);
+  assert(validateSchema('session', s).valid);
+  assert.strictEqual(s.tasks.length, 0);
+});
+
+test('save rejects an invalid task status and writes nothing', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-test-'));
+  const s = session.createEmpty();
+  s.tasks.push({ id: 't1', status: 'bogus' });
+  assert.throws(() => session.save(s, dir), /session/i);
+  assert(!fs.existsSync(sessionFileIn(dir)), 'invalid state must not be written');
+});
+
+test('save rejects a state missing branch', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-test-'));
+  const s = session.createEmpty();
+  delete s.branch;
+  assert.throws(() => session.save(s, dir));
+  assert(!fs.existsSync(sessionFileIn(dir)));
 });
 
 section('session-state: mutations');
 
-test('addDecision appends to decisions', () => {
+test('addDecision stores decisions[].note (not text)', () => {
   const s = session.createEmpty();
   session.addDecision(s, 'Use Guid for PK');
   assert.strictEqual(s.decisions.length, 1);
-  assert.strictEqual(s.decisions[0].text, 'Use Guid for PK');
+  assert.strictEqual(s.decisions[0].note, 'Use Guid for PK');
+  assert.strictEqual(s.decisions[0].text, undefined);
   assert(s.decisions[0].at);
+});
+
+test('state with a decision and tasks saves as schema-valid', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-test-'));
+  const s = session.createEmpty();
+  session.addDecision(s, 'Use Guid for PK');
+  session.updateTask(s, 'task-1', 'done', 'Completed');
+  session.save(s, dir);
+  const onDisk = JSON.parse(fs.readFileSync(sessionFileIn(dir), 'utf8'));
+  assert.strictEqual(onDisk.decisions[0].note, 'Use Guid for PK');
 });
 
 test('updateTask creates new task', () => {
@@ -453,28 +500,9 @@ test('updateTask updates existing task', () => {
   assert.strictEqual(s.tasks[0].summary, 'Completed');
 });
 
-test('trackFile adds new file', () => {
-  const s = session.createEmpty();
-  session.trackFile(s, 'src/foo.ts', 'New file');
-  assert.strictEqual(s.filesModified.length, 1);
-  assert.strictEqual(s.filesModified[0].count, 1);
-});
-
-test('trackFile increments count on duplicate', () => {
-  const s = session.createEmpty();
-  session.trackFile(s, 'src/foo.ts', 'Created');
-  session.trackFile(s, 'src/foo.ts', 'Updated');
-  assert.strictEqual(s.filesModified.length, 1);
-  assert.strictEqual(s.filesModified[0].count, 2);
-  assert.strictEqual(s.filesModified[0].reason, 'Updated');
-});
-
-test('setTestResults stores results', () => {
-  const s = session.createEmpty();
-  session.setTestResults(s, { passed: 10, failed: 1, skipped: 0, summary: '1 failure' });
-  assert.strictEqual(s.testResults.passed, 10);
-  assert.strictEqual(s.testResults.failed, 1);
-  assert(s.testResults.at);
+test('trackFile and setTestResults are retired', () => {
+  assert.strictEqual(session.trackFile, undefined);
+  assert.strictEqual(session.setTestResults, undefined);
 });
 
 section('session-state: formatForPrompt');
