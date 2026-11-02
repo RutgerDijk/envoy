@@ -32,14 +32,14 @@ What to verify during code review. Used by review agents.
 ### Test Command (optional)
 A profile may declare the commands skills use to run tests, read by `lib/test-commands.js`:
 
-```
+```markdown
 ## Test Command
 
 filtered: dotnet test --filter "FullyQualifiedName~{{test}}"
 full: dotnet test
 ```
 
-`filtered:` runs one named test and must contain the literal `{{test}}` placeholder; `full:` runs the whole suite. A project's root `CLAUDE.md` may declare the same `## Test Command` section, which overrides the stack default (e.g. to add `--no-build`). Templates containing shell metacharacters (`;`, `&&`, `||`, `|`, `$(`, backticks) outside the placeholder are rejected and reported as warnings — never executed.
+`filtered:` runs one named test and must contain the literal `{{test}}` placeholder; `full:` runs the whole suite. A project's root `CLAUDE.md` may declare the same `## Test Command` section, which overrides the stack default (e.g. to add `--no-build`). A valid override replaces all detected stack defaults at once — it is not merged per line. Templates containing shell metacharacters (`;`, `&&`, `||`, `|`, `$(`, backticks, newline) outside the placeholder are rejected and reported as warnings — never executed. One unsafe line (`filtered:` or `full:`) drops both lines; an unsafe override falls back to the stack-profile commands.
 
 ## Selective Loading
 
