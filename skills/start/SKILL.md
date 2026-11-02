@@ -87,7 +87,8 @@ Call **AskUserQuestion** with one question ("What do you want to work on?",
 ### Step 4: Dispatch the choice
 
 In the blocks below, set `SNAP=` to the exact path Step 2 printed (single-quoted
-literal) and `INDEX=` to the chosen option's `index` (a plain number).
+literal; write any `'` in it as `'\''`) and `INDEX=` to the chosen option's
+`index` (a plain number).
 
 | `action` | Do |
 |---|---|
