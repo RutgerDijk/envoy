@@ -618,10 +618,11 @@ test('render throwing on a malformed snapshot: stderr, empty dashboard, exit 0',
   assert.match(strip(stdout.text()), /nothing open/);
 });
 
-test('collect is called with the repo root option', async () => {
+test('collect is called with the start cwd, not a forced repo root', async () => {
   let got = null;
   await mod.main(['--json'], { collect: (o) => { got = o; return emptyFixture(); }, stdout: capture(), stderr: capture(), env: {}, cwd: '/some/dir' });
-  assert.ok(got && got.repoRoot === '/some/dir', `repoRoot not passed: ${JSON.stringify(got)}`);
+  assert.ok(got && got.cwd === '/some/dir', `cwd not passed: ${JSON.stringify(got)}`);
+  assert.strictEqual(got.repoRoot, undefined, 'repoRoot must be resolved by collect from git worktree list');
 });
 
 // ═══════════════════════════════════════════════════════════════════

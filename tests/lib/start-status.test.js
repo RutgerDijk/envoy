@@ -1097,6 +1097,38 @@ test('merged PR lookup failing is fail-soft: worktree keeps its normal action', 
   }
 });
 
+test('merged PR but uncommitted changes: hervat, never cleanup (would lose work)', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '91-done', branch: 'feature/91-done', ahead: 9, dirty: true }],
+    mergedPrs: [{ number: 92, headRefName: 'feature/91-done' }],
+  });
+  try {
+    const snap = await ss.collect(fx.opts);
+    const w = snap.worktrees.find((x) => x.branch === 'feature/91-done');
+    assert.strictEqual(w.merged, true);
+    assert.strictEqual(w.action, 'hervat');
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('run from inside a worktree (opts.cwd): repoRoot is the main checkout, worktree is not main', async () => {
+  const fx = makeFixture({
+    worktrees: [{ dir: '12-foo', branch: 'feature/12-foo', ahead: 2 }],
+  });
+  try {
+    const { repoRoot, ...rest } = fx.opts;
+    const snap = await ss.collect({ ...rest, cwd: fx.wtPath('12-foo') });
+    assert.strictEqual(snap.repo.root, fx.repoRoot);
+    const w = snap.worktrees.find((x) => x.branch === 'feature/12-foo');
+    assert.strictEqual(w.isMain, false);
+    assert.strictEqual(w.action, 'hervat');
+    assert.ok(fx.gitCalls.some((c) => c.args.join(' ') === 'worktree list --porcelain' && c.cwd === fx.wtPath('12-foo')));
+  } finally {
+    fx.cleanup();
+  }
+});
+
 section('brainstorm window + scan');
 
 test('ledger brainstorm older than 30 days is dropped', async () => {
