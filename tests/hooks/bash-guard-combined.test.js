@@ -242,6 +242,12 @@ const ALLOW_COMMANDS = [
   'cat > notes.md <<-EOF\n\techo > biome.json\n\tEOF',
   'ls -la',
   '',
+  // Commit / PR-body idiom: heredoc inside "$(...)" whose body mentions a write.
+  'git commit -m "$(cat <<\'EOF\'\nfix: block "echo {} > .eslintrc.json" writes\nEOF\n)"',
+  'gh pr create --title t --body "$(cat <<\'EOF\'\nfix: a) b > .prettierrc\nEOF\n)"',
+  'git commit -m "$(cat <<EOF\nnote: tee .editorconfig\nEOF\n)" && git log -1',
+  // Plain-directory backup target is not treated as a write of the source basename.
+  'cp .prettierrc /tmp/backup/',
 ];
 
 for (const cmd of ALLOW_COMMANDS) {
