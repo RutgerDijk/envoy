@@ -24,9 +24,10 @@ session. The dashboard and snapshot are read-only.
 **Announce at start:** "I'm using envoy:start to show what's open and pick what to resume."
 
 Shell state does not persist between Bash calls: every block sets `ENVOY`
-(plugin root) and `SNAP` (snapshot file) itself. Copy each block whole. Never
-paste a branch, path, title or session id into a command — only the option
-**index**; `lib/start-choices.js` reads everything else from the snapshot.
+(plugin root) itself. Copy each block whole. Never paste a branch, path, title
+or session id into a command — only the option **index** and the one snapshot
+path Step 2 prints as `SNAP=<path>`; `lib/start-choices.js` reads everything
+else from that snapshot.
 
 ## Process
 
@@ -53,15 +54,21 @@ esac
 ### Step 2: Snapshot and build the options
 
 Saves the `lib/start-status.js` snapshot (shape: its `StartSnapshot` typedef) to
-gitignored `.envoy/start/snapshot.json`, then prints 2–4 options as JSON
-(`index`, `label`, `description`, `action`, `kind`, `ref`).
+a new, unique file under gitignored `.envoy/start/` (so concurrent
+`/envoy:start` runs never share one; snapshots older than a day are pruned),
+prints `SNAP=<path>`, then 2–4 options as JSON (`index`, `label`,
+`description`, `action`, `kind`, `ref`).
 
 ```bash
 ENVOY=$(cd "${CLAUDE_SKILL_DIR}/../.." && pwd)
-SNAP="$(git rev-parse --show-toplevel)/.envoy/start/snapshot.json"
-mkdir -p "$(dirname "$SNAP")" && node "$ENVOY/lib/start-status.js" > "$SNAP" &&
+TOP=$(git rev-parse --show-toplevel) && mkdir -p "$TOP/.envoy/start" &&
+find "$TOP/.envoy/start" -maxdepth 1 -name 'snapshot.*' -mtime +1 -delete
+SNAP=$(mktemp "$TOP/.envoy/start/snapshot.XXXXXX") && echo "SNAP=$SNAP" &&
+node "$ENVOY/lib/start-status.js" > "$SNAP" &&
 node "$ENVOY/lib/start-choices.js" options "$SNAP"
 ```
+
+Remember the printed `SNAP=` path: Step 4 acts on exactly that snapshot.
 
 The list is the first 3 ranking items plus the recommended issue. A PR and its
 own worktree count as one option (the PR). When fewer than 2 items are open, it
@@ -79,7 +86,8 @@ Call **AskUserQuestion** with one question ("What do you want to work on?",
 
 ### Step 4: Dispatch the choice
 
-Set `INDEX=` in the blocks below to the chosen option's `index` (a plain number).
+In the blocks below, set `SNAP=` to the exact path Step 2 printed (single-quoted
+literal) and `INDEX=` to the chosen option's `index` (a plain number).
 
 | `action` | Do |
 |---|---|
@@ -96,7 +104,7 @@ path instead; for a PR without a local worktree it points to `envoy:babysit` or
 
 ```bash
 ENVOY=$(cd "${CLAUDE_SKILL_DIR}/../.." && pwd)
-SNAP="$(git rev-parse --show-toplevel)/.envoy/start/snapshot.json"
+SNAP='<printed SNAP path>'   # the exact path Step 2 printed
 INDEX=1   # the chosen option's index
 node "$ENVOY/lib/start-choices.js" resume "$SNAP" "$INDEX"
 ```
@@ -109,7 +117,7 @@ directory, then moves to the main repo itself. So `cd` into the worktree first:
 
 ```bash
 ENVOY=$(cd "${CLAUDE_SKILL_DIR}/../.." && pwd)
-SNAP="$(git rev-parse --show-toplevel)/.envoy/start/snapshot.json"
+SNAP='<printed SNAP path>'   # the exact path Step 2 printed
 INDEX=1   # the chosen option's index
 DIR=$(node "$ENVOY/lib/start-choices.js" dir "$SNAP" "$INDEX") && cd "$DIR" && pwd
 ```
