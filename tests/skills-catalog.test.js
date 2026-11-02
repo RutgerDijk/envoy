@@ -262,6 +262,7 @@ test('skills/start/SKILL.md gives each invocation its own immutable snapshot (no
   assert.ok(!/SNAP="\$\(git rev-parse/.test(content), 'resume/cleanup must not recompute a shared SNAP path');
   assert.ok(/find "[^"]*\.envoy\/start" -maxdepth 1 -name 'snapshot\.\*' -mtime \+1 -delete/.test(content),
     'expected bounded pruning of old snapshots');
+  assert.ok(content.includes("'\\''"), "expected guidance to escape a ' in the pasted SNAP path as '\\''");
 });
 
 test('skills/start/SKILL.md stays well under 200 lines', () => {
