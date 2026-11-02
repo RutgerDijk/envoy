@@ -136,6 +136,42 @@ test('brainstorm SKILL.md has the inline preflight briefing', () => {
   assert.ok(/preflight\.js/.test(content));
 });
 
+// The issue-create guard (lib/contract-guard.js) reads an approval marker
+// before allowing `gh issue create`. SKILL.md must write exactly that file,
+// and must write it before the issue is created (#94).
+function guardApprovalPath() {
+  const src = fs.readFileSync(path.join(REPO_ROOT, 'lib', 'contract-guard.js'), 'utf8');
+  const m = src.match(/path\.join\(\s*cwd\s*,([^)]*issue-plan-approved\.json[^)]*)\)/);
+  assert.ok(m, 'contract-guard.js joins a path ending in issue-plan-approved.json');
+  const segs = [...m[1].matchAll(/'([^']+)'/g)].map((s) => s[1]);
+  return segs.join('/');
+}
+
+test('brainstorm SKILL.md names the approval marker path the guard reads', () => {
+  const marker = guardApprovalPath();
+  assert.strictEqual(marker, '.envoy/brainstorm/issue-plan-approved.json');
+  const content = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'brainstorm', 'SKILL.md'), 'utf8');
+  assert.ok(content.includes(marker), `SKILL.md mentions ${marker}`);
+});
+
+test('brainstorm SKILL.md writes the approval marker before the first issue create command', () => {
+  const marker = guardApprovalPath();
+  const content = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'brainstorm', 'SKILL.md'), 'utf8');
+  const blocks = [...content.matchAll(/```bash\n([\s\S]*?)```/g)]
+    .map((b) => ({ start: b.index, body: b[1] }));
+  const writeRe = new RegExp(`>\\s*${marker.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}`);
+  const writeBlock = blocks.find((b) => writeRe.test(b.body));
+  assert.ok(writeBlock, `a bash block redirects into ${marker}`);
+  const createBlock = blocks.find((b) => /gh issue create/.test(b.body));
+  assert.ok(createBlock, 'a bash block runs the issue create');
+  const writeAt = writeBlock.start + writeBlock.body.search(writeRe);
+  const createAt = createBlock.start + createBlock.body.search(/gh issue create/);
+  assert.ok(writeAt < createAt, 'marker write precedes the issue create command');
+  assert.ok(/"\\?\$schemaVersion"\s*:\s*"1"/.test(writeBlock.body), 'marker carries $schemaVersion "1"');
+  assert.ok(/"approved"\s*:\s*true/.test(writeBlock.body), 'marker carries approved: true');
+  assert.ok(/"approvedAt"/.test(writeBlock.body), 'marker carries approvedAt');
+});
+
 for (const d of tmpRoots) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
