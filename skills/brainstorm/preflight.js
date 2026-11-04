@@ -11,7 +11,7 @@
  *     brainstormed (when a topic is determinable)            -> degraded
  *
  * Existing-issue mode (`/envoy:brainstorm #82`, dispatched by /envoy:start for
- * an open issue without a plan): the first argument token `#<n>` or `<n>`
+ * an open issue without a plan): a lone `#<n>` or `<n>` argument
  * selects it. Then:
  *   - issue missing / `gh issue view` fails                  -> fatal
  *   - issue closed                                           -> fatal
@@ -120,10 +120,12 @@ function findSimilarIssue(topic) {
 
 // The skill forwards "$ARGUMENTS" as ONE quoted string (an unquoted `#82`
 // would be a shell comment), so split it into tokens here (#89). Only a
-// leading `#<n>` / `<n>` token selects existing-issue mode; anything else
+// lone `#<n>` / `<n>` argument selects existing-issue mode; anything else
 // (a topic, nothing) keeps the normal new-issue flow.
 function resolveIssueRef(argv) {
   const tokens = argv.flatMap((a) => String(a).split(/\s+/)).filter(Boolean);
+  // A topic that merely starts with a number ("10 ways to …") is not a ref.
+  if (tokens.length > 1) return null;
   const first = tokens.length ? tokens[0] : (process.env.ENVOY_BRAINSTORM_ISSUE || '').trim();
   const m = /^#?([1-9]\d*)$/.exec(first || '');
   return m ? Number(m[1]) : null;
@@ -190,6 +192,9 @@ function runExistingIssue(n, warnings) {
     mode: 'existing-issue',
     createdAt: new Date().toISOString(),
   }, null, 2));
+  // Phase 4 runs `gh issue edit`, not `gh issue create`, so /envoy:start can
+  // only tell this session has an issue through a ledger event carrying both.
+  appendEvent(CWD, { type: 'brainstorm-existing-issue', issue: n });
 
   banner(warnings.length > 0 ? strictPromote('degraded') : 'ok');
   say('');
