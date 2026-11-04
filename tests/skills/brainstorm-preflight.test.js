@@ -259,6 +259,32 @@ test('non-numeric args (a topic) -> not existing-issue mode', () => {
   assert.ok(!/MODE: existing-issue/.test(out));
 });
 
+test('a topic that starts with a number ("10 ways to speed up CI") -> not existing-issue mode', () => {
+  const cwd = makeCwd();
+  const { status, out } = runPreflight(cwd, {
+    ENVOY_GH_AUTH_STATUS_FAKE: 'ok',
+    ENVOY_GH_ISSUE_VIEW_FILE: writeIssueView(cwd, OPEN_82),
+  }, ['10 ways to speed up CI']);
+  assert.strictEqual(status, 'ok', out);
+  assert.ok(!/MODE: existing-issue/.test(out), 'leading number in a topic is not an issue ref');
+  assert.ok(!fs.existsSync(path.join(cwd, '.envoy', 'brainstorm', 'session.json')));
+});
+
+test('existing-issue mode links the session to the issue in the ledger (so /envoy:start drops it from open brainstorms)', () => {
+  const cwd = makeCwd();
+  runPreflight(cwd, {
+    ENVOY_GH_AUTH_STATUS_FAKE: 'ok',
+    ENVOY_GH_ISSUE_VIEW_FILE: writeIssueView(cwd, OPEN_82),
+    CLAUDE_SESSION_ID: 'sess-existing-82',
+  }, ['#82']);
+  const events = fs.readFileSync(path.join(cwd, '.envoy', 'ledger.jsonl'), 'utf8')
+    .trim().split('\n').map((l) => JSON.parse(l));
+  assert.ok(
+    events.some((e) => e.sessionId === 'sess-existing-82' && e.issue === 82),
+    `a ledger event carries both sessionId and issue 82: ${JSON.stringify(events)}`,
+  );
+});
+
 test('brainstorm SKILL.md forwards "$ARGUMENTS" quoted to preflight (#89)', () => {
   const content = fs.readFileSync(path.join(REPO_ROOT, 'skills', 'brainstorm', 'SKILL.md'), 'utf8');
   assert.ok(content.includes('preflight.js "$ARGUMENTS"'));
