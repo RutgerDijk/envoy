@@ -544,6 +544,37 @@ for (const cmd of [
   });
 }
 
+section('PR #98 cycle 2: env only counts in the wrapper prefix; sibling subshells; redirects ignore env -C');
+
+for (const cmd of [
+  'tee -- .eslintrc.json env -C /tmp/out.log < /dev/null',
+  'tee .prettierrc env --chdir=/tmp < /dev/null',
+  '(cd /tmp); (printf x > .eslintrc.json)',
+  '(cd /tmp) ; (cp x.json biome.json)',
+  '((cd /tmp); echo {} > .eslintrc.json)',
+  'env -C /tmp cat /dev/null > .eslintrc.json',
+  'env --chdir /tmp echo {} >> .prettierrc',
+]) {
+  test(`blocks: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+for (const cmd of [
+  '(cd /tmp; (echo {} > .eslintrc.json))',
+  'env -C /tmp tee .eslintrc.json < /dev/null',
+]) {
+  test(`allows (nested subshell inherits / env -C operand): ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
 test('unknown cd target still blocks an absolute in-project target', () => {
   withTmp((tmp) => {
     const real = fs.realpathSync(tmp);

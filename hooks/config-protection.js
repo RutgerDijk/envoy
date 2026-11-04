@@ -112,8 +112,10 @@ function evaluateBasename(filePath, blocked = BLOCKED_PATTERNS, warn = WARN_PATT
 // inside a quoted string (or arithmetic `$(( a << 2 ))`) may over-strip
 // following lines; symlinked paths are compared lexically, not via realpath;
 // a target starting with `$VAR` is resolved literally, relative to cwd.
-// Directory changes: `cd DIR` / `pushd DIR` (scoped to its `( ... )` subshell)
-// and `env -C DIR` move the base that later relative targets resolve against;
+// Directory changes: `cd DIR` / `pushd DIR` (scoped to its own `( ... )`
+// subshell) move the base for later segments; `env -C DIR` in the wrapper
+// prefix moves it for that command's operands only (redirects are opened by
+// the shell, before env runs);
 // when DIR cannot be established (`cd`, `cd -`, `~`, `$VAR`, `$(...)`),
 // relative targets after it are not blocked (absolute targets still are).
 // ---------------------------------------------------------------------------
@@ -174,14 +176,16 @@ const WRAPPER_ARG_OPTS = {
  * Tokenize a shell command into segments of words and redirects.
  * @param {string} command
  * Each segment carries `quoted[]` (parallel to `words`: true when any part of
- * the word was quoted or escaped) and `depth` (the `( ... )` subshell nesting
- * level it runs at).
- * @returns {Array<{words: string[], quoted: boolean[], depth: number, redirects: Array<{op: string, fd: string, target: string}>}>}
+ * the word was quoted or escaped) and `scopes` (the ids of the `( ... )`
+ * subshells it runs in, outermost first; `[0]` is the top-level shell).
+ * Sibling subshells get distinct ids, so state never leaks between them.
+ * @returns {Array<{words: string[], quoted: boolean[], scopes: number[], redirects: Array<{op: string, fd: string, target: string}>}>}
  */
 function tokenize(command) {
   const segments = [];
-  let depth = 0; // ( ... ) subshell nesting
-  const newSegment = () => ({ words: [], quoted: [], depth, redirects: [] });
+  const scopeStack = [0]; // ( ... ) subshell ids, outermost first
+  let nextScopeId = 1;
+  const newSegment = () => ({ words: [], quoted: [], scopes: scopeStack.slice(), redirects: [] });
   let current = newSegment();
   let word = null; // null = no word in progress
   let wordQuoted = false; // any part of the current word was quoted/escaped
@@ -298,9 +302,9 @@ function tokenize(command) {
     }
     if (c === ';' || c === '|' || c === '(' || c === ')') {
       finishSegment();
-      if (c === '(') depth++;
-      else if (c === ')') depth = Math.max(0, depth - 1);
-      current.depth = depth;
+      if (c === '(') scopeStack.push(nextScopeId++);
+      else if (c === ')' && scopeStack.length > 1) scopeStack.pop();
+      current.scopes = scopeStack.slice();
       i += (c === '|' && s[i + 1] === '|') ? 2 : 1;
       continue;
     }
@@ -360,24 +364,45 @@ function tokenize(command) {
   return segments;
 }
 
-function commandWords(words, quoted = []) {
+/**
+ * Walk a segment's prefix (keywords, assignments, wrappers and their options)
+ * to the real command. `chdir` is the last `env -C DIR` / `--chdir[=]DIR` /
+ * `-CDIR` seen in that prefix (undefined when none); `env` appearing later,
+ * as an ordinary argument, is never looked at.
+ * @param {string[]} words
+ * @param {boolean[]} [quoted]
+ * @returns {{words: string[], chdir: string|undefined}}
+ */
+function parsePrefix(words, quoted = []) {
   let k = 0;
+  let chdir;
   while (k < words.length) {
     const w = words[k];
     if (!quoted[k] && COMPOUND_KEYWORDS.has(w)) { k++; continue; }
     if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) { k++; continue; }
     if (Object.prototype.hasOwnProperty.call(WRAPPER_ARG_OPTS, w)) {
       const argOpts = WRAPPER_ARG_OPTS[w];
+      const isEnv = w === 'env';
       k++;
       while (k < words.length && words[k].startsWith('-') && words[k] !== '-') {
-        if (words[k] === '--') { k++; break; }
-        k += argOpts.has(words[k]) ? 2 : 1;
+        const o = words[k];
+        if (o === '--') { k++; break; }
+        if (isEnv) {
+          if (o === '-C' || o === '--chdir') chdir = words[k + 1] || '';
+          else if (o.startsWith('--chdir=')) chdir = o.slice('--chdir='.length);
+          else if (/^-C./.test(o)) chdir = o.slice(2);
+        }
+        k += argOpts.has(o) ? 2 : 1;
       }
       continue;
     }
     break;
   }
-  return words.slice(k);
+  return { words: words.slice(k), chdir };
+}
+
+function commandWords(words, quoted = []) {
+  return parsePrefix(words, quoted).words;
 }
 
 function teeTargets(args) {
@@ -448,25 +473,6 @@ function resolvableDir(d) {
 }
 
 /**
- * `env -C DIR` / `env --chdir DIR` / `--chdir=DIR` / `-CDIR` in a segment's
- * wrapper prefix. Returns undefined when absent, the DIR string when found.
- * @param {string[]} words
- * @returns {string|undefined}
- */
-function envChdir(words) {
-  const at = words.indexOf('env');
-  if (at === -1) return undefined;
-  for (let k = at + 1; k < words.length; k++) {
-    const a = words[k];
-    if (a === '-C' || a === '--chdir') return words[k + 1] || '';
-    if (a.startsWith('--chdir=')) return a.slice('--chdir='.length);
-    if (/^-C./.test(a)) return a.slice(2);
-    if (!a.startsWith('-') && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(a)) break;
-  }
-  return undefined;
-}
-
-/**
  * Extract the write targets of a Bash command together with the directory
  * changes in effect when each runs. `dirs` is the list of `cd`/`env -C`
  * operands to apply (in order) to the payload cwd, or null when the effective
@@ -476,28 +482,34 @@ function envChdir(words) {
  */
 function extractWriteTargetsWithDirs(command) {
   const out = [];
-  // dirStack[d] = cd operands in effect at subshell depth d (null = unknown).
-  const dirStack = [[]];
+  const copy = (d) => (d === null ? null : d.slice());
+  // One entry per enclosing subshell: {id, dirs} where dirs = cd operands in
+  // effect there (null = unknown). Entering a subshell copies its parent's
+  // dirs; leaving it discards its own, so siblings never share state.
+  const dirStack = [{ id: 0, dirs: [] }];
   for (const seg of tokenize(command)) {
-    const d = seg.depth || 0;
-    while (dirStack.length > d + 1) dirStack.pop();
-    while (dirStack.length < d + 1) {
-      const top = dirStack[dirStack.length - 1];
-      dirStack.push(top === null ? null : top.slice());
+    const scopes = seg.scopes || [0];
+    let common = 0;
+    while (common < dirStack.length && common < scopes.length && dirStack[common].id === scopes[common]) common++;
+    dirStack.length = Math.max(common, 1);
+    for (let j = dirStack.length; j < scopes.length; j++) {
+      dirStack.push({ id: scopes[j], dirs: copy(dirStack[j - 1].dirs) });
     }
-    let dirs = dirStack[d];
-    const chdir = envChdir(seg.words);
-    if (chdir !== undefined) dirs = dirs !== null && resolvableDir(chdir) ? [...dirs, chdir] : null;
-
-    const targets = [];
+    const frame = dirStack[dirStack.length - 1];
+    // Redirects are opened by the shell in its own directory.
+    const shellDirs = frame.dirs;
     for (const r of seg.redirects) {
       if (r.target === null || r.target === undefined) continue;
       if (r.op === '<' || r.op === '<<<' || r.op === '<&' || r.op === '<>') continue;
       if (r.op === '>&' && /^(\d+|-)$/.test(r.target)) continue; // fd dup
-      targets.push(r.target);
+      out.push({ target: r.target, dirs: copy(shellDirs) });
     }
-    const k0 = seg.words.length - commandWords(seg.words, seg.quoted).length;
-    const words = seg.words.slice(k0);
+
+    // Command operands run where `env -C` (if any) puts the command.
+    const { words, chdir } = parsePrefix(seg.words, seg.quoted);
+    let cmdDirs = shellDirs;
+    if (chdir !== undefined) cmdDirs = shellDirs !== null && resolvableDir(chdir) ? [...shellDirs, chdir] : null;
+    const targets = [];
     if (words.length) {
       const cmd = path.basename(words[0]);
       const args = words.slice(1);
@@ -505,13 +517,12 @@ function extractWriteTargetsWithDirs(command) {
       else if (cmd === 'sed' || cmd === 'gsed') targets.push(...sedTargets(args));
       else if (cmd === 'cp' || cmd === 'mv' || cmd === 'install') targets.push(...copyTargets(args));
     }
-    for (const target of targets) out.push({ target, dirs: dirs === null ? null : dirs.slice() });
+    for (const target of targets) out.push({ target, dirs: copy(cmdDirs) });
 
-    // `cd`/`pushd` move the base for the following segments at this depth.
+    // `cd`/`pushd` move the base for the following segments in this subshell.
     if (words.length && (words[0] === 'cd' || words[0] === 'pushd')) {
       const operand = words.slice(1).find((a) => a === '-' || !a.startsWith('-'));
-      const cur = dirStack[d];
-      dirStack[d] = cur !== null && resolvableDir(operand) ? [...cur, operand] : null;
+      frame.dirs = frame.dirs !== null && resolvableDir(operand) ? [...frame.dirs, operand] : null;
     }
   }
   return out;
