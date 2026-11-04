@@ -193,6 +193,11 @@ test('linkedIssue parses feature/fix/hotfix branches', async () => {
   assert.strictEqual(ss.linkedIssue(null), null);
 });
 
+test('linkedIssue accepts a bare feature/<N> branch, matching tab-title issueFromBranch', async () => {
+  assert.strictEqual(ss.linkedIssue('feature/83'), 83);
+  assert.strictEqual(ss.linkedIssue('feature/83x'), null);
+});
+
 test('describeBody strips headers and caps to one short line', async () => {
   const d = ss.describeBody('## Overview\n\nAdds a **dashboard** for\nsessions.\n\n## Architecture\n' + 'x'.repeat(300));
   assert.ok(!d.includes('#'), d);

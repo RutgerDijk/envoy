@@ -514,6 +514,11 @@ test('ENVOY_DISABLED_HOOKS=tab-title: refresh does nothing', () => {
   assert.strictEqual(calls.length, 0);
 });
 
+test('finalize SKILL.md quotes the tab-title.js path (plugin dirs may contain spaces)', () => {
+  const md = require('fs').readFileSync(path.join(__dirname, '..', '..', 'skills', 'finalize', 'SKILL.md'), 'utf8');
+  assert.ok(md.includes('node "${CLAUDE_SKILL_DIR}/../../lib/tab-title.js"'), 'tab-title.js path is quoted');
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
