@@ -112,6 +112,10 @@ function evaluateBasename(filePath, blocked = BLOCKED_PATTERNS, warn = WARN_PATT
 // inside a quoted string (or arithmetic `$(( a << 2 ))`) may over-strip
 // following lines; symlinked paths are compared lexically, not via realpath;
 // a target starting with `$VAR` is resolved literally, relative to cwd.
+// Directory changes: `cd DIR` / `pushd DIR` (scoped to its `( ... )` subshell)
+// and `env -C DIR` move the base that later relative targets resolve against;
+// when DIR cannot be established (`cd`, `cd -`, `~`, `$VAR`, `$(...)`),
+// relative targets after it are not blocked (absolute targets still are).
 // ---------------------------------------------------------------------------
 
 /**
@@ -152,6 +156,11 @@ function stripHeredocBodies(s) {
 // Wrapper commands and which of their options consume a following argument.
 // Unknown options are skipped as flags (conservative: at worst we look at the
 // wrong word and miss a write — a false negative).
+// Shell reserved words that may precede the real command in a segment
+// (`if sed -i ...`, `then tee ...`, `do cp ...`). Only unquoted words count:
+// `echo 'then'` is not a keyword.
+const COMPOUND_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{']);
+
 const WRAPPER_ARG_OPTS = {
   sudo: new Set(['-u', '-g', '-U', '-C', '-p', '-r', '-t', '-D', '-h']),
   env: new Set(['-u', '-C', '-S', '--unset', '--chdir', '--split-string']),
@@ -164,14 +173,24 @@ const WRAPPER_ARG_OPTS = {
 /**
  * Tokenize a shell command into segments of words and redirects.
  * @param {string} command
- * @returns {Array<{words: string[], redirects: Array<{op: string, fd: string, target: string}>}>}
+ * Each segment carries `quoted[]` (parallel to `words`: true when any part of
+ * the word was quoted or escaped) and `depth` (the `( ... )` subshell nesting
+ * level it runs at).
+ * @returns {Array<{words: string[], quoted: boolean[], depth: number, redirects: Array<{op: string, fd: string, target: string}>}>}
  */
 function tokenize(command) {
   const segments = [];
-  let current = { words: [], redirects: [] };
+  let depth = 0; // ( ... ) subshell nesting
+  const newSegment = () => ({ words: [], quoted: [], depth, redirects: [] });
+  let current = newSegment();
   let word = null; // null = no word in progress
+  let wordQuoted = false; // any part of the current word was quoted/escaped
   let pendingRedirect = null; // redirect awaiting its target word
   let heredocDelimiterNext = false; // next word is a heredoc delimiter (body already stripped)
+  // Inside `[[ ... ]]`: `>`/`<` are comparisons and `&&`, `||`, `(`, `)` are
+  // condition operators, not segment boundaries. Tracked at tokenizer level so
+  // the scope survives those operators.
+  let inDoubleBracket = false;
 
   const s = stripHeredocBodies(command);
   let i = 0;
@@ -179,7 +198,9 @@ function tokenize(command) {
   function finishWord() {
     if (word === null) return;
     const w = word;
+    const q = wordQuoted;
     word = null;
+    wordQuoted = false;
     if (heredocDelimiterNext) {
       heredocDelimiterNext = false;
       return;
@@ -190,18 +211,24 @@ function tokenize(command) {
       pendingRedirect = null;
       return;
     }
+    if (!q && w === '[[') inDoubleBracket = true;
+    else if (!q && w === ']]') inDoubleBracket = false;
     current.words.push(w);
+    current.quoted.push(q);
+  }
+
+  function pushOperatorWord(op) {
+    finishWord();
+    current.words.push(op);
+    current.quoted.push(false);
   }
 
   function finishSegment() {
     finishWord();
     pendingRedirect = null;
+    inDoubleBracket = false;
     if (current.words.length || current.redirects.length) segments.push(current);
-    current = { words: [], redirects: [] };
-  }
-
-  function inDoubleBracket() {
-    return current.words.lastIndexOf('[[') > current.words.lastIndexOf(']]');
+    current = newSegment();
   }
 
   while (i < s.length) {
@@ -222,6 +249,7 @@ function tokenize(command) {
       const end = s.indexOf("'", i + 1);
       const stop = end === -1 ? s.length : end;
       word = (word || '') + s.slice(i + 1, stop);
+      wordQuoted = true;
       i = stop + 1;
       continue;
     }
@@ -234,11 +262,12 @@ function tokenize(command) {
         j++;
       }
       word = (word || '') + buf;
+      wordQuoted = true;
       i = j + 1;
       continue;
     }
     if (c === '\\') {
-      if (i + 1 < s.length && s[i + 1] !== '\n') word = (word || '') + s[i + 1];
+      if (i + 1 < s.length && s[i + 1] !== '\n') { word = (word || '') + s[i + 1]; wordQuoted = true; }
       i += 2;
       continue;
     }
@@ -261,8 +290,17 @@ function tokenize(command) {
       i = stop + 1;
       continue;
     }
+    if ((c === '|' || c === '(' || c === ')') && inDoubleBracket) {
+      const op = (c === '|' && s[i + 1] === '|') ? '||' : c;
+      pushOperatorWord(op);
+      i += op.length;
+      continue;
+    }
     if (c === ';' || c === '|' || c === '(' || c === ')') {
       finishSegment();
+      if (c === '(') depth++;
+      else if (c === ')') depth = Math.max(0, depth - 1);
+      current.depth = depth;
       i += (c === '|' && s[i + 1] === '|') ? 2 : 1;
       continue;
     }
@@ -274,14 +312,18 @@ function tokenize(command) {
         i += op.length;
         continue;
       }
+      if (inDoubleBracket && s[i + 1] === '&') {
+        pushOperatorWord('&&');
+        i += 2;
+        continue;
+      }
       finishSegment();
       i += s[i + 1] === '&' ? 2 : 1;
       continue;
     }
-    if ((c === '>' || c === '<') && inDoubleBracket()) {
+    if ((c === '>' || c === '<') && inDoubleBracket) {
       // `[[ a > b ]]` is a string comparison, not a redirect.
-      finishWord();
-      current.words.push(c);
+      pushOperatorWord(c);
       i++;
       continue;
     }
@@ -318,10 +360,11 @@ function tokenize(command) {
   return segments;
 }
 
-function commandWords(words) {
+function commandWords(words, quoted = []) {
   let k = 0;
   while (k < words.length) {
     const w = words[k];
+    if (!quoted[k] && COMPOUND_KEYWORDS.has(w)) { k++; continue; }
     if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) { k++; continue; }
     if (Object.prototype.hasOwnProperty.call(WRAPPER_ARG_OPTS, w)) {
       const argOpts = WRAPPER_ARG_OPTS[w];
@@ -354,6 +397,10 @@ function sedTargets(args) {
   const operands = [];
   for (let k = 0; k < args.length; k++) {
     const a = args[k];
+    // Attached script options (`-e's/a/b/'`, `-frules.sed`) carry their own
+    // argument; recognise them before the in-place check so the file operand
+    // is not mistaken for the script.
+    if (/^-[ef]./.test(a)) { explicitScript = true; continue; }
     if (a === '--in-place' || a.startsWith('--in-place=') || /^-[a-zA-Z]*i/.test(a) && !a.startsWith('--')) {
       inPlace = true;
       // `-i` combined with other short flags before it (e.g. -Ei) is fine;
@@ -395,6 +442,81 @@ function copyTargets(args) {
   return [operands[operands.length - 1]];
 }
 
+// A directory operand we can resolve lexically (no ~, variables or substitutions).
+function resolvableDir(d) {
+  return typeof d === 'string' && d !== '' && d !== '-' && !d.startsWith('~') && !/[$`]/.test(d);
+}
+
+/**
+ * `env -C DIR` / `env --chdir DIR` / `--chdir=DIR` / `-CDIR` in a segment's
+ * wrapper prefix. Returns undefined when absent, the DIR string when found.
+ * @param {string[]} words
+ * @returns {string|undefined}
+ */
+function envChdir(words) {
+  const at = words.indexOf('env');
+  if (at === -1) return undefined;
+  for (let k = at + 1; k < words.length; k++) {
+    const a = words[k];
+    if (a === '-C' || a === '--chdir') return words[k + 1] || '';
+    if (a.startsWith('--chdir=')) return a.slice('--chdir='.length);
+    if (/^-C./.test(a)) return a.slice(2);
+    if (!a.startsWith('-') && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(a)) break;
+  }
+  return undefined;
+}
+
+/**
+ * Extract the write targets of a Bash command together with the directory
+ * changes in effect when each runs. `dirs` is the list of `cd`/`env -C`
+ * operands to apply (in order) to the payload cwd, or null when the effective
+ * directory cannot be established. Pure: never executes the command.
+ * @param {string} command
+ * @returns {Array<{target: string, dirs: string[]|null}>}
+ */
+function extractWriteTargetsWithDirs(command) {
+  const out = [];
+  // dirStack[d] = cd operands in effect at subshell depth d (null = unknown).
+  const dirStack = [[]];
+  for (const seg of tokenize(command)) {
+    const d = seg.depth || 0;
+    while (dirStack.length > d + 1) dirStack.pop();
+    while (dirStack.length < d + 1) {
+      const top = dirStack[dirStack.length - 1];
+      dirStack.push(top === null ? null : top.slice());
+    }
+    let dirs = dirStack[d];
+    const chdir = envChdir(seg.words);
+    if (chdir !== undefined) dirs = dirs !== null && resolvableDir(chdir) ? [...dirs, chdir] : null;
+
+    const targets = [];
+    for (const r of seg.redirects) {
+      if (r.target === null || r.target === undefined) continue;
+      if (r.op === '<' || r.op === '<<<' || r.op === '<&' || r.op === '<>') continue;
+      if (r.op === '>&' && /^(\d+|-)$/.test(r.target)) continue; // fd dup
+      targets.push(r.target);
+    }
+    const k0 = seg.words.length - commandWords(seg.words, seg.quoted).length;
+    const words = seg.words.slice(k0);
+    if (words.length) {
+      const cmd = path.basename(words[0]);
+      const args = words.slice(1);
+      if (cmd === 'tee') targets.push(...teeTargets(args));
+      else if (cmd === 'sed' || cmd === 'gsed') targets.push(...sedTargets(args));
+      else if (cmd === 'cp' || cmd === 'mv' || cmd === 'install') targets.push(...copyTargets(args));
+    }
+    for (const target of targets) out.push({ target, dirs: dirs === null ? null : dirs.slice() });
+
+    // `cd`/`pushd` move the base for the following segments at this depth.
+    if (words.length && (words[0] === 'cd' || words[0] === 'pushd')) {
+      const operand = words.slice(1).find((a) => a === '-' || !a.startsWith('-'));
+      const cur = dirStack[d];
+      dirStack[d] = cur !== null && resolvableDir(operand) ? [...cur, operand] : null;
+    }
+  }
+  return out;
+}
+
 /**
  * Extract the file paths a Bash command would write to (best effort).
  * Pure: never executes or evaluates the command.
@@ -402,23 +524,7 @@ function copyTargets(args) {
  * @returns {string[]}
  */
 function extractWriteTargets(command) {
-  const targets = [];
-  for (const seg of tokenize(command)) {
-    for (const r of seg.redirects) {
-      if (r.target === null || r.target === undefined) continue;
-      if (r.op === '<' || r.op === '<<<' || r.op === '<&' || r.op === '<>') continue;
-      if (r.op === '>&' && /^(\d+|-)$/.test(r.target)) continue; // fd dup
-      targets.push(r.target);
-    }
-    const words = commandWords(seg.words);
-    if (!words.length) continue;
-    const cmd = path.basename(words[0]);
-    const args = words.slice(1);
-    if (cmd === 'tee') targets.push(...teeTargets(args));
-    else if (cmd === 'sed' || cmd === 'gsed') targets.push(...sedTargets(args));
-    else if (cmd === 'cp' || cmd === 'mv' || cmd === 'install') targets.push(...copyTargets(args));
-  }
-  return targets;
+  return extractWriteTargetsWithDirs(command).map((t) => t.target);
 }
 
 /**
@@ -463,8 +569,12 @@ function runBash(rawInput) {
     // The payload's cwd is where the command runs; relative targets resolve
     // there, but "inside the project" is still judged against the hook cwd.
     const base = typeof input.cwd === 'string' && input.cwd ? realpathOr(input.cwd) : cwd;
-    for (const target of extractWriteTargets(command)) {
-      if (!insideProject(target, cwd, base)) continue;
+    for (const { target, dirs } of extractWriteTargetsWithDirs(command)) {
+      // Unknown effective directory (e.g. `cd "$X"`): a relative target
+      // cannot be placed, so it is not blocked. Absolute targets still are.
+      if (dirs === null && !path.isAbsolute(target)) continue;
+      const targetBase = dirs === null ? base : path.resolve(base, ...dirs);
+      if (!insideProject(target, cwd, targetBase)) continue;
       const result = evaluateBasename(target, BASH_BLOCKED_PATTERNS, BASH_WARN_PATTERNS);
       if (!result) continue;
       if (result.decision === 'block') {
@@ -522,6 +632,7 @@ module.exports = {
   runBash,
   evaluateBasename,
   extractWriteTargets,
+  extractWriteTargetsWithDirs,
   insideProject,
   blockReason,
   BLOCKED_PATTERNS,

@@ -126,6 +126,48 @@ test('non-numeric argument -> fatal, never touches .envoy-tasks', () => {
   assert.ok(!fs.existsSync(path.join(dir, '.envoy')), 'no runtime state written');
 });
 
+test('re-invoking pickup for the same issue keeps completed tasks and decisions (resume)', () => {
+  const dir = makeTmpDir();
+  writeTasksFile(dir, 2497);
+  assert.strictEqual(runPreflight(dir, ['2497']).status, 'ok');
+  const file = path.join(dir, '.envoy', 'pickup', 'session.json');
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+  saved.tasks[0].status = 'done';
+  saved.decisions.push({ note: 'chose batch strategy', at: new Date().toISOString() });
+  saved.nextSteps.push('run review');
+  fs.writeFileSync(file, JSON.stringify(saved, null, 2));
+  const { status, out } = runPreflight(dir, ['2497']);
+  assert.strictEqual(status, 'ok', out);
+  assert.match(out, /Resumed existing session/);
+  const after = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.strictEqual(after.tasks[0].status, 'done');
+  assert.strictEqual(after.decisions.length, 1);
+  assert.deepStrictEqual(after.nextSteps, ['run review']);
+});
+
+test('session for a different issue is replaced by a fresh seed', () => {
+  const dir = makeTmpDir();
+  writeTasksFile(dir, 41);
+  writeTasksFile(dir, 2497);
+  assert.strictEqual(runPreflight(dir, ['41']).status, 'ok');
+  const file = path.join(dir, '.envoy', 'pickup', 'session.json');
+  const { status, out } = runPreflight(dir, ['2497']);
+  assert.strictEqual(status, 'ok', out);
+  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).issueNumber, 2497);
+});
+
+test('invalid existing session is re-seeded with a warning', () => {
+  const dir = makeTmpDir();
+  writeTasksFile(dir, 2497);
+  fs.mkdirSync(path.join(dir, '.envoy', 'pickup'), { recursive: true });
+  const file = path.join(dir, '.envoy', 'pickup', 'session.json');
+  fs.writeFileSync(file, '{not json');
+  const { status, out } = runPreflight(dir, ['2497']);
+  assert.strictEqual(status, 'ok', out);
+  assert.match(out, /WARNING: existing session state is invalid/);
+  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).issueNumber, 2497);
+});
+
 for (const d of tmpRoots) fs.rmSync(d, { recursive: true, force: true });
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);

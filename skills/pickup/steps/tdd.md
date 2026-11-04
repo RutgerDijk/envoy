@@ -2,7 +2,7 @@
 
 ### Step 9: Initialize Session State
 
-Session state lives in `.envoy/pickup/session.json` (schema `lib/schemas/session.json`). Preflight already seeded it with every task `pending`, `issueNumber`, and `branch: "unknown"`. `session.load()` throws (naming the path) if the file is corrupt or schema-invalid — stop and surface that error rather than recreating the file. `session.save()` validates and throws on an invalid shape. Decisions are stored as `decisions[].note` (via `session.addDecision`).
+Session state lives in `.envoy/pickup/session.json` (schema `lib/schemas/session.json`). Preflight seeds it with every task `pending`, `issueNumber`, and `branch: "unknown"` — or, when a valid session for the same issue already exists (re-invocation after a compaction), keeps it as-is so completed tasks, decisions and next steps survive. `session.load()` throws (naming the path) if the file is corrupt or schema-invalid — stop and surface that error rather than recreating the file. `session.save()` validates and throws on an invalid shape. Decisions are stored as `decisions[].note` (via `session.addDecision`).
 
 Run from the worktree root (self-contained — the lib is resolved from the plugin root, the branch from git, the tasks from `.envoy-tasks/<issue>.json`):
 

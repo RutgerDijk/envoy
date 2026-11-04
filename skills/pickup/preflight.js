@@ -24,6 +24,7 @@ const { extractEmbeddedBlock, ensureTasksDirIgnored } = require(path.join(REPO_R
 const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
 const { resolveTestCommands } = require(path.join(REPO_ROOT, 'lib', 'test-commands'));
+const { load: loadSession, exists: existsSession } = require(path.join(REPO_ROOT, 'lib', 'session-state'));
 
 // Best-effort fetch of an issue body via gh. Returns the body string, or null
 // when gh is unavailable or the call fails — callers must tolerate null.
@@ -141,8 +142,20 @@ function main() {
     }
   }
 
-  // Seed session.json
-  const session = {
+  // Seed session.json — unless a valid session for this same issue already
+  // exists (re-invoking pickup after a compaction must not erase completed
+  // tasks, decisions or next steps).
+  let resumedSession = null;
+  let sessionWarning = null;
+  try {
+    const existing = loadSession(CWD);
+    if (existsSession(CWD) && Number(existing.issueNumber) === Number(issueNumber)) {
+      resumedSession = existing;
+    }
+  } catch (err) {
+    sessionWarning = `existing session state is invalid and was re-seeded (${err.message})`;
+  }
+  const session = resumedSession || {
     $schemaVersion: '1',
     branch: 'unknown',
     plan: `issue #${issueNumber}`,
@@ -157,7 +170,7 @@ function main() {
     decisions: [],
     nextSteps: [],
   };
-  writeJson('.envoy/pickup/session.json', session);
+  if (!resumedSession) writeJson('.envoy/pickup/session.json', session);
   writeActiveSkill(CWD, { skill: 'pickup', issueNumber: issueNumber ? Number(issueNumber) : undefined });
   appendEvent(CWD, { type: 'skill-started', skill: 'pickup', issue: Number(issueNumber) });
 
@@ -169,6 +182,15 @@ function main() {
   }
   if (driftWarning) {
     say(`WARNING: ${driftWarning}`);
+    say('');
+  }
+  if (sessionWarning) {
+    say(`WARNING: ${sessionWarning}`);
+    say('');
+  }
+  if (resumedSession) {
+    const done = (resumedSession.tasks || []).filter((t) => t.status === 'done').length;
+    say(`Resumed existing session (.envoy/pickup/session.json): ${done}/${(resumedSession.tasks || []).length} tasks done, ${(resumedSession.decisions || []).length} decision(s) kept.`);
     say('');
   }
   say(`Issue #${issueNumber} — ${tasks.tasks.length} task${tasks.tasks.length === 1 ? '' : 's'} loaded`);

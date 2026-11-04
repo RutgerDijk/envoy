@@ -445,6 +445,113 @@ for (const cmd of [
   });
 }
 
+section('PR #98: [[ ]] scope survives &&, ||, ( and )');
+
+for (const cmd of [
+  '[[ -n foo && z > .eslintrc.json ]]',
+  '[[ -n foo || z > .prettierrc ]] && echo ok',
+  '[[ ( -n foo ) && z < biome.json ]]',
+  'if [[ -n $a && $a > .eslintrc.json ]]; then echo y; fi',
+]) {
+  test(`allows compound condition: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+test('redirect after a closed compound [[ a && b ]] still blocks', () => {
+  withTmp((tmp) => {
+    const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent('[[ -n a && -n b ]] && echo {} > .eslintrc.json'));
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+  });
+});
+
+section('PR #98: writes inside if/then/else/do bodies are detected');
+
+for (const cmd of [
+  "if true; then sed -i 's/error/off/' .eslintrc.json; fi",
+  'if true; then tee .prettierrc < /dev/null; fi',
+  'if false; then :; else cp x.json biome.json; fi',
+  'for f in a; do mv tmp.js eslint.config.js; done',
+  'while false; do cp x.json .eslintrc.json; done',
+  "if sed -i 's/a/b/' .eslintrc.json; then echo ok; fi",
+  '! tee .editorconfig < /dev/null',
+  '{ cp x.json .eslintrc.json; }',
+]) {
+  test(`blocks compound-command body: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+test('a quoted keyword is not a keyword: "then" tee ... runs the command "then"', () => {
+  const { extractWriteTargets } = loadConfigProtection();
+  assert.deepStrictEqual(extractWriteTargets("'then' tee .eslintrc.json"), []);
+});
+
+section('PR #98: attached sed -e/-f script options');
+
+for (const cmd of [
+  "sed -i -e's/error/off/' .eslintrc.json",
+  'sed -i -frules.sed .eslintrc.json',
+  "sed -e's/a/b/' -i .prettierrc",
+  'sed --in-place -finline.sed biome.json',
+]) {
+  test(`blocks attached script option: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+section('PR #98: cd / pushd / env -C move the base for relative targets');
+
+for (const cmd of [
+  "cd /tmp && echo '{}' > .eslintrc.json",
+  'pushd /tmp; echo {} > .prettierrc',
+  'env -C /tmp tee .eslintrc.json < /dev/null',
+  'env --chdir=/tmp tee .eslintrc.json < /dev/null',
+  'cd "$HOME" && echo {} > .eslintrc.json',
+  'cd && echo {} > .eslintrc.json',
+  'cd - && echo {} > .eslintrc.json',
+]) {
+  test(`allows write after leaving the project: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+for (const cmd of [
+  'cd sub && echo {} > .eslintrc.json',
+  'cd sub && echo {} > ../.prettierrc',
+  '(cd /tmp && echo x > a.txt); echo {} > .eslintrc.json',
+  'echo {} > .eslintrc.json; cd /tmp',
+  'env -C sub tee .eslintrc.json < /dev/null',
+]) {
+  test(`blocks write that stays inside the project: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      fs.mkdirSync(path.join(tmp, 'sub'));
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+test('unknown cd target still blocks an absolute in-project target', () => {
+  withTmp((tmp) => {
+    const real = fs.realpathSync(tmp);
+    const r = runScript(BASH_GUARD_COMBINED, real, bashEvent(`cd "$X" && echo x > ${real}/.eslintrc.json`));
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+  });
+});
+
 section('ENVOY_OVERRIDE: lets a protected write through on both paths');
 
 test('Bash: ENVOY_OVERRIDE=1 allows a protected write', () => {
