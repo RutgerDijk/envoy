@@ -6,7 +6,7 @@ description: Use when starting any new feature, significant change, or when you 
 # Brainstorming Ideas Into Designs
 
 ## Briefing
-!`node ${CLAUDE_SKILL_DIR}/preflight.js`
+!`node ${CLAUDE_SKILL_DIR}/preflight.js "$ARGUMENTS"`
 
 - [ ] Preflight ok/degraded acknowledged (fatal stops here)
 - [ ] Phase 1: Understanding the Idea
@@ -14,7 +14,7 @@ description: Use when starting any new feature, significant change, or when you 
 - [ ] Phase 2: Exploring Approaches
 - [ ] Phase 3: Presenting the Design
 - [ ] Phase 3.5: Scope Confirmation (BLOCKING)
-- [ ] Phase 4: Create GitHub Issue and Task Handoff
+- [ ] Phase 4: Create GitHub Issue and Task Handoff (existing-issue mode: edit #<n> instead)
 - [ ] Phase 5: Final Handoff
 
 ## Overview
@@ -23,6 +23,22 @@ Turn ideas into fully formed designs through collaborative dialogue. Produces ON
 - **GitHub Issue** — Design document with overview, architecture, and acceptance criteria
 
 **Announce at start:** "I'm using envoy:brainstorm to design this feature."
+
+## Existing-issue mode
+
+`/envoy:brainstorm #<n>` (or `<n>`) plans an issue that already exists —
+`/envoy:start` dispatches this for an open issue without a plan. Preflight
+reports `MODE: existing-issue #<n>` and prints the issue under
+`## Existing issue`; it is fatal when the issue is missing, closed, or already
+has an envoy tasks block (then use `/envoy:pickup <n>`). Preflight also writes
+`.envoy/brainstorm/session.json` with `mode: "existing-issue"`, so the
+issue-create-guard hard-blocks any `gh issue create` this run.
+
+Differences from the normal flow (everything else is identical):
+- **Phase 1** starts from the issue's title and body — refine, don't re-ask what it already answers.
+- **Phase 3.5** confirms the scope before the issue is **edited** (not created).
+- **Phase 4** follows "Phase 4 — existing-issue mode" below: never `gh issue create`.
+- **Phase 5** hands off `#<n>` exactly as normal.
 
 ## The Process
 
@@ -147,6 +163,43 @@ TASKS_MD=$(node "$(dirname "$0")/write-tasks.js" "$ISSUE_NUMBER" /tmp/envoy-task
 gh issue edit "$ISSUE_NUMBER" --body "$(gh issue view "$ISSUE_NUMBER" --json body -q .body)
 
 $TASKS_MD"
+```
+
+### Phase 4 — existing-issue mode
+
+Same payload and `write-tasks.js` call as above, with `ISSUE_NUMBER` set to the
+issue from preflight. Skip step 2/2b (preflight already wrote session.json).
+The original issue text stays at the top; the design and rendered tasks are
+appended below it. Use `--body-file`, never an inline `--body`.
+
+```bash
+ISSUE_NUMBER=<n>   # from "MODE: existing-issue #<n>"
+TASKS_MD=$(node "$(dirname "$0")/write-tasks.js" "$ISSUE_NUMBER" /tmp/envoy-tasks-payload.json)
+BODY_FILE=$(mktemp)
+{
+  gh issue view "$ISSUE_NUMBER" --json body -q .body   # original text, re-fetched now
+  cat <<'EOF'
+
+---
+
+## Overview
+
+<2-3 sentence description>
+
+## Architecture
+
+<Technical approach, key decisions, components involved>
+
+## Acceptance Criteria
+
+- [ ] Criterion 1
+
+*Design added by Envoy*
+
+EOF
+  printf '%s\n' "$TASKS_MD"
+} > "$BODY_FILE"
+gh issue edit "$ISSUE_NUMBER" --body-file "$BODY_FILE"
 ```
 
 ### Phase 5: Final Handoff
