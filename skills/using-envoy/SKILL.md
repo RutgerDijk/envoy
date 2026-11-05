@@ -15,6 +15,7 @@ When you receive a task, check if any Envoy skill applies:
 
 | Task Type | Skill to Use |
 |-----------|--------------|
+| See what's open / resume a session | `envoy:start` |
 | New feature idea | `envoy:brainstorm` |
 | Pick up GitHub issue | `envoy:pickup` |
 | Bug or test failure | `envoy:systematic-debugging` |
@@ -79,6 +80,7 @@ This keeps the user informed and commits you to following the skill.
 
 | Command | Purpose |
 |---------|---------|
+| `/envoy:start` | Session dashboard; resume or start the next item |
 | `/envoy:brainstorm` | Turn idea into GitHub issue + spec |
 | `/envoy:pickup` | Pick up GitHub issue, plan, and implement |
 | `/envoy:review` | Full 5-layer review |

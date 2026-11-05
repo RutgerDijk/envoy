@@ -196,6 +196,8 @@ PR_NUMBER="$PR_NUMBER" PR_URL="$PR_URL" node -e "
   state.updatedAt = new Date().toISOString();
   fs.writeFileSync(p, JSON.stringify(state, null, 2));
 "
+# Refresh the terminal tab title with the new PR number (fail-soft, silent).
+node "${CLAUDE_SKILL_DIR}/../../lib/tab-title.js" >/dev/null 2>&1 || true
 ```
 
 ---

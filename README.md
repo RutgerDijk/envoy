@@ -308,7 +308,7 @@ The `pickup` skill includes rationalization counters:
 
 ## Skills
 
-Envoy includes 23 skills:
+Envoy includes 24 skills:
 
 ### Core Workflow (5 phases)
 
@@ -324,6 +324,7 @@ Envoy includes 23 skills:
 
 | Skill | When to Use |
 |-------|-------------|
+| `envoy:start` | Session dashboard of open brainstorms, worktrees, PRs and issues; resume or start the next item by name |
 | `envoy:babysit` | Move open PRs forward in one pass (re-trigger CodeRabbit, fix CI, resolve threads) |
 | `envoy:prs` | Read-only status across open PRs — what's stuck and why |
 | `envoy:hotfix` | Urgent single-defect fix on a fast path (worktree + TDD + verification, no brainstorm) |

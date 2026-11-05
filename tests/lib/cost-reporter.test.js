@@ -448,6 +448,54 @@ test('formatReport includes BY CONTRIBUTOR when byContributor exists', () => {
   assert.ok(report.includes('BY CONTRIBUTOR'), 'Should contain BY CONTRIBUTOR section');
 });
 
+section('discoverSessions: bounded head read for unindexed sessions');
+
+test('discoverSessions reads only a bounded head of an unindexed multi-MB transcript', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cost-reporter-discover-'));
+  try {
+    const jsonlPath = path.join(tmpDir, 'big-session.jsonl');
+    const head = [
+      { type: 'permission-mode', sessionId: 'big-session' },
+      { type: 'user', gitBranch: 'feature/1-big', message: { role: 'user', content: 'Build the big thing' } },
+    ];
+    const filler = JSON.stringify({ type: 'assistant', message: { content: 'x'.repeat(1000) } });
+    const lines = head.map((l) => JSON.stringify(l)).concat(Array(4000).fill(filler));
+    fs.writeFileSync(jsonlPath, lines.join('\n') + '\n');
+    const origRead = fs.readFileSync;
+    const fullReads = [];
+    fs.readFileSync = function (p, ...rest) {
+      if (String(p).endsWith('.jsonl')) fullReads.push(String(p));
+      return origRead.call(this, p, ...rest);
+    };
+    let sessions;
+    try {
+      sessions = costReporter.discoverSessions(tmpDir);
+    } finally {
+      fs.readFileSync = origRead;
+    }
+    assert.deepStrictEqual(fullReads, [], 'transcript must not be read whole');
+    const s = sessions.find((x) => x.sessionId === 'big-session');
+    assert.ok(s, 'session discovered');
+    assert.strictEqual(s.gitBranch, 'feature/1-big');
+    assert.strictEqual(s.summary, 'Build the big thing');
+  } finally {
+    cleanup(tmpDir);
+  }
+});
+
+test('discoverSessions keeps a final line without trailing newline in a small transcript', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cost-reporter-discover-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'small.jsonl'),
+      JSON.stringify({ type: 'user', gitBranch: 'fix/2-small', message: { role: 'user', content: 'tiny' } }));
+    const s = costReporter.discoverSessions(tmpDir).find((x) => x.sessionId === 'small');
+    assert.strictEqual(s.gitBranch, 'fix/2-small');
+    assert.strictEqual(s.summary, 'tiny');
+  } finally {
+    cleanup(tmpDir);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════

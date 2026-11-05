@@ -14,6 +14,18 @@ const { execFileSync } = require('child_process');
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const HOOK = path.join(REPO_ROOT, 'hooks', 'session-start.sh');
 
+
+// The real hook launches lib/tab-title.js; strip terminal markers so a run
+// inside cmux / opted-in VS Code never renames the developer's tab.
+function hermeticEnv(extra) {
+  const env = { ...process.env, ...extra };
+  for (const k of ['CMUX_WORKSPACE_ID', 'CMUX_SURFACE_ID', 'CMUX_TAB_ID', 'TERM_PROGRAM',
+    'CLAUDE_CODE_DISABLE_TERMINAL_TITLE', 'ENVOY_TAB_TITLE_TTY', 'ENVOY_TAB_TITLE_PID']) {
+    delete env[k];
+  }
+  return env;
+}
+
 let passed = 0;
 let failed = 0;
 
@@ -36,7 +48,7 @@ function runHook() {
       encoding: 'utf8',
       timeout: 30000,
       input: JSON.stringify({ hook_event_name: 'SessionStart', source: 'startup', session_id: 'test', cwd }),
-      env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT }
+      env: hermeticEnv({ CLAUDE_PLUGIN_ROOT: REPO_ROOT })
     });
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
