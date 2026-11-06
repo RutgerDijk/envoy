@@ -785,6 +785,69 @@ for (const conclusion of ['STALE', 'STARTUP_FAILURE', 'stale', 'startup_failure'
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Stale rate-limit comment, shared pending states, checks-only snapshot (#94 review)
+// ═══════════════════════════════════════════════════════════════════
+
+section('rateLimit.stale: a CodeRabbit review after the rate-limit comment');
+
+test('rate-limit comment older than the latest CodeRabbit review is stale', () => {
+  const snap = prStatus.buildSnapshot({
+    ...rawInputs,
+    rateLimitCommentAt: '2026-07-15T10:00:00.000Z',
+    coderabbitReviewedAt: '2026-07-15T11:00:00.000Z',
+  });
+  assert.strictEqual(snap.coderabbit.rateLimit.rateLimited, true);
+  assert.strictEqual(snap.coderabbit.rateLimit.stale, true);
+});
+
+test('rate-limit comment newer than the latest CodeRabbit review is not stale', () => {
+  const snap = prStatus.buildSnapshot({
+    ...rawInputs,
+    rateLimitCommentAt: '2026-07-15T11:00:00.000Z',
+    coderabbitReviewedAt: '2026-07-15T10:00:00.000Z',
+  });
+  assert.strictEqual(snap.coderabbit.rateLimit.stale, false);
+});
+
+test('no CodeRabbit review (or no comment time) -> not stale', () => {
+  assert.strictEqual(prStatus.buildSnapshot({ ...rawInputs, rateLimitCommentAt: '2026-07-15T10:00:00.000Z' }).coderabbit.rateLimit.stale, false);
+  assert.strictEqual(prStatus.buildSnapshot({ ...rawInputs, coderabbitReviewedAt: '2026-07-15T10:00:00.000Z' }).coderabbit.rateLimit.stale, false);
+});
+
+test('latestCoderabbitReviewAt picks the newest CodeRabbit review submittedAt', () => {
+  const at = prStatus.latestCoderabbitReviewAt([
+    { author: { login: 'coderabbitai' }, submittedAt: '2026-07-15T10:00:00Z' },
+    { author: { login: 'rutger' }, submittedAt: '2026-07-15T12:00:00Z' },
+    { author: { login: 'coderabbitai[bot]' }, submittedAt: '2026-07-15T11:00:00Z' },
+  ]);
+  assert.strictEqual(at, '2026-07-15T11:00:00.000Z');
+  assert.strictEqual(prStatus.latestCoderabbitReviewAt([]), null);
+  assert.strictEqual(prStatus.latestCoderabbitReviewAt(undefined), null);
+});
+
+section('PENDING_CHECK_STATES: one pending-state list for summarizeChecks and pr-poll');
+
+test('PENDING_CHECK_STATES is exported and covers EXPECTED/WAITING/REQUESTED', () => {
+  for (const s of ['PENDING', 'IN_PROGRESS', 'QUEUED', 'EXPECTED', 'WAITING', 'REQUESTED', '']) {
+    assert.ok(prStatus.PENDING_CHECK_STATES.has(s), s);
+  }
+});
+
+test('an EXPECTED status keeps the rollup PENDING (it has not run yet)', () => {
+  const s = prStatus.summarizeChecks([
+    { __typename: 'CheckRun', name: 'build', conclusion: 'SUCCESS' },
+    { __typename: 'StatusContext', context: 'deploy', state: 'EXPECTED' },
+  ]);
+  assert.strictEqual(s.ci.state, 'PENDING');
+});
+
+section('getChecksSnapshot: checks-only probe for the CI wait');
+
+test('getChecksSnapshot is exported', () => {
+  assert.strictEqual(typeof prStatus.getChecksSnapshot, 'function');
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════════
 

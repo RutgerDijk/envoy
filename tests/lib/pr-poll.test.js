@@ -68,18 +68,18 @@ function harness(snapshots, extra = {}) {
   };
 }
 
-function crSnap({ checkState = null, unresolved = 0, rateLimited = false, resetsAt = null } = {}) {
+function crSnap({ checkState = null, statusState = null, unresolved = 0, rateLimited = false, resetsAt = null, stale = false } = {}) {
   return {
     pr: 7,
     ci: { state: 'PENDING', checks: [] },
-    coderabbit: { checkState, unresolvedThreads: unresolved, rateLimit: { rateLimited, resetsAt } },
+    coderabbit: { checkState, statusState, unresolvedThreads: unresolved, rateLimit: { rateLimited, resetsAt, stale } },
   };
 }
 
-function ciSnap(states) {
+function ciSnap(states, names = []) {
   return {
     pr: 7,
-    ci: { state: 'X', checks: states.map((s, i) => ({ name: `c${i}`, state: s })) },
+    ci: { state: 'X', checks: states.map((s, i) => ({ name: names[i] || `c${i}`, state: s })) },
     coderabbit: { checkState: null, unresolvedThreads: 0, rateLimit: { rateLimited: false, resetsAt: null } },
   };
 }
@@ -169,6 +169,59 @@ test('prints exactly one line per probe', async () => {
   await poll({ pr: 7, target: 'coderabbit', ...h.deps });
   assert.strictEqual(h.probes, 3);
   assert.strictEqual(h.lines.length, 3);
+});
+
+// ─────────────────────────────────────────────────────────────────────
+section('review fixes (#94): stale rate limit, commit status, CodeRabbit outside CI, checks-only probe');
+
+test('coderabbit: a stale rate-limit comment is ignored; a finished review settles clean, no retrigger', async () => {
+  const past = new Date(START - 3600000).toISOString();
+  const h = harness([crSnap({ checkState: 'SUCCESS', rateLimited: true, resetsAt: past, stale: true })]);
+  const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
+  assert.strictEqual(code, 0);
+  assert.ok(/clean/.test(h.lines[0]) && !/retrigger/.test(h.lines[0]), h.lines[0]);
+});
+
+test('coderabbit: unresolved threads settle before an active rate limit is acted on', async () => {
+  const future = new Date(START + 3600000).toISOString();
+  const h = harness([crSnap({ checkState: 'SUCCESS', unresolved: 2, rateLimited: true, resetsAt: future })]);
+  const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
+  assert.strictEqual(code, 0);
+  assert.ok(/unresolved=2/.test(h.lines[0]), h.lines[0]);
+});
+
+test('coderabbit: a review reported only by commit status (no check run) settles clean', async () => {
+  const h = harness([crSnap({ statusState: 'SUCCESS' })]);
+  const code = await poll({ pr: 7, target: 'coderabbit', deadlineSec: 240, ...h.deps });
+  assert.strictEqual(code, 0);
+  assert.ok(/clean/.test(h.lines[0]), h.lines[0]);
+});
+
+test('coderabbit: a pending commit status holds even when the check run finished', async () => {
+  const h = harness([crSnap({ checkState: 'SUCCESS', statusState: 'PENDING' })]);
+  const code = await poll({ pr: 7, target: 'coderabbit', deadlineSec: 240, ...h.deps });
+  assert.strictEqual(code, 1);
+});
+
+test('ci: a pending CodeRabbit check does not hold the CI wait', async () => {
+  const h = harness([ciSnap(['SUCCESS', 'PENDING'], ['test', 'CodeRabbit'])]);
+  const code = await poll({ pr: 7, target: 'ci', ...h.deps });
+  assert.strictEqual(code, 0);
+  assert.strictEqual(h.probes, 1);
+  assert.ok(/1 checks finished/.test(h.lines[0]), h.lines[0]);
+});
+
+test('ci: uses the shared PENDING_CHECK_STATES from pr-status', () => {
+  const src = require('fs').readFileSync(MODULE, 'utf8');
+  assert.ok(/PENDING_CHECK_STATES/.test(src));
+  assert.ok(!/const CI_PENDING = new Set/.test(src), 'no private pending-state list');
+});
+
+test('default probe: ci uses the checks-only snapshot, coderabbit the full one', () => {
+  const { defaultProbe } = require(MODULE);
+  const prStatus = require(path.join(__dirname, '..', '..', 'lib', 'pr-status.js'));
+  assert.strictEqual(defaultProbe('ci'), prStatus.getChecksSnapshot);
+  assert.strictEqual(defaultProbe('coderabbit'), prStatus.getSnapshot);
 });
 
 // ─────────────────────────────────────────────────────────────────────
