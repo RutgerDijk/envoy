@@ -45,13 +45,16 @@ node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit -
 
 The poller owns the backoff table (probes at 2, 4, 8, 14 and 22 min; 1320s default
 deadline). Each probe reads one `lib/pr-status.js` snapshot (GraphQL
-`unresolvedThreads` plus `rateLimit`), and the rate-limit decision comes from
+`unresolvedThreads` plus `rateLimit`; a rate-limit comment is stale, and not
+rate limited, once CodeRabbit has reviewed the head commit, and a relative cooldown
+is measured from the comment's last edit), and the rate-limit decision comes from
 `shouldReTrigger`. It prints one line per probe. When it exits, branch on the exit
 code and the last line:
 
 - **Exit 0 (settled).** The last line gives the reason:
-  - `settled: unresolved=N`: CodeRabbit left N unresolved threads. Add them to the combined fix list.
+  - `settled: unresolved=N`: CodeRabbit left N unresolved threads. Add them to the combined fix list. Threads left over from an earlier review (for example a disputed thread you replied to) settle the wait only after CodeRabbit has reviewed, or finished its run on, the new head commit.
   - `settled: clean (...)`: the review finished with no unresolved threads. No CodeRabbit findings this cycle.
+  - `settled: ended (...)`: CodeRabbit's run finished without success (for example CANCELLED) and left no unresolved threads. No findings to fix; say in the report that CodeRabbit did not complete a review.
   - `settled: retrigger`: the rate-limit reset has passed. Post the re-trigger, bump `retriggerCount`, then run the background wait above again (a fresh run resets the poll clock):
     ```bash
     PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)

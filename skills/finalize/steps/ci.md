@@ -23,7 +23,10 @@ node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target ci --deadlin
 The poller owns the backoff table. It probes at once, then after 30, 60, 120, 240, 240
 and 240s, clamped to the deadline. Each probe reads one `lib/pr-status.js` snapshot and
 prints one line. It settles once at least one check is registered and none is still
-pending. A freshly pushed PR with no checks yet counts as pending. When it exits, branch on
+pending. A freshly pushed PR with no checks yet counts as pending. CodeRabbit's own check
+is left out; when finished CodeRabbit checks are the only ones, the wait settles as "no CI
+checks" only 2 minutes after it started, so a fast CodeRabbit status cannot settle it before
+GitHub Actions registers its workflows. When it exits, branch on
 the exit code:
 
 - **Exit 0 (settled).** Every check has finished. Run "Read CI Status" below.

@@ -316,7 +316,7 @@ test('--deadline override is honoured (ci, 900s)', async () => {
 test('rate-limit reset close (<=10min) extends the deadline instead of exiting', async () => {
   // resetsAt 8min after start; on probe at 120s it is 6min away -> wait, deadline extends.
   const resetsAt = new Date(START + 8 * 60000).toISOString();
-  const h = harness([crSnap({ rateLimited: true, resetsAt }), crSnap({ rateLimited: true, resetsAt }), crSnap({ unresolved: 2 })]);
+  const h = harness([crSnap({ rateLimited: true, resetsAt }), crSnap({ rateLimited: true, resetsAt }), crSnap({ unresolved: 2, reviewedHead: true })]);
   const code = await poll({ pr: 7, target: 'coderabbit', deadlineSec: 200, ...h.deps });
   assert.strictEqual(code, 0, 'deadline 200s would have expired without the extension');
   assert.ok(h.elapsed() > 200);
@@ -368,18 +368,18 @@ test('tolerated failures wait per the backoff table before the next probe', asyn
 });
 
 test('1 failure then success -> no exit 3', async () => {
-  const h = harness([new Error('blip'), crSnap({ unresolved: 1 })]);
+  const h = harness([new Error('blip'), crSnap({ unresolved: 1, reviewedHead: true })]);
   assert.strictEqual(await poll({ pr: 7, target: 'coderabbit', ...h.deps }), 0);
 });
 
 test('2 failures then success -> no exit 3', async () => {
-  const h = harness([new Error('blip'), null, crSnap({ unresolved: 1 })]);
+  const h = harness([new Error('blip'), null, crSnap({ unresolved: 1, reviewedHead: true })]);
   assert.strictEqual(await poll({ pr: 7, target: 'coderabbit', ...h.deps }), 0);
   assert.strictEqual(h.probes, 3);
 });
 
 test('failure, success, failure, failure -> no exit 3 (success resets the counter)', async () => {
-  const h = harness([new Error('a'), crSnap(), new Error('b'), new Error('c'), crSnap({ unresolved: 2 })]);
+  const h = harness([new Error('a'), crSnap(), new Error('b'), new Error('c'), crSnap({ unresolved: 2, reviewedHead: true })]);
   assert.strictEqual(await poll({ pr: 7, target: 'coderabbit', ...h.deps }), 0);
   assert.strictEqual(h.probes, 5);
 });
