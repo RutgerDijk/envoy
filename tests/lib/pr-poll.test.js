@@ -211,6 +211,25 @@ test('ci: a pending CodeRabbit check does not hold the CI wait', async () => {
   assert.ok(/1 checks finished/.test(h.lines[0]), h.lines[0]);
 });
 
+test('ci: only CodeRabbit checks, all finished -> settled (repo without CI)', async () => {
+  const h = harness([ciSnap(['SUCCESS'], ['CodeRabbit'])]);
+  const code = await poll({ pr: 7, target: 'ci', deadlineSec: 120, ...h.deps });
+  assert.strictEqual(code, 0);
+  assert.ok(/no CI checks/.test(h.lines[0]), h.lines[0]);
+});
+
+test('ci: only a pending CodeRabbit check -> still pending (CI may not be registered yet)', async () => {
+  const h = harness([ciSnap(['PENDING'], ['CodeRabbit'])]);
+  const code = await poll({ pr: 7, target: 'ci', deadlineSec: 60, ...h.deps });
+  assert.strictEqual(code, 1);
+});
+
+test('ci: the settled line reports the CI verdict without CodeRabbit', async () => {
+  const h = harness([{ pr: 7, ci: { state: 'FAILURE', checks: [{ name: 'test', state: 'SUCCESS' }, { name: 'CodeRabbit', state: 'FAILURE' }] } }]);
+  await poll({ pr: 7, target: 'ci', ...h.deps });
+  assert.ok(/ci SUCCESS/.test(h.lines[0]), h.lines[0]);
+});
+
 test('ci: uses the shared PENDING_CHECK_STATES from pr-status', () => {
   const src = require('fs').readFileSync(MODULE, 'utf8');
   assert.ok(/PENDING_CHECK_STATES/.test(src));
