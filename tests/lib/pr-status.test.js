@@ -788,41 +788,37 @@ for (const conclusion of ['STALE', 'STARTUP_FAILURE', 'stale', 'startup_failure'
 // Stale rate-limit comment, shared pending states, checks-only snapshot (#94 review)
 // ═══════════════════════════════════════════════════════════════════
 
-section('rateLimit.stale: a CodeRabbit review after the rate-limit comment');
+section('rateLimit.stale: CodeRabbit already reviewed the head commit');
 
-test('rate-limit comment older than the latest CodeRabbit review is stale', () => {
-  const snap = prStatus.buildSnapshot({
-    ...rawInputs,
-    rateLimitCommentAt: '2026-07-15T10:00:00.000Z',
-    coderabbitReviewedAt: '2026-07-15T11:00:00.000Z',
-  });
+// CodeRabbit edits its summary comment in place, so the comment's createdAt
+// says nothing about which push the limit hit. A review on the head commit does.
+test('rate-limit comment with a CodeRabbit review on the head commit is stale', () => {
+  const snap = prStatus.buildSnapshot({ ...rawInputs, coderabbitReviewedHead: true });
   assert.strictEqual(snap.coderabbit.rateLimit.rateLimited, true);
   assert.strictEqual(snap.coderabbit.rateLimit.stale, true);
 });
 
-test('rate-limit comment newer than the latest CodeRabbit review is not stale', () => {
-  const snap = prStatus.buildSnapshot({
-    ...rawInputs,
-    rateLimitCommentAt: '2026-07-15T11:00:00.000Z',
-    coderabbitReviewedAt: '2026-07-15T10:00:00.000Z',
-  });
+test('no CodeRabbit review on the head commit -> not stale (even if an older commit was reviewed later than the comment)', () => {
+  const snap = prStatus.buildSnapshot({ ...rawInputs, rateLimitCommentAt: '2026-07-15T10:00:00.000Z', coderabbitReviewedHead: false });
+  assert.strictEqual(snap.coderabbit.rateLimit.stale, false);
+  assert.strictEqual(prStatus.buildSnapshot(rawInputs).coderabbit.rateLimit.stale, false);
+});
+
+test('no rate limit -> never stale', () => {
+  const snap = prStatus.buildSnapshot({ ...rawInputs, rateLimitCommentBody: null, coderabbitReviewedHead: true });
   assert.strictEqual(snap.coderabbit.rateLimit.stale, false);
 });
 
-test('no CodeRabbit review (or no comment time) -> not stale', () => {
-  assert.strictEqual(prStatus.buildSnapshot({ ...rawInputs, rateLimitCommentAt: '2026-07-15T10:00:00.000Z' }).coderabbit.rateLimit.stale, false);
-  assert.strictEqual(prStatus.buildSnapshot({ ...rawInputs, coderabbitReviewedAt: '2026-07-15T10:00:00.000Z' }).coderabbit.rateLimit.stale, false);
-});
-
-test('latestCoderabbitReviewAt picks the newest CodeRabbit review submittedAt', () => {
-  const at = prStatus.latestCoderabbitReviewAt([
-    { author: { login: 'coderabbitai' }, submittedAt: '2026-07-15T10:00:00Z' },
-    { author: { login: 'rutger' }, submittedAt: '2026-07-15T12:00:00Z' },
-    { author: { login: 'coderabbitai[bot]' }, submittedAt: '2026-07-15T11:00:00Z' },
-  ]);
-  assert.strictEqual(at, '2026-07-15T11:00:00.000Z');
-  assert.strictEqual(prStatus.latestCoderabbitReviewAt([]), null);
-  assert.strictEqual(prStatus.latestCoderabbitReviewAt(undefined), null);
+test('coderabbitReviewedCommit matches a CodeRabbit review on the given head oid only', () => {
+  const reviews = [
+    { author: { login: 'coderabbitai' }, commit: { oid: 'aaa' } },
+    { author: { login: 'rutger' }, commit: { oid: 'bbb' } },
+  ];
+  assert.strictEqual(prStatus.coderabbitReviewedCommit(reviews, 'aaa'), true);
+  assert.strictEqual(prStatus.coderabbitReviewedCommit(reviews, 'bbb'), false, 'a human review does not count');
+  assert.strictEqual(prStatus.coderabbitReviewedCommit(reviews, 'ccc'), false);
+  assert.strictEqual(prStatus.coderabbitReviewedCommit(undefined, 'aaa'), false);
+  assert.strictEqual(prStatus.coderabbitReviewedCommit(reviews, null), false);
 });
 
 section('PENDING_CHECK_STATES: one pending-state list for summarizeChecks and pr-poll');
