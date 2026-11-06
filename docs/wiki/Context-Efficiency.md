@@ -26,9 +26,20 @@ Persists between context compactions and session restarts:
 `session.save()` validates against the schema and throws on an invalid shape, so nothing malformed reaches disk.
 
 **Lifecycle:**
-1. `pickup` preflight seeds the file via `session.save()` (or keeps a valid session for the same issue); a corrupt or invalid file stops preflight (fatal) and is left untouched; pickup updates it during execution
+1. `pickup` preflight seeds the file via `session.save()` (or keeps a valid session for the same issue and reconciles its tasks with the issue by id: kept tasks keep their status, new ones are added, removed ones dropped); a corrupt or invalid file stops preflight (fatal) and is left untouched; pickup updates it during execution through the CLI below
 2. `session-start.sh` detects and surfaces state on session startup (~300-500 tokens)
 3. `cleanup` removes it (`git clean -fdx -- .envoy`) when the worktree is torn down after merge
+
+Skills use the CLI (exit 1 on a corrupt or invalid file, which is left untouched; 64 on a usage error):
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/lib/session-state.js" sync      # branch from git + reconcile tasks with .envoy-tasks/<issue>.json
+node "$CLAUDE_PLUGIN_ROOT/lib/session-state.js" task task-1 done "Added User entity"
+node "$CLAUDE_PLUGIN_ROOT/lib/session-state.js" decision "Used Guid PK — matches existing entities"
+node "$CLAUDE_PLUGIN_ROOT/lib/session-state.js" next-steps "Run envoy:review" "Run envoy:finalize"
+```
+
+The same operations as a module (a file without `decisions` or `nextSteps` loads with both as `[]`):
 
 ```javascript
 const session = require(path.join(process.env.CLAUDE_PLUGIN_ROOT, 'lib', 'session-state'));

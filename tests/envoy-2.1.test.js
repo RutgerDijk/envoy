@@ -541,7 +541,7 @@ test('schema description no longer names the retired root-level file', () => {
 
 test('session-state.js is strict mode', () => {
   const src = fs.readFileSync(path.join(LIB, 'session-state.js'), 'utf8');
-  assert.ok(/^\s*(\/\*[\s\S]*?\*\/\s*)?'use strict';/.test(src), "missing 'use strict'");
+  assert.ok(/^(#!.*\n)?\s*(\/\*[\s\S]*?\*\/\s*)?'use strict';/.test(src), "missing 'use strict'");
   assert.ok(!src.includes('Prefers worktree root'), 'stale JSDoc');
 });
 

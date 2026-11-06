@@ -2,37 +2,15 @@
 
 ### Step 9: Initialize Session State
 
-Session state lives in `.envoy/pickup/session.json` (schema `lib/schemas/session.json`). Preflight seeds it with every task `pending`, `issueNumber`, and `branch: "unknown"` — or, when a valid session for the same issue already exists (re-invocation after a compaction), keeps it as-is so completed tasks, decisions and next steps survive. A corrupt or schema-invalid file makes preflight fatal and is left untouched. `session.load()` throws (naming the path) if the file is corrupt or schema-invalid — stop and surface that error rather than recreating the file. `session.save()` validates and throws on an invalid shape. Decisions are stored as `decisions[].note` (via `session.addDecision`).
+Session state lives in `.envoy/pickup/session.json` (schema `lib/schemas/session.json`). Preflight seeds it with every task `pending`, `issueNumber`, and `branch: "unknown"` — or, when a valid session for the same issue already exists (re-invocation after a compaction), keeps it so completed tasks, decisions and next steps survive, and reconciles its task list with the issue by task id (kept tasks keep their status, new tasks are added as `pending`, tasks removed from the issue are dropped). A corrupt or schema-invalid file makes preflight fatal and is left untouched.
 
-Run from the worktree root (self-contained — the lib is resolved from the plugin root, the branch from git, the tasks from `.envoy-tasks/<issue>.json`):
+Update the file only through the `lib/session-state.js` CLI. Run from the worktree root — it sets the branch from git and reconciles the tasks with `.envoy-tasks/<issue>.json` again:
 
 ```bash
-node - "${CLAUDE_PLUGIN_ROOT:-${CLAUDE_SKILL_DIR}/../..}/lib/session-state" <<'EOF'
-const fs = require('fs');
-const { execSync } = require('child_process');
-const session = require(process.argv[2]);
-const state = session.load(); // .envoy/pickup/session.json (preflight seed)
-
-if (state.branch === 'unknown') {
-  state.branch = execSync('git branch --show-current', { encoding: 'utf8' }).trim() || 'unknown';
-}
-const tasksFile = `.envoy-tasks/${state.issueNumber}.json`;
-if (state.issueNumber && fs.existsSync(tasksFile)) {
-  for (const task of JSON.parse(fs.readFileSync(tasksFile, 'utf8')).tasks || []) {
-    if (!state.tasks.some(t => t.id === task.id)) {
-      state.tasks.push({ id: task.id, name: task.title, status: 'pending' });
-    }
-  }
-}
-
-if (state.tasks.some(t => t.status !== 'pending')) {
-  const done = state.tasks.filter(t => t.status === 'done').length;
-  console.log(`Resuming: ${done}/${state.tasks.length} tasks complete`);
-  console.log('Recent decisions:', state.decisions.slice(-3).map(d => d.note));
-}
-session.save(state);
-EOF
+node "${CLAUDE_PLUGIN_ROOT:-${CLAUDE_SKILL_DIR}/../..}/lib/session-state.js" sync
 ```
+
+During the execute loop, record progress the same way (`task <id> <pending|in_progress|done|blocked> [summary]`, `decision <note>`). Exit 1 means the file is corrupt or schema-invalid: stop and surface the error rather than recreating the file. Exit 64 is a usage error.
 
 ### Step 10: Parse Issue Body for Tasks
 
