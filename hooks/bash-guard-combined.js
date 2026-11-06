@@ -16,11 +16,8 @@
  * Both guards always run; the hook blocks (exit 2) if either returns 2.
  * Each honours ENVOY_DISABLED_HOOKS / ENVOY_HOOK_PROFILE by its own name via
  * hook-runner's shouldRun, so disabling one never disables the other.
- *
- * Note: ENVOY_DISABLED_HOOKS=config-protection disables only this Bash check.
- * The Edit/Write check (edit-guard-combined) does not consult shouldRun for
- * config-protection, so it stays active; disable `edit-guard-combined` to
- * turn that one off.
+ * ENVOY_DISABLED_HOOKS=config-protection turns off both this Bash check and
+ * the Edit/Write check (edit-guard-combined).
  */
 
 const { guardIssueCreate } = require('./observe-gate');

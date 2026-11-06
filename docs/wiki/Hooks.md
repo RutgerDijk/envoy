@@ -41,7 +41,7 @@ The most impactful hook. When Claude is in an autonomous review-fix loop, it mig
 
 When Claude tries to edit `.eslintrc.js`, it sees: "BLOCKED: Fix source code instead of weakening linter config." and adjusts its approach.
 
-Setting `ENVOY_OVERRIDE=1` in the environment (not in the command text) unblocks config-protection on both the Edit/Write and the Bash path. `ENVOY_DISABLED_HOOKS=config-protection` turns off only the Bash check; the Edit/Write check stays active unless `edit-guard-combined` is disabled.
+Setting `ENVOY_OVERRIDE=1` in the environment (not in the command text) unblocks config-protection on both the Edit/Write and the Bash path. `ENVOY_DISABLED_HOOKS=config-protection` turns off both the Bash and the Edit/Write check. On the Bash path, "inside the project" is judged against `CLAUDE_PROJECT_DIR`; a `cd` that may not run (inside `if`/`case`/loops, after `&&`/`||`, in a pipeline) keeps the original directory as a possibility; a target rooted at a variable (`$HOME/...`) is not judged.
 
 ## Batch Lint
 
