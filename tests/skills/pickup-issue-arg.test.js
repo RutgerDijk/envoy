@@ -156,16 +156,46 @@ test('session for a different issue is replaced by a fresh seed', () => {
   assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).issueNumber, 2497);
 });
 
-test('invalid existing session is re-seeded with a warning', () => {
+test('invalid existing session -> fatal, file left untouched (progress is never overwritten)', () => {
   const dir = makeTmpDir();
   writeTasksFile(dir, 2497);
   fs.mkdirSync(path.join(dir, '.envoy', 'pickup'), { recursive: true });
   const file = path.join(dir, '.envoy', 'pickup', 'session.json');
   fs.writeFileSync(file, '{not json');
   const { status, out } = runPreflight(dir, ['2497']);
-  assert.strictEqual(status, 'ok', out);
-  assert.match(out, /WARNING: existing session state is invalid/);
-  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).issueNumber, 2497);
+  assert.strictEqual(status, 'fatal', out);
+  assert.match(out, /corrupt session state/);
+  assert.match(out, /\.envoy\/pickup\/session\.json/);
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), '{not json', 'invalid file not overwritten');
+});
+
+test('schema-invalid existing session -> fatal, file left untouched', () => {
+  const dir = makeTmpDir();
+  writeTasksFile(dir, 2497);
+  fs.mkdirSync(path.join(dir, '.envoy', 'pickup'), { recursive: true });
+  const file = path.join(dir, '.envoy', 'pickup', 'session.json');
+  const bad = JSON.stringify({ $schemaVersion: '1', issueNumber: 2497, tasks: 'nope' });
+  fs.writeFileSync(file, bad);
+  const { status, out } = runPreflight(dir, ['2497']);
+  assert.strictEqual(status, 'fatal', out);
+  assert.match(out, /invalid session state/);
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), bad);
+});
+
+test('preflight seeds session.json through session-state save() (schema-validated), not a raw write', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'pickup', 'preflight.js'), 'utf8');
+  assert.ok(/save:\s*saveSession/.test(src), 'imports save from lib/session-state');
+  assert.ok(!/writeJson\('\.envoy\/pickup\/session\.json'/.test(src), 'no raw writeJson of session.json');
+  assert.ok(!/existsSession/.test(src), 'no redundant exists() check');
+});
+
+test('seeded session validates against lib/schemas/session.json', () => {
+  const dir = makeTmpDir();
+  writeTasksFile(dir, 2497);
+  assert.strictEqual(runPreflight(dir, ['2497']).status, 'ok');
+  const { validateFile } = require(path.join(__dirname, '..', '..', 'lib', 'validate-schema'));
+  const r = validateFile('session', path.join(dir, '.envoy', 'pickup', 'session.json'));
+  assert.ok(r.valid, (r.errors || []).join('; '));
 });
 
 for (const d of tmpRoots) fs.rmSync(d, { recursive: true, force: true });
