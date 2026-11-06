@@ -24,7 +24,7 @@ const { extractEmbeddedBlock, ensureTasksDirIgnored } = require(path.join(REPO_R
 const { writeActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 const { appendEvent } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
 const { resolveTestCommands } = require(path.join(REPO_ROOT, 'lib', 'test-commands'));
-const { load: loadSession, exists: existsSession } = require(path.join(REPO_ROOT, 'lib', 'session-state'));
+const { load: loadSession, save: saveSession } = require(path.join(REPO_ROOT, 'lib', 'session-state'));
 
 // Best-effort fetch of an issue body via gh. Returns the body string, or null
 // when gh is unavailable or the call fails — callers must tolerate null.
@@ -144,17 +144,22 @@ function main() {
 
   // Seed session.json — unless a valid session for this same issue already
   // exists (re-invoking pickup after a compaction must not erase completed
-  // tasks, decisions or next steps).
+  // tasks, decisions or next steps). A corrupt or schema-invalid file is
+  // fatal and left untouched: overwriting it would lose that progress.
   let resumedSession = null;
-  let sessionWarning = null;
+  let existing;
   try {
-    const existing = loadSession(CWD);
-    if (existsSession(CWD) && Number(existing.issueNumber) === Number(issueNumber)) {
-      resumedSession = existing;
-    }
+    existing = loadSession(CWD); // missing file -> empty state (no issueNumber)
   } catch (err) {
-    sessionWarning = `existing session state is invalid and was re-seeded (${err.message})`;
+    banner('fatal');
+    say(err.message);
+    say('');
+    say('Remediation:');
+    say('  1. Fix .envoy/pickup/session.json to match lib/schemas/session.json (keeps progress), OR');
+    say('  2. Remove .envoy/pickup/session.json to start this issue with a fresh session.');
+    return;
   }
+  if (Number(existing.issueNumber) === Number(issueNumber)) resumedSession = existing;
   const session = resumedSession || {
     $schemaVersion: '1',
     branch: 'unknown',
@@ -170,7 +175,7 @@ function main() {
     decisions: [],
     nextSteps: [],
   };
-  if (!resumedSession) writeJson('.envoy/pickup/session.json', session);
+  if (!resumedSession) saveSession(session, CWD);
   writeActiveSkill(CWD, { skill: 'pickup', issueNumber: issueNumber ? Number(issueNumber) : undefined });
   appendEvent(CWD, { type: 'skill-started', skill: 'pickup', issue: Number(issueNumber) });
 
@@ -182,10 +187,6 @@ function main() {
   }
   if (driftWarning) {
     say(`WARNING: ${driftWarning}`);
-    say('');
-  }
-  if (sessionWarning) {
-    say(`WARNING: ${sessionWarning}`);
     say('');
   }
   if (resumedSession) {

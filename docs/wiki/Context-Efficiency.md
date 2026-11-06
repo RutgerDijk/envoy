@@ -26,7 +26,7 @@ Persists between context compactions and session restarts:
 `session.save()` validates against the schema and throws on an invalid shape, so nothing malformed reaches disk.
 
 **Lifecycle:**
-1. `pickup` preflight seeds the file; pickup updates it during execution
+1. `pickup` preflight seeds the file via `session.save()` (or keeps a valid session for the same issue); a corrupt or invalid file stops preflight (fatal) and is left untouched; pickup updates it during execution
 2. `session-start.sh` detects and surfaces state on session startup (~300-500 tokens)
 3. `cleanup` removes it (`git clean -fdx -- .envoy`) when the worktree is torn down after merge
 
