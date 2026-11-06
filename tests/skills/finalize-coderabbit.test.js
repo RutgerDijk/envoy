@@ -167,5 +167,15 @@ test('coderabbit.md polls --target coderabbit; ci.md polls --target ci', () => {
   assert.ok(/--target ci/.test(ciMd));
 });
 
+test('coderabbit.md documents every settle reason, including "ended" (run finished without success)', () => {
+  for (const r of ['settled: unresolved=N', 'settled: clean', 'settled: ended', 'settled: retrigger', 'settled: capped']) {
+    assert.ok(md.includes(r), `missing ${r}`);
+  }
+});
+
+test('coderabbit.md says old unresolved threads wait for a review of the new head', () => {
+  assert.ok(/head commit/i.test(md) && /earlier review/i.test(md), 'explain that leftover threads do not settle the wait');
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

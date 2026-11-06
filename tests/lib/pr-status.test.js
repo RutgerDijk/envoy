@@ -792,9 +792,10 @@ section('rateLimit.stale: CodeRabbit already reviewed the head commit');
 
 // CodeRabbit edits its summary comment in place, so the comment's createdAt
 // says nothing about which push the limit hit. A review on the head commit does.
-test('rate-limit comment with a CodeRabbit review on the head commit is stale', () => {
+test('rate-limit comment with a CodeRabbit review on the head commit is stale and no longer rate limited', () => {
   const snap = prStatus.buildSnapshot({ ...rawInputs, coderabbitReviewedHead: true });
-  assert.strictEqual(snap.coderabbit.rateLimit.rateLimited, true);
+  assert.strictEqual(snap.coderabbit.rateLimit.rateLimited, false);
+  assert.strictEqual(snap.coderabbit.rateLimit.resetsAt, null);
   assert.strictEqual(snap.coderabbit.rateLimit.stale, true);
 });
 
@@ -841,6 +842,88 @@ section('getChecksSnapshot: checks-only probe for the CI wait');
 
 test('getChecksSnapshot is exported', () => {
   assert.strictEqual(typeof prStatus.getChecksSnapshot, 'function');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Second review of PR #98
+// ═══════════════════════════════════════════════════════════════════
+
+section('stale rate limit lives in the snapshot itself (full-ci and babysit read rateLimited)');
+
+test('a stale comment without a parseable time is not rate limited', () => {
+  const snap = prStatus.buildSnapshot({ ...rawInputs, rateLimitCommentBody: 'Rate limit exceeded. Try again later.', coderabbitReviewedHead: true });
+  assert.deepStrictEqual(snap.coderabbit.rateLimit, { rateLimited: false, resetsAt: null, stale: true });
+});
+
+test('full-ci notReadyReason does not report a stale rate limit', () => {
+  const { notReadyReason } = require(path.join(__dirname, '..', '..', 'lib', 'full-ci.js'));
+  const snap = prStatus.buildSnapshot({
+    ...rawInputs,
+    ci: { state: 'FAILURE', checks: [], fullSuiteOwed: true, pinned: true },
+    reviewThreads: { nodes: [] },
+    rateLimitCommentBody: 'Rate limit exceeded. Try again later.',
+    coderabbitReviewedHead: true,
+  });
+  assert.strictEqual(notReadyReason(snap, false, rawInputs.now), null);
+});
+
+test('the snapshot exposes coderabbit.reviewedHead', () => {
+  assert.strictEqual(prStatus.buildSnapshot({ ...rawInputs, coderabbitReviewedHead: true }).coderabbit.reviewedHead, true);
+  assert.strictEqual(prStatus.buildSnapshot(rawInputs).coderabbit.reviewedHead, false);
+});
+
+section('fetchRateLimitComment: anchor on the last edit, not the creation time');
+
+test('returns the last edit time (updated_at) of the latest rate-limit comment', () => {
+  const lines = [
+    JSON.stringify({ user: { login: 'coderabbitai[bot]' }, body: 'Rate limit exceeded. wait 3 minutes', created_at: '2026-05-01T06:00:00Z', updated_at: '2026-05-01T06:01:00Z' }),
+    JSON.stringify({ user: { login: 'rutger' }, body: 'rate limit exceeded?', created_at: '2026-05-02T07:00:00Z', updated_at: '2026-05-02T07:00:00Z' }),
+    JSON.stringify({ user: { login: 'coderabbitai[bot]' }, body: 'Rate limit exceeded. Please wait **8 minutes**', created_at: '2026-05-02T06:18:25Z', updated_at: '2026-05-02T06:29:23Z' }),
+  ].join('\n');
+  let seen;
+  const run = (args) => { seen = args; return lines; };
+  const c = prStatus.fetchRateLimitComment({ owner: 'o', repo: 'r' }, 595, run);
+  assert.ok(seen.join(' ').includes('repos/o/r/issues/595/comments'), seen.join(' '));
+  assert.strictEqual(c.at, '2026-05-02T06:29:23Z');
+  assert.ok(/8 minutes/.test(c.body));
+});
+
+test('no CodeRabbit rate-limit comment -> null', () => {
+  const run = () => JSON.stringify({ user: { login: 'coderabbitai[bot]' }, body: 'Walkthrough', created_at: 'x', updated_at: 'y' });
+  assert.strictEqual(prStatus.fetchRateLimitComment({ owner: 'o', repo: 'r' }, 1, run), null);
+});
+
+section('coderabbitRunState: one definition of "finished" and "passed"');
+
+test('a commit status governs when present', () => {
+  assert.deepStrictEqual(prStatus.coderabbitRunState({ statusState: 'SUCCESS', checkState: 'PENDING' }), { source: 'status', state: 'SUCCESS', finished: true, passed: true });
+  assert.deepStrictEqual(prStatus.coderabbitRunState({ statusState: 'pending', checkState: 'SUCCESS' }), { source: 'status', state: 'PENDING', finished: false, passed: false });
+  assert.deepStrictEqual(prStatus.coderabbitRunState({ statusState: 'FAILURE' }), { source: 'status', state: 'FAILURE', finished: true, passed: false });
+});
+
+test('without a status the check run decides; CANCELLED is finished but not passed', () => {
+  assert.deepStrictEqual(prStatus.coderabbitRunState({ checkState: 'CANCELLED' }), { source: 'check', state: 'CANCELLED', finished: true, passed: false });
+  assert.deepStrictEqual(prStatus.coderabbitRunState({ checkState: 'neutral' }), { source: 'check', state: 'NEUTRAL', finished: true, passed: true });
+  assert.deepStrictEqual(prStatus.coderabbitRunState({ checkState: 'IN_PROGRESS' }), { source: 'check', state: 'IN_PROGRESS', finished: false, passed: false });
+});
+
+test('neither -> no source, not finished', () => {
+  assert.deepStrictEqual(prStatus.coderabbitRunState({}), { source: null, state: '', finished: false, passed: false });
+});
+
+test('isCoderabbitName matches CodeRabbit check and status names', () => {
+  assert.strictEqual(prStatus.isCoderabbitName('CodeRabbit'), true);
+  assert.strictEqual(prStatus.isCoderabbitName('test'), false);
+  assert.strictEqual(prStatus.isCoderabbitName(undefined), false);
+});
+
+test('pr-poll and full-ci use coderabbitRunState, with no private copies of the state sets', () => {
+  const fs = require('fs');
+  const poll = fs.readFileSync(path.join(__dirname, '..', '..', 'lib', 'pr-poll.js'), 'utf8');
+  const fullCi = fs.readFileSync(path.join(__dirname, '..', '..', 'lib', 'full-ci.js'), 'utf8');
+  for (const src of [poll, fullCi]) assert.ok(/coderabbitRunState/.test(src));
+  assert.ok(!/CR_TERMINAL|CR_STATUS_TERMINAL/.test(poll), 'pr-poll keeps a private terminal-state list');
+  assert.ok(!/\['success', 'neutral', 'skipped'\]/.test(fullCi), 'full-ci keeps a private passed-state list');
 });
 
 // ═══════════════════════════════════════════════════════════════════

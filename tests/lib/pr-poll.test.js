@@ -68,11 +68,11 @@ function harness(snapshots, extra = {}) {
   };
 }
 
-function crSnap({ checkState = null, statusState = null, unresolved = 0, rateLimited = false, resetsAt = null, stale = false } = {}) {
+function crSnap({ checkState = null, statusState = null, unresolved = 0, rateLimited = false, resetsAt = null, stale = false, reviewedHead = false } = {}) {
   return {
     pr: 7,
     ci: { state: 'PENDING', checks: [] },
-    coderabbit: { checkState, statusState, unresolvedThreads: unresolved, rateLimit: { rateLimited, resetsAt, stale } },
+    coderabbit: { checkState, statusState, unresolvedThreads: unresolved, reviewedHead, rateLimit: { rateLimited, resetsAt, stale } },
   };
 }
 
@@ -112,7 +112,7 @@ test('coderabbit: terminal checkState with zero unresolved threads settles (exit
 });
 
 test('coderabbit: unresolved threads settle (exit 0) even while the check is pending', async () => {
-  const h = harness([crSnap({ checkState: 'PENDING', unresolved: 3 })]);
+  const h = harness([crSnap({ checkState: 'PENDING', unresolved: 3, reviewedHead: true })]);
   const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
   assert.strictEqual(code, 0);
   assert.ok(/unresolved=3/.test(h.lines[0]));
@@ -165,7 +165,7 @@ test('ci: no checks registered yet (just pushed) is pending, not settled', async
 });
 
 test('prints exactly one line per probe', async () => {
-  const h = harness([crSnap(), crSnap(), crSnap({ unresolved: 1 })]);
+  const h = harness([crSnap(), crSnap(), crSnap({ unresolved: 1, reviewedHead: true })]);
   await poll({ pr: 7, target: 'coderabbit', ...h.deps });
   assert.strictEqual(h.probes, 3);
   assert.strictEqual(h.lines.length, 3);
@@ -176,7 +176,8 @@ section('review fixes (#94): stale rate limit, commit status, CodeRabbit outside
 
 test('coderabbit: a stale rate-limit comment is ignored; a finished review settles clean, no retrigger', async () => {
   const past = new Date(START - 3600000).toISOString();
-  const h = harness([crSnap({ checkState: 'SUCCESS', rateLimited: true, resetsAt: past, stale: true })]);
+  const h = harness([crSnap({ checkState: 'SUCCESS', rateLimited: false, resetsAt: null, stale: true })]);
+  void past;
   const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
   assert.strictEqual(code, 0);
   assert.ok(/clean/.test(h.lines[0]) && !/retrigger/.test(h.lines[0]), h.lines[0]);
@@ -211,11 +212,14 @@ test('ci: a pending CodeRabbit check does not hold the CI wait', async () => {
   assert.ok(/1 checks finished/.test(h.lines[0]), h.lines[0]);
 });
 
-test('ci: only CodeRabbit checks, all finished -> settled (repo without CI)', async () => {
+test('ci: only CodeRabbit checks, all finished -> settled after the grace period (repo without CI)', async () => {
+  const { CI_REGISTRATION_GRACE_SECONDS } = require(MODULE);
   const h = harness([ciSnap(['SUCCESS'], ['CodeRabbit'])]);
-  const code = await poll({ pr: 7, target: 'ci', deadlineSec: 120, ...h.deps });
+  const code = await poll({ pr: 7, target: 'ci', ...h.deps });
   assert.strictEqual(code, 0);
-  assert.ok(/no CI checks/.test(h.lines[0]), h.lines[0]);
+  const last = h.lines[h.lines.length - 1];
+  assert.ok(/no CI checks/.test(last), last);
+  assert.ok(h.elapsed() >= CI_REGISTRATION_GRACE_SECONDS, `settled at ${h.elapsed()}s`);
 });
 
 test('ci: only a pending CodeRabbit check -> still pending (CI may not be registered yet)', async () => {
@@ -241,6 +245,54 @@ test('default probe: ci uses the checks-only snapshot, coderabbit the full one',
   const prStatus = require(path.join(__dirname, '..', '..', 'lib', 'pr-status.js'));
   assert.strictEqual(defaultProbe('ci'), prStatus.getChecksSnapshot);
   assert.strictEqual(defaultProbe('coderabbit'), prStatus.getSnapshot);
+});
+
+// ─────────────────────────────────────────────────────────────────────
+section('second review (#98): head-commit review, CI registration grace, CANCELLED run');
+
+test('coderabbit: unresolved threads from an earlier review wait until CodeRabbit reviewed the head', async () => {
+  const h = harness([
+    crSnap({ checkState: 'PENDING', unresolved: 1 }),
+    crSnap({ checkState: 'PENDING', unresolved: 1, reviewedHead: true }),
+  ]);
+  const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
+  assert.strictEqual(code, 0);
+  assert.strictEqual(h.probes, 2, 'the first probe must not settle on old threads');
+  assert.ok(/pending/.test(h.lines[0]), h.lines[0]);
+  assert.ok(/unresolved=1/.test(h.lines[1]), h.lines[1]);
+});
+
+test('coderabbit: unresolved threads settle once the run on the head finished (no new review needed)', async () => {
+  const h = harness([crSnap({ statusState: 'SUCCESS', unresolved: 1 })]);
+  const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
+  assert.strictEqual(code, 0);
+  assert.ok(/unresolved=1/.test(h.lines[0]), h.lines[0]);
+});
+
+test('ci: a finished CodeRabbit-only list right after the push does not settle before CI registers', async () => {
+  const h = harness([
+    ciSnap(['SUCCESS'], ['CodeRabbit']),
+    ciSnap(['SUCCESS'], ['CodeRabbit']),
+    ciSnap(['SUCCESS', 'QUEUED'], ['CodeRabbit', 'ci-gate']),
+    ciSnap(['SUCCESS', 'SUCCESS'], ['CodeRabbit', 'ci-gate']),
+  ]);
+  const code = await poll({ pr: 7, target: 'ci', ...h.deps });
+  assert.strictEqual(code, 0);
+  const last = h.lines[h.lines.length - 1];
+  assert.ok(/1 checks finished \(ci SUCCESS\)/.test(last), last);
+  assert.ok(!h.lines.some((l) => /no CI checks/.test(l)), h.lines.join('\n'));
+});
+
+test('coderabbit: a CANCELLED run settles but is not reported as clean', async () => {
+  const h = harness([crSnap({ checkState: 'CANCELLED' })]);
+  const code = await poll({ pr: 7, target: 'coderabbit', ...h.deps });
+  assert.strictEqual(code, 0);
+  assert.ok(!/clean/.test(h.lines[0]) && /ended/.test(h.lines[0]), h.lines[0]);
+});
+
+test('coderabbit: rateLimit.stale is not consulted (the snapshot clears rateLimited itself)', () => {
+  const src = require('fs').readFileSync(MODULE, 'utf8');
+  assert.ok(!/rl\.stale/.test(src));
 });
 
 // ─────────────────────────────────────────────────────────────────────
