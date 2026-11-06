@@ -40,7 +40,16 @@
 
 const configProtection = require('./config-protection');
 
+// Resolved lazily: hook-runner.js requires this file before assigning its own
+// module.exports, so a top-level destructure would capture undefined.
+function shouldRun(name) {
+  return require('./hook-runner').shouldRun(name);
+}
+
 function run(rawInput) {
+  // ENVOY_DISABLED_HOOKS=config-protection turns off this check too, as on
+  // the Bash path (bash-guard-combined).
+  if (!shouldRun('config-protection')) return;
   // May process.exit(2) internally to block the edit.
   configProtection.run(rawInput);
 }

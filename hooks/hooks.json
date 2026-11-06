@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" issue-create-guard",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook-runner.js\" bash-guard-combined",
             "_profiles": ["minimal", "standard", "strict"]
           }
         ]

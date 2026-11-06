@@ -6,7 +6,7 @@ Libraries inspired by [lean-ctx](https://github.com/yvgude/lean-ctx) that reduce
 
 | Library | Purpose | Used By |
 |---------|---------|---------|
-| `lib/session-state.js` | Cross-session task continuity | pickup, finalize |
+| `lib/session-state.js` | Cross-session task continuity | pickup, session-start hook |
 | `lib/agent-scratchpad.js` | Multi-agent coordination | envoy-authoring (dispatching-parallel-agents step), finalize |
 | `lib/context-budget.js` | LITM-aware prompt structuring | envoy-authoring (dispatching-parallel-agents step), pickup |
 | `lib/relevance-scorer.js` | Task-aware file scoring | pickup, review |
@@ -15,24 +15,35 @@ Libraries inspired by [lean-ctx](https://github.com/yvgude/lean-ctx) that reduce
 
 ## Session State
 
-**File:** `.envoy-session.json` (gitignored, per-worktree)
+**File:** `.envoy/pickup/session.json` (gitignored, per-worktree; schema `lib/schemas/session.json`)
 
 Persists between context compactions and session restarts:
-- Current branch and plan path
+- Current branch and plan (e.g. `issue #94`)
 - Task progress (pending/in_progress/done/blocked)
-- Key decisions made during implementation
-- Files modified and why
-- Last test results
+- Key decisions made during implementation (`decisions[].note`)
 - Next steps
 
+`session.save()` validates against the schema and throws on an invalid shape, so nothing malformed reaches disk.
+
 **Lifecycle:**
-1. `pickup` creates/updates state during execution
+1. `pickup` preflight seeds the file via `session.save()` (or keeps a valid session for the same issue and reconciles its tasks with the issue by id: kept tasks keep their status, new ones are added, removed ones dropped); a corrupt or invalid file stops preflight (fatal) and is left untouched; pickup updates it during execution through the CLI below
 2. `session-start.sh` detects and surfaces state on session startup (~300-500 tokens)
-3. `finalize` clears state when the branch ships
+3. `cleanup` removes it (`git clean -fdx -- .envoy`) when the worktree is torn down after merge
+
+Skills use the CLI (exit 1 on a corrupt or invalid file, which is left untouched; 64 on a usage error):
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/lib/session-state.js" sync      # branch from git + reconcile tasks with .envoy-tasks/<issue>.json
+node "$CLAUDE_PLUGIN_ROOT/lib/session-state.js" task task-1 done "Added User entity"
+node "$CLAUDE_PLUGIN_ROOT/lib/session-state.js" decision "Used Guid PK — matches existing entities"
+node "$CLAUDE_PLUGIN_ROOT/lib/session-state.js" next-steps "Run envoy:review" "Run envoy:finalize"
+```
+
+The same operations as a module (a file without `decisions` or `nextSteps` loads with both as `[]`):
 
 ```javascript
-const session = require('../../lib/session-state');
-const state = session.load();           // Resume or create
+const session = require(path.join(process.env.CLAUDE_PLUGIN_ROOT, 'lib', 'session-state'));
+const state = session.load();  // preflight seed, or empty if missing; throws on corrupt/invalid file
 session.updateTask(state, 'task-1', 'done', 'Added User entity');
 session.addDecision(state, 'Used Guid PK — matches existing entities');
 session.save(state);

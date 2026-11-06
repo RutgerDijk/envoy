@@ -87,22 +87,24 @@ function readLog(cwd) {
     .map((l) => JSON.parse(l));
 }
 
-section('registration: PreToolUse[Bash] -> issue-create-guard, all profiles');
+section('registration: PreToolUse[Bash] -> bash-guard-combined (runs issue-create-guard), all profiles');
 
-test('hooks.json registers matcher "Bash" -> issue-create-guard via hook-runner in all profiles', () => {
+test('hooks.json registers matcher "Bash" -> bash-guard-combined (which runs issue-create-guard) via hook-runner in all profiles', () => {
   const hooksConfig = JSON.parse(fs.readFileSync(HOOKS_JSON, 'utf8'));
   const pre = hooksConfig.hooks.PreToolUse || [];
   const bashEntry = pre.find(
-    (e) => e.matcher === 'Bash' && e.hooks.some((h) => /issue-create-guard/.test(h.command))
+    (e) => e.matcher === 'Bash' && e.hooks.some((h) => /bash-guard-combined/.test(h.command))
   );
-  assert.ok(bashEntry, 'no PreToolUse entry with matcher "Bash" wired to issue-create-guard');
-  const hookDef = bashEntry.hooks.find((h) => /issue-create-guard/.test(h.command));
-  assert.ok(/hook-runner\.js" issue-create-guard/.test(hookDef.command), `not wired via hook-runner: ${hookDef.command}`);
+  assert.ok(bashEntry, 'no PreToolUse entry with matcher "Bash" wired to bash-guard-combined');
+  const hookDef = bashEntry.hooks.find((h) => /bash-guard-combined/.test(h.command));
+  assert.ok(/hook-runner\.js" bash-guard-combined/.test(hookDef.command), `not wired via hook-runner: ${hookDef.command}`);
   assert.deepStrictEqual(
     [...hookDef._profiles].sort(),
     ['minimal', 'standard', 'strict'],
-    'issue-create-guard must be registered in ALL profiles (unconditional duplicate case is not profile-gated)'
+    'issue-create-guard (via bash-guard-combined) must be registered in ALL profiles (unconditional duplicate case is not profile-gated)'
   );
+  const combinedSrc = fs.readFileSync(path.join(REPO_ROOT, 'hooks', 'bash-guard-combined.js'), 'utf8');
+  assert.ok(/guardIssueCreate/.test(combinedSrc), 'bash-guard-combined must run guardIssueCreate');
 });
 
 section('ARMED: duplicate gh issue create always blocks, ignoring profile');
@@ -318,6 +320,50 @@ test('existing-issue mode: gh issue create is hard-blocked and names the existin
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+section('review 2 (#98): brainstorm state is read from the payload cwd (where the shell wrote it)');
+
+const BASH_GUARD_COMBINED = path.join(REPO_ROOT, 'hooks', 'bash-guard-combined.js');
+const CREATE_CMD = ['gh', 'issue', 'create', '--title', 'x', '--body', 'y'].join(' ');
+
+for (const script of [ISSUE_CREATE_GUARD, BASH_GUARD_COMBINED]) {
+  const name = path.basename(script);
+
+  test(`${name}: duplicate create blocks when session.json is under the payload cwd, not the hook cwd`, () => {
+    const tmp = mkTmp();
+    try {
+      const sub = path.join(tmp, 'wt');
+      writeSession(sub, 42);
+      const r = spawnSync('node', [script], {
+        cwd: tmp,
+        encoding: 'utf8',
+        input: JSON.stringify({ ...bashEvent(CREATE_CMD), cwd: sub }),
+        env: { ...process.env },
+      });
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test(`${name}: an approval marker under the payload cwd allows the create under strict`, () => {
+    const tmp = mkTmp();
+    try {
+      const sub = path.join(tmp, 'wt');
+      writeApproval(sub);
+      const r = spawnSync('node', [script], {
+        cwd: tmp,
+        encoding: 'utf8',
+        input: JSON.stringify({ ...bashEvent(CREATE_CMD), cwd: sub }),
+        env: { ...process.env, ENVOY_HOOK_PROFILE: 'strict' },
+      });
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+      assert.strictEqual(readLog(tmp), null, 'nothing logged under the hook cwd');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+}
 
 process.stdout.write(`\n\x1b[1m${passed} passed, ${failed} failed\x1b[0m\n`);
 process.exit(failed === 0 ? 0 : 1);

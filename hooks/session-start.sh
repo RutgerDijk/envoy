@@ -122,26 +122,36 @@ fi
 DETECTED_STACKS=$(node "$PLUGIN_DIR/lib/stack-loader.js" .)
 
 # Detect session state (cross-session continuity)
+# Prints nothing unless the file parses, validates against
+# lib/schemas/session.json and carries a non-empty branch.
 SESSION_STATE=""
-if [ -f ".envoy-session.json" ]; then
+SESSION_BRANCH=""
+if [ -f ".envoy/pickup/session.json" ]; then
     # Extract all fields in a single Node process
     eval "$(node -e "
-      const s=JSON.parse(require('fs').readFileSync('.envoy-session.json','utf8'));
+      let s;
+      try {
+        s=JSON.parse(require('fs').readFileSync('.envoy/pickup/session.json','utf8'));
+        if(!require(process.argv[1]).validate('session',s).valid) process.exit(0);
+      } catch { process.exit(0); }
+      if(typeof s.branch!=='string'||!s.branch) process.exit(0);
       const esc=v=>(v||'').replace(/'/g,\"'\\\\''\");
-      console.log('SESSION_BRANCH=\'' + esc(s.branch||'unknown') + '\'');
+      console.log('SESSION_BRANCH=\'' + esc(s.branch) + '\'');
       console.log('SESSION_PLAN=\'' + esc(s.plan||'') + '\'');
       const d=(s.tasks||[]).filter(t=>t.status==='done').length;
       console.log('SESSION_TASKS=\'' + d+'/'+(s.tasks||[]).length + '\'');
       console.log('SESSION_UPDATED=\'' + esc(s.updatedAt||'') + '\'');
       const ns=(s.nextSteps||[]).slice(0,3).map(n=>'- '+n).join('\n');
       console.log('SESSION_NEXTSTEPS=\'' + esc(ns) + '\'');
-      const dc=(s.decisions||[]).slice(-3).map(d=>'- '+d.text).join('\n');
+      const dc=(s.decisions||[]).filter(x=>x&&typeof x.note==='string'&&x.note).slice(-3).map(x=>'- '+x.note).join('\n');
       console.log('SESSION_DECISIONS=\'' + esc(dc) + '\'');
-    " 2>/dev/null)"
+    " "$PLUGIN_DIR/lib/validate-schema" 2>/dev/null)"
+fi
 
+if [ -n "$SESSION_BRANCH" ]; then
     SESSION_STATE="---
 
-**Session state detected** (from \`.envoy-session.json\`, last updated: $SESSION_UPDATED)
+**Session state detected** (from \`.envoy/pickup/session.json\`, last updated: $SESSION_UPDATED)
 
 **Branch:** $SESSION_BRANCH"
 
@@ -167,8 +177,8 @@ $SESSION_NEXTSTEPS"
 
     SESSION_STATE="$SESSION_STATE
 
-Load full state with: \`const session = require('./lib/session-state').load()\`
-To clear after branch is done: \`require('./lib/session-state').clear()\`"
+Load full state with: \`require('$PLUGIN_DIR/lib/session-state').load()\`
+(cleanup's \`git clean -fdx -- .envoy\` removes the file when the worktree is torn down)"
 fi
 
 # Compaction-resume nudge: on a resume trigger, if the most recent ledger

@@ -2,27 +2,15 @@
 
 ### Step 9: Initialize Session State
 
-Initialize session state for cross-session continuity:
+Session state lives in `.envoy/pickup/session.json` (schema `lib/schemas/session.json`). Preflight seeds it with every task `pending`, `issueNumber`, and `branch: "unknown"` — or, when a valid session for the same issue already exists (re-invocation after a compaction), keeps it so completed tasks, decisions and next steps survive, and reconciles its task list with the issue by task id (kept tasks keep their status, new tasks are added as `pending`, tasks removed from the issue are dropped). A corrupt or schema-invalid file makes preflight fatal and is left untouched.
 
-```javascript
-const session = require('../../lib/session-state');
-const state = session.exists() ? session.load() : session.createEmpty();
+Update the file only through the `lib/session-state.js` CLI. Run from the worktree root — it sets the branch from git and reconciles the tasks with `.envoy-tasks/<issue>.json` again:
 
-if (state.tasks.length > 0) {
-  // Resuming — report progress
-  const done = state.tasks.filter(t => t.status === 'done').length;
-  console.log(`Resuming: ${done}/${state.tasks.length} tasks complete`);
-  console.log('Recent decisions:', state.decisions.slice(-3));
-} else {
-  // Fresh start
-  state.branch = currentBranch;
-  state.plan = `issue #${issueNumber}`;
-  for (const task of planTasks) {
-    session.updateTask(state, task.id, 'pending');
-  }
-  session.save(state);
-}
+```bash
+node "${CLAUDE_PLUGIN_ROOT:-${CLAUDE_SKILL_DIR}/../..}/lib/session-state.js" sync
 ```
+
+During the execute loop, record progress the same way (`task <id> <pending|in_progress|done|blocked> [summary]`, `decision <note>`). Exit 1 means the file is corrupt or schema-invalid: stop and surface the error rather than recreating the file. Exit 64 is a usage error.
 
 ### Step 10: Parse Issue Body for Tasks
 

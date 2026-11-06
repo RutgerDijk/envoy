@@ -1,7 +1,7 @@
 {
   "$schemaVersion": "1",
   "$id": "envoy/session",
-  "description": "Pickup session state — replaces .envoy-session.json; lives at .envoy/pickup/session.json.",
+  "description": "Pickup session state at .envoy/pickup/session.json — the single home for cross-session task continuity (written by pickup preflight and lib/session-state.js).",
   "type": "object",
   "required": ["$schemaVersion", "branch", "tasks"],
   "properties": {
@@ -21,7 +21,9 @@
           "name": { "type": "string" },
           "status": { "type": "string", "enum": ["pending", "in_progress", "done", "blocked"] },
           "commitSha": { "type": "string" },
-          "blocker": { "type": "string" }
+          "blocker": { "type": "string" },
+          "summary": { "type": ["string", "null"] },
+          "updatedAt": { "type": "string" }
         }
       }
     },

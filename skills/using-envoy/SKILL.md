@@ -76,6 +76,20 @@ Every skill has an "Announce at start" directive. Use it:
 
 This keeps the user informed and commits you to following the skill.
 
+## Test Command override
+
+Skills resolve test commands from the detected stack profile. To override, add this section to the project's root `CLAUDE.md` (it overrides the stack default; a valid override replaces all detected stack defaults at once, not merged per line):
+
+```markdown
+## Test Command
+
+filtered: dotnet test --no-build --filter "FullyQualifiedName~{{test}}"
+full: dotnet test --no-build
+```
+
+- `filtered:` runs one named test and must contain the literal `{{test}}` placeholder; `full:` runs the whole suite.
+- Templates containing shell metacharacters (`;`, `&&`, `||`, `|`, `$(`, backticks, newline) outside `{{test}}` are rejected and reported as warnings — never executed. One unsafe line drops both lines; an unsafe override falls back to the stack-profile commands.
+
 ## Commands Quick Reference
 
 | Command | Purpose |

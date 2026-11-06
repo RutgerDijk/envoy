@@ -25,6 +25,7 @@ const HOOK_PROFILES = {
   'config-protection':      ['minimal', 'standard', 'strict'],
   'edit-guard-combined':    ['minimal', 'standard', 'strict'],
   'issue-create-guard':     ['minimal', 'standard', 'strict'],
+  'bash-guard-combined':    ['minimal', 'standard', 'strict'],
   'pre-compact':            ['minimal', 'standard', 'strict'],
   'post-edit-accumulator':  ['standard', 'strict'],
   'stop-batch-lint':        ['standard', 'strict'],

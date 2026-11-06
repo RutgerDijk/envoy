@@ -24,7 +24,8 @@ Hooks receive JSON on stdin describing the event. They control behavior via exit
 | Hook | Event | Purpose |
 |------|-------|---------|
 | `session-start.sh` | SessionStart | Loads Envoy skills, detects tech stacks, restores session state |
-| `config-protection.js` | PreToolUse (Edit/Write) | Blocks linter/formatter config modifications |
+| `config-protection.js` | PreToolUse (Edit/Write/Bash) | Blocks linter/formatter config modifications |
+| `bash-guard-combined.js` | PreToolUse (Bash) | Runs issue-create-guard and config-protection's Bash check (writes via `>`, `tee`, `sed -i`, `cp`/`mv`/`install`) in one spawn. Both use the payload `cwd` (brainstorm state, relative targets); config-protection follows `cd`, `pushd`/`popd` and `cd -` |
 | `post-edit-accumulator.js` | PostToolUse (Edit/Write) | Tracks edited files for batched processing |
 | `post-pr-poll.js` | PostToolUse (Bash) | Triggers CodeRabbit polling after `gh pr create` |
 | `stop-batch-lint.js` | Stop | Runs lint once across all session edits |
@@ -39,6 +40,8 @@ The most impactful hook. When Claude is in an autonomous review-fix loop, it mig
 **Warned files (not blocked):** `tsconfig.json`
 
 When Claude tries to edit `.eslintrc.js`, it sees: "BLOCKED: Fix source code instead of weakening linter config." and adjusts its approach.
+
+Setting `ENVOY_OVERRIDE=1` in the environment (not in the command text) unblocks config-protection on both the Edit/Write and the Bash path. `ENVOY_DISABLED_HOOKS=config-protection` turns off both the Bash and the Edit/Write check. On the Bash path, "inside the project" is judged against `CLAUDE_PROJECT_DIR`; a `cd` that may not run (inside `if`/`case`/loops, after `&&`/`||`, in a pipeline) keeps the original directory as a possibility; a target rooted at a variable (`$HOME/...`) is not judged.
 
 ## Batch Lint
 
@@ -65,7 +68,7 @@ Override individual hooks: `export ENVOY_DISABLED_HOOKS=learning-extractor`
 
 ## Session State Restoration
 
-When `session-start.sh` runs, it checks for `.envoy-session.json` in the working directory. If found, it surfaces task progress, recent decisions, and next steps — enabling seamless continuation across context compactions and session restarts. See [[Context Efficiency]] for details.
+When `session-start.sh` runs, it checks for `.envoy/pickup/session.json` (pickup's session state, schema `lib/schemas/session.json`) in the working directory. If found, it surfaces task progress, recent decisions (`decisions[].note`), and next steps — enabling seamless continuation across context compactions and session restarts. See [[Context Efficiency]] for details.
 
 ## Cost Tracking
 

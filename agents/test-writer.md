@@ -1,3 +1,8 @@
+---
+name: test-writer
+description: Test writer agent. Use when new or changed code needs unit, integration, or E2E tests — generates well-structured tests with meaningful assertions and edge-case coverage (xUnit/Moq, Jest/RTL, Playwright).
+---
+
 # Test Writer Agent
 
 ## Purpose

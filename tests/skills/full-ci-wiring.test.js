@@ -307,6 +307,11 @@ if (!jqOk) {
     assert.strictEqual(runJq(f, '[{"name":"a","bucket":"pass"},{"name":"b","bucket":"skipping"}]', a), '0');
     assert.strictEqual(runJq(f, '[]', a), '0');
   });
+  check('PENDING_JQ and FAILED_JQ leave out CodeRabbit (the coderabbit wait owns it, not CI)', () => {
+    const cr = '[{"name":"CodeRabbit","bucket":"pending"},{"name":"coderabbitai","bucket":"fail"},{"name":"test","bucket":"pass"}]';
+    assert.strictEqual(runJq(filterFromCiMd('PENDING_JQ'), cr), '0');
+    assert.strictEqual(runJq(filterFromCiMd('FAILED_JQ'), cr, ['--arg', 'skip', 'false', '--arg', 'gate', 'ci-gate']), '0');
+  });
 }
 
 

@@ -8,12 +8,41 @@ push, one CI run per cycle). CI failures are diagnosed here; they get fixed
 and committed together with CodeRabbit findings in `steps/coderabbit.md`
 Steps 4-6.
 
-### Poll CI Status
+### Wait for CI in the background (`lib/pr-poll.js`)
+
+Do NOT wait in the foreground. Run this as ONE Bash call with `run_in_background: true`.
+The session stays free, and Claude is re-invoked when the poller exits:
 
 ```bash
-# CI: 15min max (synchronous checks, faster feedback loop)
-# Poll with exponential backoff — 15min timeout
-# intervals: 30s, 60s, 120s, 240s, 240s, 240s (cumulative: 15.5min)
+# Run with run_in_background: true. Claude is re-invoked when it exits.
+# CI: 15min max (synchronous checks, faster feedback loop than CodeRabbit).
+PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
+node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target ci --deadline 900
+```
+
+The poller owns the backoff table. It probes at once, then after 30, 60, 120, 240, 240
+and 240s, clamped to the deadline. Each probe reads one `lib/pr-status.js` snapshot and
+prints one line. It settles once at least one check is registered and none is still
+pending. A freshly pushed PR with no checks yet counts as pending. CodeRabbit's own check
+is left out; when finished CodeRabbit checks are the only ones, the wait settles as "no CI
+checks" only 2 minutes after it started, so a fast CodeRabbit status cannot settle it before
+GitHub Actions registers its workflows. When it exits, branch on
+the exit code:
+
+- **Exit 0 (settled).** Every check has finished. Run "Read CI Status" below.
+- **Exit 1 (deadline).** Report `CI checks still running after 15 minutes.`, then run
+  "Read CI Status" anyway. Pending checks are not failures: `FAILED` counts only
+  fail/cancel, and the Step 8 re-poll picks up the rest.
+- **Exit 2 (handoff).** Only the `coderabbit` target produces this. If it ever appears here, treat it as exit 3.
+- **Exit 3 (persistently unavailable).** `pr-status.js` failed on 3 consecutive probes (the
+  poller already tolerates 1-2 transient failures and retries them itself), or the poller crashed.
+  Do not re-run the wait. Report the poller's last line, then run "Read CI Status" anyway. An
+  unreadable `gh pr checks` makes `FAILED` "unknown", which fails closed (never treated as green).
+
+### Read CI Status (after the wait)
+
+```bash
+PR_NUMBER=$(jq -r .prNumber .envoy/finalize/state.json)
 # `gh pr checks` has no `conclusion` field: use `bucket` (pass|fail|pending|skipping|cancel).
 # It exits 8 while checks are pending/failing but still prints the JSON, so keep stdout
 # and validate it. A failed query yields an empty CHECKS and the counts become "unknown"
@@ -27,29 +56,15 @@ count_checks() {  # usage: count_checks <jq args...> <filter>; prints a number o
   if [ -z "$CHECKS" ]; then echo unknown; return; fi
   printf '%s' "$CHECKS" | jq "$@" 2>/dev/null || echo unknown
 }
-PENDING_JQ='[.[] | select((.bucket // "") == "pending")] | length'
+# CodeRabbit's own check is not CI (the coderabbit wait owns it), so both counts leave it out.
+PENDING_JQ='[.[] | select(((.name // "") | test("coderabbit"; "i")) | not) | select((.bucket // "") == "pending")] | length'
 # "cancel" counts as failing: a cancelled check is not green (lib/pr-status.js treats CANCELLED as failing too).
-FAILED_JQ='[.[] | select((.bucket // "") == "fail" or (.bucket // "") == "cancel")
+FAILED_JQ='[.[] | select(((.name // "") | test("coderabbit"; "i")) | not) | select((.bucket // "") == "fail" or (.bucket // "") == "cancel")
         | select(($skip == "true" and ((.name // "") | ascii_downcase) == ($gate | ascii_downcase)) | not)] | length'
 
-ELAPSED=0
-for WAIT in 30 60 120 240 240 240; do
-  CHECKS=$(fetch_checks)
-  PENDING=$(count_checks "$PENDING_JQ")
-
-  if [ "$PENDING" = "0" ]; then
-    break  # All checks resolved
-  fi
-
-  ELAPSED=$((ELAPSED + WAIT))
-  if [ "$ELAPSED" -ge 900 ]; then
-    echo "CI checks still running (or unreadable) after 15 minutes. Pending: $PENDING"
-    break
-  fi
-
-  echo "CI checks still running ($PENDING pending, ${ELAPSED}s elapsed). Next poll in ${WAIT}s..."
-  sleep $WAIT
-done
+CHECKS=$(fetch_checks)   # ONE read, after the background wait has exited
+PENDING=$(count_checks "$PENDING_JQ")   # non-zero only after an exit-1 (deadline) wait
+echo "CI checks still pending: $PENDING"
 
 # Check the FULL SUITE NOT RUN marker BEFORE treating CI as failed or passed.
 PR_STATUS="node ${CLAUDE_SKILL_DIR}/../../lib/pr-status.js"
@@ -100,8 +115,13 @@ fi
 Exit codes: 0 = rerun triggered (re-poll CI); 1 = report only, do not loop; if the run is still in progress, retry on the next poll/pass; 2 = blocked after 3 cycles per head commit, which applies only once the PR is otherwise ready (exit 3 takes precedence over exit 2) — stop and surface to the user (unblock: `node ${CLAUDE_SKILL_DIR}/../../lib/loop-safeguards.js cleanup full-ci-$PR_NUMBER`); exit 3 = `NOT READY: <reason>` (CodeRabbit not yet resolved or the gate is not marker-only) — re-poll on the next pass, never a failure and never an escalation (no writes, no cycle consumed).
 
 **Bounded re-poll for exit 3 and exit 1:** there is no real "next pass" inside one finalize session, so
-re-poll at most 3 polls (spaced by the existing poll interval), re-running the snapshot and this step each
-time. If it is still exit 3 or 1 after the 3rd poll, end the CI step with this STATUS REPORT line and continue
+re-poll at most 3 polls. Space each one with one background `pr-poll.js` call (`run_in_background: true`), then
+re-run the snapshot and this step. Pick the target from the NOT READY reason. If it names CodeRabbit, use
+`node ${CLAUDE_SKILL_DIR}/../../lib/pr-poll.js "$PR_NUMBER" --target coderabbit --retrigger-count "$RETRIGGER_COUNT" --deadline 180`
+(the short deadline keeps a missing CodeRabbit from holding it for 22 minutes; `RETRIGGER_COUNT=$(jq -r '.retriggerCount // 0' .envoy/finalize/state.json 2>/dev/null || echo 0)`), whose first
+probe always waits 120s. Otherwise use the CI wait above. When only the gate is red, a `--target ci` wait settles
+at once and would not space the re-polls. Here any exit code or settle reason from the poller only counts as spacing.
+Ignore it and re-read the snapshot. If it is still exit 3 or 1 after the 3rd poll, end the CI step with this STATUS REPORT line and continue
 to finalize's remaining steps:
 
 ```

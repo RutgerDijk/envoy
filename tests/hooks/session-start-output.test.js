@@ -148,5 +148,92 @@ test('routing table lines never contain raw boilerplate phrases (independent of 
   }
 });
 
+test('surfaces pickup session state from .envoy/pickup/session.json with decisions[].note', () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'session-start-'));
+  try {
+    fs.mkdirSync(path.join(cwd, '.envoy', 'pickup'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, '.envoy', 'pickup', 'session.json'), JSON.stringify({
+      $schemaVersion: '1',
+      branch: 'feature/session-test',
+      updatedAt: '2026-11-02T00:00:00.000Z',
+      tasks: [{ id: 'task-1', status: 'done' }, { id: 'task-2', status: 'pending' }],
+      decisions: [{ at: '2026-11-02T00:00:00.000Z', note: 'Chose atomic rename' }],
+      nextSteps: ['Run review'],
+    }));
+    const out = execFileSync('bash', [HOOK], {
+      cwd,
+      encoding: 'utf8',
+      timeout: 30000,
+      input: JSON.stringify({ hook_event_name: 'SessionStart', source: 'startup', session_id: 'test', cwd }),
+      env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT }
+    });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext;
+    assert.ok(ctx.includes('.envoy/pickup/session.json'), 'must name the new session path');
+    assert.ok(ctx.includes('feature/session-test'), 'must surface the branch');
+    assert.ok(ctx.includes('1/2'), 'must surface task progress');
+    assert.ok(ctx.includes('Chose atomic rename'), 'must surface decisions[].note');
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+function runHookWithSession(content) {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'session-start-'));
+  try {
+    fs.mkdirSync(path.join(cwd, '.envoy', 'pickup'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, '.envoy', 'pickup', 'session.json'),
+      typeof content === 'string' ? content : JSON.stringify(content));
+    const out = execFileSync('bash', [HOOK], {
+      cwd,
+      encoding: 'utf8',
+      timeout: 30000,
+      input: JSON.stringify({ hook_event_name: 'SessionStart', source: 'startup', session_id: 'test', cwd }),
+      env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT }
+    });
+    return JSON.parse(out).hookSpecificOutput.additionalContext;
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+const validSession = (extra = {}) => ({
+  $schemaVersion: '1',
+  branch: 'feature/session-test',
+  tasks: [{ id: 'task-1', status: 'done' }],
+  decisions: [],
+  nextSteps: [],
+  ...extra,
+});
+
+test('decisions without a note never render as "undefined"', () => {
+  const ctx = runHookWithSession(validSession({
+    decisions: [{ at: '2026-11-02T00:00:00.000Z' }, { at: '2026-11-02T00:00:01.000Z', note: 'Kept note' }],
+  }));
+  assert.ok(ctx.includes('Kept note'));
+  assert.ok(!ctx.includes('undefined'), 'a note-less decision rendered as undefined');
+});
+
+test('corrupt session JSON prints no session block', () => {
+  const ctx = runHookWithSession('{ not json');
+  assert.ok(!ctx.includes('Session state detected'));
+});
+
+test('schema-invalid session (empty branch) prints no session block', () => {
+  const ctx = runHookWithSession(validSession({ branch: '' }));
+  assert.ok(!ctx.includes('Session state detected'));
+});
+
+test('schema-invalid session (bad task status) prints no session block', () => {
+  const ctx = runHookWithSession(validSession({ tasks: [{ id: 't', status: 'bogus' }] }));
+  assert.ok(!ctx.includes('Session state detected'));
+});
+
+test('load hint resolves session-state from the plugin root, not ./lib', () => {
+  const ctx = runHookWithSession(validSession());
+  assert.ok(!ctx.includes("require('./lib/session-state')"), 'hint uses a cwd-relative require');
+  assert.ok(ctx.includes(path.join(REPO_ROOT, 'lib', 'session-state')) || ctx.includes('CLAUDE_PLUGIN_ROOT'),
+    'hint must name the plugin lib path');
+});
+
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

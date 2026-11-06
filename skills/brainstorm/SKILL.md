@@ -13,9 +13,9 @@ description: Use when starting any new feature, significant change, or when you 
 - [ ] Phase 1.5: Repo Exploration
 - [ ] Phase 2: Exploring Approaches
 - [ ] Phase 3: Presenting the Design
-- [ ] Phase 3.5: Scope Confirmation (BLOCKING)
+- [ ] Phase 3.5: Scope Confirmation (BLOCKING) — on approval, write `.envoy/brainstorm/issue-plan-approved.json`
 - [ ] Phase 4: Create GitHub Issue and Task Handoff (existing-issue mode: edit #<n> instead)
-- [ ] Phase 5: Final Handoff
+- [ ] Phase 5: Final Handoff — clear `.envoy/brainstorm/`, then hand off to pickup
 
 ## Overview
 
@@ -82,7 +82,21 @@ correct:
    it will contain.
 2. Ask: "Does this scope look right, or does anything need to be added,
    removed, or narrowed before I create the issue?"
-3. Do NOT run `gh issue create` until the user confirms or edits the scope.
+3. Do NOT run `gh issue create` until the user explicitly confirms the
+   scope; if they edit it, re-present the revised scope and ask again.
+4. Only after the user explicitly confirms the final scope — never on an edit
+   request alone — record the approval in
+   `.envoy/brainstorm/issue-plan-approved.json`. The issue-create guard
+   (`lib/contract-guard.js`) checks this file before allowing the issue to be
+   created, so write it now, before Phase 4 (the block below is step 4's
+   command):
+
+```bash
+mkdir -p .envoy/brainstorm
+cat > .envoy/brainstorm/issue-plan-approved.json <<EOF
+{"\$schemaVersion":"1","approved":true,"approvedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+EOF
+```
 
 The task list inside the issue is what absorbs size — a big issue with a
 long task list is normal. Do not split into multiple issues; that is no
@@ -203,6 +217,17 @@ gh issue edit "$ISSUE_NUMBER" --body-file "$BODY_FILE"
 ```
 
 ### Phase 5: Final Handoff
+
+First clear this run's brainstorm state. The issue and `.envoy-tasks/<n>.json`
+are written by now, and a leftover `.envoy/brainstorm/session.json` would make
+the issue-create guard block the next brainstorm in this checkout as a
+duplicate create:
+
+```bash
+rm -rf .envoy/brainstorm
+```
+
+Then announce:
 
 "**Design complete!**
 
