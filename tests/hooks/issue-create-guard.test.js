@@ -321,5 +321,49 @@ test('existing-issue mode: gh issue create is hard-blocked and names the existin
   }
 });
 
+section('review 2 (#98): brainstorm state is read from the payload cwd (where the shell wrote it)');
+
+const BASH_GUARD_COMBINED = path.join(REPO_ROOT, 'hooks', 'bash-guard-combined.js');
+const CREATE_CMD = ['gh', 'issue', 'create', '--title', 'x', '--body', 'y'].join(' ');
+
+for (const script of [ISSUE_CREATE_GUARD, BASH_GUARD_COMBINED]) {
+  const name = path.basename(script);
+
+  test(`${name}: duplicate create blocks when session.json is under the payload cwd, not the hook cwd`, () => {
+    const tmp = mkTmp();
+    try {
+      const sub = path.join(tmp, 'wt');
+      writeSession(sub, 42);
+      const r = spawnSync('node', [script], {
+        cwd: tmp,
+        encoding: 'utf8',
+        input: JSON.stringify({ ...bashEvent(CREATE_CMD), cwd: sub }),
+        env: { ...process.env },
+      });
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test(`${name}: an approval marker under the payload cwd allows the create under strict`, () => {
+    const tmp = mkTmp();
+    try {
+      const sub = path.join(tmp, 'wt');
+      writeApproval(sub);
+      const r = spawnSync('node', [script], {
+        cwd: tmp,
+        encoding: 'utf8',
+        input: JSON.stringify({ ...bashEvent(CREATE_CMD), cwd: sub }),
+        env: { ...process.env, ENVOY_HOOK_PROFILE: 'strict' },
+      });
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+      assert.strictEqual(readLog(tmp), null, 'nothing logged under the hook cwd');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+}
+
 process.stdout.write(`\n\x1b[1m${passed} passed, ${failed} failed\x1b[0m\n`);
 process.exit(failed === 0 ? 0 : 1);
