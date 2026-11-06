@@ -523,6 +523,17 @@ test('schema declares the optional task fields updateTask writes (summary, updat
   assert(validateSchema('session', s).valid);
 });
 
+test('load of a schema-valid file without decisions/nextSteps defaults them to [] (no crash downstream)', () => {
+  const dir = freshDir();
+  fs.mkdirSync(path.dirname(sessionFileIn(dir)), { recursive: true });
+  fs.writeFileSync(sessionFileIn(dir), JSON.stringify({ $schemaVersion: '1', branch: 'x', tasks: [] }));
+  const s = session.load(dir);
+  assert.deepStrictEqual(s.decisions, []);
+  assert.deepStrictEqual(s.nextSteps, []);
+  assert.doesNotThrow(() => session.formatForPrompt(s));
+  assert.doesNotThrow(() => session.addDecision(s, 'kept going'));
+});
+
 test('schema description no longer names the retired root-level file', () => {
   const { loadSchema } = require(path.join(LIB, 'validate-schema'));
   assert.ok(!loadSchema('session').description.includes('.envoy-' + 'session'));

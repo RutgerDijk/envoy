@@ -156,6 +156,28 @@ test('session for a different issue is replaced by a fresh seed', () => {
   assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).issueNumber, 2497);
 });
 
+test('resume reconciles the session with a changed task list (kept status, renamed, added, removed)', () => {
+  const dir = makeTmpDir();
+  const tasksPath = path.join(dir, '.envoy-tasks', '2497.json');
+  fs.mkdirSync(path.dirname(tasksPath), { recursive: true });
+  const write = (tasks) => fs.writeFileSync(tasksPath, JSON.stringify({ $schemaVersion: '1', issueNumber: 2497, strategy: 'batch', tasks }));
+  const task = (id, title) => ({ id, title, files: ['src/foo.ts'], acceptance: ['works'] });
+  write([task('t1', 'One'), task('t2', 'Two'), task('t3', 'Three')]);
+  assert.strictEqual(runPreflight(dir, ['2497']).status, 'ok');
+  const file = path.join(dir, '.envoy', 'pickup', 'session.json');
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+  saved.tasks[0].status = 'done';
+  fs.writeFileSync(file, JSON.stringify(saved, null, 2));
+  write([task('t1', 'One'), task('t2', 'Two, renamed'), task('t4', 'Four')]);
+  const { status, out } = runPreflight(dir, ['2497']);
+  assert.strictEqual(status, 'ok', out);
+  assert.match(out, /reconciled/i);
+  const after = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepStrictEqual(after.tasks.map((t) => [t.id, t.name, t.status]), [
+    ['t1', 'One', 'done'], ['t2', 'Two, renamed', 'pending'], ['t4', 'Four', 'pending'],
+  ]);
+});
+
 test('invalid existing session -> fatal, file left untouched (progress is never overwritten)', () => {
   const dir = makeTmpDir();
   writeTasksFile(dir, 2497);

@@ -98,6 +98,13 @@ for (const file of ['tdd.md', 'verify.md']) {
   test(`${file}: snippets are shell blocks`, () => {
     for (const { lang } of sessionSnippets(file)) assert.strictEqual(lang, 'bash');
   });
+
+  test(`${file}: snippets call the session-state CLI, never require the lib inline (CLAUDE.md: preflight owns the plumbing)`, () => {
+    for (const { body } of sessionSnippets(file)) {
+      assert.ok(!/require\(/.test(body), 'inline require() of the lib');
+      assert.ok(/lib\/session-state\.js" (sync|next-steps|task|decision)\b/.test(body), 'expected a node lib/session-state.js <command> call');
+    }
+  });
 }
 
 test('tdd.md Step 9 snippet runs: sets branch from git and adds tasks from .envoy-tasks', () => {
@@ -106,6 +113,13 @@ test('tdd.md Step 9 snippet runs: sets branch from git and adds tasks from .envo
   const s = readSession(dir);
   assert.strictEqual(s.branch, 'feature/7-snippet');
   assert.deepStrictEqual(s.tasks.map(t => t.id).sort(), ['task-1', 'task-2']);
+});
+
+test('tdd.md Step 9 snippet drops a task that was removed from the issue', () => {
+  const dir = seedRepo('feature/7-snippet');
+  fs.writeFileSync(path.join(dir, '.envoy-tasks', '7.json'), JSON.stringify({ tasks: [{ id: 'task-2', title: 'Second' }] }));
+  for (const { body } of sessionSnippets('tdd.md')) runSnippet(body, dir);
+  assert.deepStrictEqual(readSession(dir).tasks.map(t => t.id), ['task-2']);
 });
 
 test('verify.md snippet runs: records next steps', () => {
