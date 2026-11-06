@@ -188,7 +188,7 @@ test('reviewers pass through', () => {
 
 test('missing rate-limit comment body yields not-rate-limited', () => {
   const snap = prStatus.buildSnapshot({ ...rawInputs, rateLimitCommentBody: null });
-  assert.deepStrictEqual(snap.coderabbit.rateLimit, { rateLimited: false, resetsAt: null });
+  assert.deepStrictEqual(snap.coderabbit.rateLimit, { rateLimited: false, resetsAt: null, stale: false });
 });
 
 test('missing lastActivityAt yields null idleMinutes', () => {
