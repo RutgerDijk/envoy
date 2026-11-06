@@ -53,9 +53,10 @@ count_checks() {  # usage: count_checks <jq args...> <filter>; prints a number o
   if [ -z "$CHECKS" ]; then echo unknown; return; fi
   printf '%s' "$CHECKS" | jq "$@" 2>/dev/null || echo unknown
 }
-PENDING_JQ='[.[] | select((.bucket // "") == "pending")] | length'
+# CodeRabbit's own check is not CI (the coderabbit wait owns it), so both counts leave it out.
+PENDING_JQ='[.[] | select(((.name // "") | test("coderabbit"; "i")) | not) | select((.bucket // "") == "pending")] | length'
 # "cancel" counts as failing: a cancelled check is not green (lib/pr-status.js treats CANCELLED as failing too).
-FAILED_JQ='[.[] | select((.bucket // "") == "fail" or (.bucket // "") == "cancel")
+FAILED_JQ='[.[] | select(((.name // "") | test("coderabbit"; "i")) | not) | select((.bucket // "") == "fail" or (.bucket // "") == "cancel")
         | select(($skip == "true" and ((.name // "") | ascii_downcase) == ($gate | ascii_downcase)) | not)] | length'
 
 CHECKS=$(fetch_checks)   # ONE read, after the background wait has exited
