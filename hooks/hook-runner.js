@@ -34,16 +34,20 @@ const HOOK_PROFILES = {
   'coderabbit-aggregator':  ['standard', 'strict'],
   'correction-detector':    ['standard', 'strict'],
   'cost-summary-export':    ['standard', 'strict'],
+  // Not a hooks.json entry: lib/tab-title.js, launched detached by
+  // session-start.sh and finalize, checks this itself via shouldRun().
+  'tab-title':              ['standard', 'strict'],
 };
 
 /**
  * Check if a hook should run in the current profile.
  * @param {string} hookName - Name of the hook
+ * @param {object} [env] - Environment to read (defaults to process.env)
  * @returns {boolean}
  */
-function shouldRun(hookName) {
-  const profile = (process.env.ENVOY_HOOK_PROFILE || 'standard').toLowerCase();
-  const disabledList = (process.env.ENVOY_DISABLED_HOOKS || '')
+function shouldRun(hookName, env = process.env) {
+  const profile = (env.ENVOY_HOOK_PROFILE || 'standard').toLowerCase();
+  const disabledList = (env.ENVOY_DISABLED_HOOKS || '')
     .split(',')
     .map(h => h.trim())
     .filter(Boolean);

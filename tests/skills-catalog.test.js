@@ -88,11 +88,11 @@ test('exactly 5 original directories are gone', () => {
   }
 });
 
-test('skills/ directory count is 23 (27 baseline - 5 originals + 1 merged)', () => {
+test('skills/ directory count is 24 (27 baseline - 5 originals + 1 merged + 1 start, #93)', () => {
   const count = fs
     .readdirSync(SKILLS_DIR, { withFileTypes: true })
     .filter((d) => d.isDirectory()).length;
-  assert.strictEqual(count, 23, `expected 23 skill directories, found ${count}`);
+  assert.strictEqual(count, 24, `expected 24 skill directories, found ${count}`);
 });
 
 section('skills/envoy-authoring is the real merged skill');
@@ -201,14 +201,80 @@ test('no skills/, hooks/, lib/, docs/wiki/, tests/, README.md, CLAUDE.md file re
 });
 
 section('README.md and plugin.json report the corrected skill count');
-test('README.md says "23 skills"', () => {
+test('README.md says "24 skills"', () => {
   const content = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
-  assert.ok(/23 skills/.test(content), 'expected README.md to say "23 skills"');
+  assert.ok(/24 skills/.test(content), 'expected README.md to say "24 skills"');
 });
 
-test('.claude-plugin/plugin.json description says "23 skills"', () => {
+test('.claude-plugin/plugin.json description says "24 skills"', () => {
   const content = fs.readFileSync(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8');
-  assert.ok(/23 skills/.test(content), 'expected plugin.json description to say "23 skills"');
+  assert.ok(/24 skills/.test(content), 'expected plugin.json description to say "24 skills"');
+});
+
+section('skills/start is a flexible skill wired to the /envoy:start scripts (#93)');
+const START_SKILL = path.join(SKILLS_DIR, 'start', 'SKILL.md');
+const readStart = () => fs.readFileSync(START_SKILL, 'utf8');
+
+test('skills/start/SKILL.md exists with name: start and a description', () => {
+  assert.ok(fs.existsSync(START_SKILL), 'expected skills/start/SKILL.md to exist');
+  const fm = readFrontmatter(readStart());
+  assert.ok(fm, 'expected YAML frontmatter block');
+  assert.strictEqual(fm.name, 'start');
+  assert.ok(fm.description && fm.description.length > 0, 'expected non-empty description');
+});
+
+test('skills/start is flexible: no preflight.js or contract.json', () => {
+  assert.ok(!fs.existsSync(path.join(SKILLS_DIR, 'start', 'preflight.js')), 'flexible skill must not ship preflight.js');
+  assert.ok(!fs.existsSync(path.join(SKILLS_DIR, 'start', 'contract.json')), 'flexible skill must not ship contract.json');
+});
+
+test('skills/start/SKILL.md has Announce-at-start and Integration with Envoy sections', () => {
+  const content = readStart();
+  assert.ok(/\*\*Announce at start:\*\*/.test(content), 'expected an "Announce at start" directive');
+  assert.ok(/^## Integration with Envoy/m.test(content), 'expected an "## Integration with Envoy" section');
+});
+
+test('skills/start/SKILL.md references the renderer, collector, opener and titler', () => {
+  const content = readStart();
+  for (const ref of ['bin/envoy-start.js', 'lib/start-status.js', 'lib/start-choices.js', 'lib/open-session.js', 'lib/tab-title.js']) {
+    assert.ok(content.includes(ref), `expected skills/start/SKILL.md to reference ${ref}`);
+  }
+});
+
+test('skills/start/SKILL.md drives choices through lib/start-choices.js, not inline node -e programs', () => {
+  const content = readStart();
+  assert.ok(!/node -e/.test(content), 'expected no inline `node -e` programs in skills/start/SKILL.md');
+  for (const sub of ['options', 'resume', 'dir']) {
+    assert.ok(
+      new RegExp(`start-choices\\.js"? ${sub} "\\$SNAP"`).test(content),
+      `expected a \`start-choices.js ${sub} "$SNAP"\` invocation`
+    );
+  }
+});
+
+test('skills/start/SKILL.md gives each invocation its own immutable snapshot (no shared path)', () => {
+  const content = readStart();
+  assert.ok(!/\.envoy\/start\/snapshot\.json/.test(content), 'expected no fixed .envoy/start/snapshot.json path');
+  assert.ok(/mktemp "[^"]*\.envoy\/start\/snapshot\.XXXXXX"/.test(content), 'expected a mktemp-created unique snapshot');
+  assert.ok(/echo "SNAP=\$SNAP"/.test(content), 'expected Step 2 to print SNAP=<path>');
+  const literalSnaps = content.match(/^SNAP='<[^>]+>'/gm) || [];
+  assert.strictEqual(literalSnaps.length, 2, 'expected resume and cleanup blocks to set SNAP to the printed literal path');
+  assert.ok(!/SNAP="\$\(git rev-parse/.test(content), 'resume/cleanup must not recompute a shared SNAP path');
+  assert.ok(/find "[^"]*\.envoy\/start" -maxdepth 1 -name 'snapshot\.\*' -mtime \+1 -delete/.test(content),
+    'expected bounded pruning of old snapshots');
+  assert.ok(content.includes("'\\''"), "expected guidance to escape a ' in the pasted SNAP path as '\\''");
+});
+
+test('skills/start/SKILL.md stays well under 200 lines', () => {
+  const lines = readStart().split('\n').length;
+  assert.ok(lines < 200, `expected under 200 lines, got ${lines}`);
+});
+
+test('envoy:start is listed in using-envoy and README', () => {
+  const usingEnvoy = fs.readFileSync(path.join(SKILLS_DIR, 'using-envoy', 'SKILL.md'), 'utf8');
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  assert.ok(usingEnvoy.includes('envoy:start'), 'expected skills/using-envoy/SKILL.md to list envoy:start');
+  assert.ok(readme.includes('envoy:start'), 'expected README.md to list envoy:start');
 });
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);

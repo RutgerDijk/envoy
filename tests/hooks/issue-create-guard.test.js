@@ -283,5 +283,43 @@ test('session.json missing issueNumber field still blocks, no "#undefined" leak'
   }
 });
 
+section('existing-issue brainstorm mode (session.json mode: existing-issue)');
+
+function writeExistingIssueSession(cwd, issueNumber) {
+  const dir = path.join(cwd, '.envoy', 'brainstorm');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'session.json'),
+    JSON.stringify({ $schemaVersion: '1', issueNumber, mode: 'existing-issue', createdAt: new Date().toISOString() })
+  );
+}
+
+test('existing-issue mode: gh issue edit --body-file on the target issue is allowed, no log', () => {
+  const tmp = mkTmp();
+  try {
+    writeExistingIssueSession(tmp, 82);
+    const r = runGate(tmp, bashEvent('gh issue edit "$ISSUE_NUMBER" --body-file /tmp/envoy-issue-body.md'));
+    assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    assert.strictEqual(readLog(tmp), null);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('existing-issue mode: gh issue create is hard-blocked and names the existing issue as the target', () => {
+  const tmp = mkTmp();
+  try {
+    writeExistingIssueSession(tmp, 82);
+    const r = runGate(tmp, bashEvent('gh issue create --title "x" --body "y"'));
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    assert.ok(r.stderr.includes('#82'), `names #82: ${r.stderr}`);
+    assert.ok(/existing issue #82/i.test(r.stderr) && /gh issue edit/.test(r.stderr),
+      `explains this run plans existing issue #82 and points at gh issue edit: ${r.stderr}`);
+    assert.ok(!/already created in this brainstorm run/.test(r.stderr), 'does not claim an issue was created');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 process.stdout.write(`\n\x1b[1m${passed} passed, ${failed} failed\x1b[0m\n`);
 process.exit(failed === 0 ? 0 : 1);

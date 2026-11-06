@@ -20,6 +20,18 @@ const SESSION_START = path.join(REPO_ROOT, 'hooks', 'session-start.sh');
 const { appendEvent, readLedger } = require(path.join(REPO_ROOT, 'lib', 'ledger'));
 const { writeActiveSkill, clearActiveSkill } = require(path.join(REPO_ROOT, 'lib', 'active-skill'));
 
+
+// The real hook launches lib/tab-title.js; strip terminal markers so a run
+// inside cmux / opted-in VS Code never renames the developer's tab.
+function hermeticEnv(extra) {
+  const env = { ...process.env, ...extra };
+  for (const k of ['CMUX_WORKSPACE_ID', 'CMUX_SURFACE_ID', 'CMUX_TAB_ID', 'TERM_PROGRAM',
+    'CLAUDE_CODE_DISABLE_TERMINAL_TITLE', 'ENVOY_TAB_TITLE_TTY', 'ENVOY_TAB_TITLE_PID']) {
+    delete env[k];
+  }
+  return env;
+}
+
 let passed = 0;
 let failed = 0;
 
@@ -57,7 +69,7 @@ function runSessionStart(cwd, source, session) {
     encoding: 'utf8',
     timeout: 30000,
     input: JSON.stringify({ hook_event_name: 'SessionStart', source: source || 'startup', session_id: 'test', cwd }),
-    env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT, ...(session ? { CLAUDE_SESSION_ID: session } : {}) },
+    env: hermeticEnv({ CLAUDE_PLUGIN_ROOT: REPO_ROOT, ...(session ? { CLAUDE_SESSION_ID: session } : {}) }),
   });
 }
 

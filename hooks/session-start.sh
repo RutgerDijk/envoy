@@ -10,6 +10,39 @@ exec < /dev/null
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Label the terminal tab with the branch's issue (and PR) — cmux / VS Code only.
+# Detached and silenced: it can never block or delay session start, and never
+# writes to this hook's stdout (which is JSON context). For opted-in VS Code
+# users only, the owning tty is resolved here synchronously (a few local ps
+# calls) because the detached child is reparented and loses its ancestry.
+# node is spawned only when a supported terminal is present. Opt out with
+# ENVOY_DISABLED_HOOKS=tab-title (comma-separated, like hook-runner.js).
+case ",${ENVOY_DISABLED_HOOKS// /}," in
+    *,tab-title,*) ;;
+    *)
+        TAB_TTY=""
+        if [ "$TERM_PROGRAM" = "vscode" ] && [ "$CLAUDE_CODE_DISABLE_TERMINAL_TITLE" = "1" ]; then
+            _tt_pid=$$
+            _tt_hops=0
+            while [ -n "$_tt_pid" ] && [ "$_tt_pid" -gt 0 ] 2>/dev/null && [ "$_tt_hops" -lt 32 ]; do
+                read -r _tt_ppid _tt_tty <<< "$(ps -o ppid=,tty= -p "$_tt_pid" 2>/dev/null)"
+                if [ -n "$_tt_tty" ] && [ "$_tt_tty" != "??" ] && [ "$_tt_tty" != "?" ]; then
+                    # Only real terminal devices (lib/tab-title.js re-validates).
+                    if [[ "$_tt_tty" =~ ^(tty[A-Za-z0-9_.]+|pts/[0-9]+)$ ]]; then
+                        TAB_TTY="/dev/$_tt_tty"
+                    fi
+                    break
+                fi
+                _tt_pid=$_tt_ppid
+                _tt_hops=$((_tt_hops + 1))
+            done
+        fi
+        if [ -n "$CMUX_WORKSPACE_ID" ] || [ -n "$TAB_TTY" ]; then
+            ( ENVOY_TAB_TITLE_TTY="$TAB_TTY" node "$PLUGIN_DIR/lib/tab-title.js" </dev/null >/dev/null 2>&1 & )
+        fi
+        ;;
+esac
+
 HOOK_SOURCE=$(HOOK_INPUT="$HOOK_INPUT" node -e '
   try {
     const s = JSON.parse(process.env.HOOK_INPUT || "{}");
