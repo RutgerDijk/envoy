@@ -529,6 +529,43 @@ for (const cmd of [
   });
 }
 
+section('review 2 (#98): popd and cd - return to a known directory');
+
+for (const cmd of [
+  'pushd /tmp; popd; echo {} > .eslintrc.json',
+  'pushd /tmp && popd && echo {} > .eslintrc.json',
+  'pushd /tmp; pushd /var; popd; popd; echo {} > .eslintrc.json',
+  'cd /tmp; cd -; echo {} > .eslintrc.json',
+  'cd /tmp && cd - && echo {} > .eslintrc.json',
+  'cd sub; cd -; echo {} > .eslintrc.json',
+]) {
+  test(`blocks a write after returning into the project: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      fs.mkdirSync(path.join(tmp, 'sub'));
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+for (const cmd of [
+  'pushd /tmp; pushd /var; popd; echo {} > .eslintrc.json',
+  'cd sub; cd /tmp; cd -; cd -; echo {} > .eslintrc.json',
+]) {
+  test(`allows a write while still outside the project: ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      fs.mkdirSync(path.join(tmp, 'sub'));
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+test('popd without a pushd in the command leaves the directory unknown (relative target not judged)', () => {
+  const cp = loadConfigProtection();
+  assert.deepStrictEqual(cp.extractWriteTargetsWithDirs('popd; echo {} > .eslintrc.json'), [{ target: '.eslintrc.json', dirs: null }]);
+});
+
 for (const cmd of [
   'cd sub && echo {} > .eslintrc.json',
   'cd sub && echo {} > ../.prettierrc',
