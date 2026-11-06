@@ -113,10 +113,13 @@ function evaluateBasename(filePath, blocked = BLOCKED_PATTERNS, warn = WARN_PATT
 // following lines; symlinked paths are compared lexically, not via realpath;
 // a target starting with `$VAR` is resolved literally, relative to cwd.
 // Directory changes: `cd DIR` / `pushd DIR` (scoped to its own `( ... )`
-// subshell) move the base for later segments; `env -C DIR` in the wrapper
+// subshell) move the base for later segments; `popd` and `cd -` return to the
+// directory tracked before them (unknown when it was not set in this command);
+// `env -C DIR` in the wrapper
 // prefix moves it for that command's operands only (redirects are opened by
 // the shell, before env runs);
-// when DIR cannot be established (`cd`, `cd -`, `~`, `$VAR`, `$(...)`),
+// when DIR cannot be established (`cd`, `~`, `$VAR`, `$(...)`, a `cd -` or
+// `popd` with nothing tracked before it),
 // relative targets after it are not blocked (absolute targets still are).
 // ---------------------------------------------------------------------------
 
@@ -548,12 +551,15 @@ function blockDepthAfter(depth, words, quoted) {
 function collectWriteTargets(command) {
   const out = [];
   const copy = (d) => (d === null ? null : d.slice());
-  // One frame per enclosing subshell: {id, alts, chain, after, depth}.
+  // One frame per enclosing subshell: {id, alts, chain, after, depth, pushed, prev}.
   // alts = directories possible now; chain = directories inside the current
   // `cd X && ...` list; after = directories once that list ends; depth =
-  // compound-command nesting. Entering a subshell copies the parent's
-  // directories; leaving it discards its own, so siblings never share state.
-  const frameOf = (id, alts) => ({ id, alts, chain: null, after: null, depth: 0 });
+  // compound-command nesting; pushed = the `pushd` stack (what `popd`
+  // returns to); prev = directories before the last cd/pushd/popd (what
+  // `cd -` returns to; null = unknown). Entering a subshell copies the
+  // parent's state; leaving it discards its own, so siblings never share it.
+  const copyAlts = (alts) => (alts === null ? null : alts.map(copy));
+  const frameOf = (id, alts, pushed = [], prev = null) => ({ id, alts, chain: null, after: null, depth: 0, pushed, prev });
   const dirStack = [frameOf(0, [[]])];
   for (const seg of tokenize(command)) {
     const scopes = seg.scopes || [0];
@@ -562,7 +568,7 @@ function collectWriteTargets(command) {
     dirStack.length = Math.max(common, 1);
     for (let j = dirStack.length; j < scopes.length; j++) {
       const parent = dirStack[j - 1];
-      dirStack.push(frameOf(scopes[j], (parent.chain || parent.alts).map(copy)));
+      dirStack.push(frameOf(scopes[j], copyAlts(parent.chain || parent.alts), parent.pushed.map(copyAlts), copyAlts(parent.prev)));
     }
     const frame = dirStack[dirStack.length - 1];
     frame.depth = blockDepthAfter(frame.depth, seg.words, seg.quoted);
@@ -589,10 +595,22 @@ function collectWriteTargets(command) {
     }
     for (const target of targets) out.push({ target, alts: cmdAlts.map(copy) });
 
-    // `cd`/`pushd` move the base for the following segments in this subshell.
-    if (words.length && (words[0] === 'cd' || words[0] === 'pushd')) {
-      const operand = words.slice(1).find((a) => a === '-' || !a.startsWith('-'));
-      const moved = shellAlts.map((d) => (d !== null && resolvableDir(operand) ? [...d, operand] : null));
+    // `cd`/`pushd`/`popd` move the base for the following segments in this subshell.
+    if (words.length && (words[0] === 'cd' || words[0] === 'pushd' || words[0] === 'popd')) {
+      const unknown = shellAlts.map(() => null);
+      let moved;
+      if (words[0] === 'popd') {
+        // `popd` returns to the directory the matching `pushd` left; with
+        // options, or without a pushd in this command, the result is unknown.
+        const top = frame.pushed.length ? frame.pushed.pop() : null;
+        moved = top && words.length === 1 ? top : unknown;
+      } else {
+        const operand = words.slice(1).find((a) => a === '-' || !a.startsWith('-'));
+        if (operand === '-') moved = frame.prev ? copyAlts(frame.prev) : unknown;
+        else moved = shellAlts.map((d) => (d !== null && resolvableDir(operand) ? [...d, operand] : null));
+        if (words[0] === 'pushd') frame.pushed.push(copyAlts(shellAlts));
+      }
+      frame.prev = copyAlts(shellAlts);
       const conditional = frame.depth > 0
         || ['&&', '||', '|', '&'].includes(seg.prevSep)
         || ['|', '&'].includes(seg.sep);
