@@ -7,8 +7,10 @@
  * Mirrors edit-guard-combined (PreToolUse[Edit|Write]): one `node` process
  * per Bash call instead of one per guard.
  *
- *  - issue-create-guard: observe-gate.js guardIssueCreate, unchanged (runs
- *    first so its observe-log side effects are exactly as before).
+ *  - issue-create-guard: observe-gate.js guardIssueCreate (runs first so its
+ *    observe-log side effects are exactly as before). It reads brainstorm
+ *    state from the payload cwd, the directory config-protection resolves
+ *    relative targets against.
  *  - config-protection: configProtection.runBash — blocks commands that write
  *    a protected linter/formatter config basename (see the parser notes in
  *    config-protection.js for supported forms and known limits).

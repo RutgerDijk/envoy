@@ -116,12 +116,16 @@ function observe(gate, data) {
  *    ENVOY_HOOK_PROFILE=strict (mirroring `observe()`'s strict handling,
  *    including the ENVOY_OVERRIDE escape hatch).
  *
+ * Brainstorm state (.envoy/brainstorm/*) is read from the payload's `cwd`
+ * when present: brainstorm writes it relative to the shell's directory,
+ * which is not the hook process's cwd once the session has cd'd elsewhere.
+ *
  * FAIL-OPEN: any error is swallowed and we return 0.
- * @param {string} cwd
+ * @param {string} hookCwd fallback when the payload carries no cwd
  * @param {string} data raw stdin payload (the Bash PreToolUse event JSON)
  * @returns {number} exit code: 0 to allow, 2 to block
  */
-function guardIssueCreate(cwd, data) {
+function guardIssueCreate(hookCwd, data) {
   try {
     let event = {};
     try {
@@ -129,6 +133,7 @@ function guardIssueCreate(cwd, data) {
     } catch {
       return 0; // malformed event — fail open
     }
+    const cwd = typeof event.cwd === 'string' && event.cwd ? event.cwd : hookCwd;
 
     const toolName = event.tool_name || event.toolName;
     if (toolName !== 'Bash') return 0;
