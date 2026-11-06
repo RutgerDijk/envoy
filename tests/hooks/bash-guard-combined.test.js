@@ -61,6 +61,7 @@ function cleanEnv(env) {
   delete base.ENVOY_OVERRIDE;
   delete base.ENVOY_DISABLED_HOOKS;
   delete base.ENVOY_HOOK_PROFILE;
+  delete base.CLAUDE_PROJECT_DIR;
   return { ...base, ...env };
 }
 
@@ -580,6 +581,64 @@ test('unknown cd target still blocks an absolute in-project target', () => {
     const real = fs.realpathSync(tmp);
     const r = runScript(BASH_GUARD_COMBINED, real, bashEvent(`cd "$X" && echo x > ${real}/.eslintrc.json`));
     assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+  });
+});
+
+section('review fixes (#94): conditional cd, case patterns, $VAR roots, CLAUDE_PROJECT_DIR');
+
+// A cd that may not run leaves the original directory as a possibility, so a
+// protected write that lands in the project from either directory is blocked.
+for (const cmd of [
+  'case $x in a) cd /tmp;; esac; echo {} > .eslintrc.json',
+  'case $x in (a) cd /tmp;; esac; echo {} > .eslintrc.json',
+  'if [ -n "$x" ]; then cd /tmp; fi; echo {} > .eslintrc.json',
+  'if [ -n "$x" ]; then cd /tmp; else true; fi\necho {} > .prettierrc',
+  'false || cd /tmp; echo {} > .eslintrc.json',
+  'test -d /tmp && cd /tmp; echo {} > .eslintrc.json',
+  'while false; do cd /tmp; done; echo {} > .eslintrc.json',
+  'for d in /tmp; do cd "$d"; done; echo {} > .eslintrc.json',
+  'cd /tmp | cat; echo {} > .eslintrc.json',
+  '(case $x in a) echo hi;; esac; cd /tmp); echo {} > .eslintrc.json',
+]) {
+  test(`blocks (cd may not have run): ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+for (const cmd of [
+  'cd /tmp; echo {} > .eslintrc.json',
+  'if true; then cd /tmp && echo {} > .eslintrc.json; fi',
+  'case $x in a) cd /tmp && echo {} > .eslintrc.json;; esac',
+  'test -d /tmp && cd /tmp && echo {} > .eslintrc.json',
+  'echo {} > "$HOME/.prettierrc"',
+  'cp x.json "${HOME}/.eslintrc.json"',
+  'tee $XDG_CONFIG_HOME/.prettierrc < /dev/null',
+]) {
+  test(`allows (write lands outside the project): ${JSON.stringify(cmd)}`, () => {
+    withTmp((tmp) => {
+      const r = runScript(BASH_GUARD_COMBINED, tmp, bashEvent(cmd));
+      assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
+    });
+  });
+}
+
+test('CLAUDE_PROJECT_DIR is the project root: a write from a subdir to the root config is blocked', () => {
+  withTmp((tmp) => {
+    const real = fs.realpathSync(tmp);
+    const sub = path.join(real, 'sub');
+    fs.mkdirSync(sub);
+    const r = runScript(BASH_GUARD_COMBINED, sub, { ...bashEvent('echo {} > ../.eslintrc.json'), cwd: sub }, { CLAUDE_PROJECT_DIR: real });
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}\n${r.stderr}`);
+  });
+});
+
+test('ENVOY_DISABLED_HOOKS=config-protection also turns off the Edit/Write check', () => {
+  withTmp((tmp) => {
+    const r = runScript(EDIT_GUARD_COMBINED, tmp, { tool_name: 'Edit', tool_input: { file_path: '/repo/.eslintrc.json' } }, { ENVOY_DISABLED_HOOKS: 'config-protection' });
+    assert.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\n${r.stderr}`);
   });
 });
 
