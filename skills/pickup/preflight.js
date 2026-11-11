@@ -228,7 +228,7 @@ function printScratchpad(tasks) {
 // Issue number for the scratchpad CLI modes: later Bash calls in Step 13 do
 // not carry ENVOY_ISSUE_NUMBER, so the session seeded by the briefing run
 // (.envoy/pickup/session.json in the worktree) wins, then the env var.
-function resolveIssueNumber() {
+function resolveSessionIssueNumber() {
   try {
     const session = JSON.parse(fs.readFileSync(path.join(CWD, '.envoy', 'pickup', 'session.json'), 'utf8'));
     if (session && Number.isInteger(session.issueNumber) && session.issueNumber > 0) return String(session.issueNumber);
@@ -241,7 +241,7 @@ function resolveIssueNumber() {
 // issue's embedded block (the same source main() materializes from). Throws
 // with a human-readable reason; never writes session state or tasks files.
 function loadTasksOrThrow() {
-  const issueNumber = resolveIssueNumber();
+  const issueNumber = resolveSessionIssueNumber();
   if (!issueNumber) throw new Error('no issue number (no .envoy/pickup/session.json issueNumber and no ENVOY_ISSUE_NUMBER)');
   const tasksFile = path.join(CWD, '.envoy-tasks', `${issueNumber}.json`);
   let tasks;
@@ -358,15 +358,18 @@ function scratchpadDone(agentId) {
   return 0;
 }
 
-// CLI dispatch. Any unrecognized argument exits 2 — a typo must never fall
-// through to main(), which would reset session.json mid-Step 13.
+// CLI dispatch. The briefing run forwards "$ARGUMENTS" quoted, so no tokens
+// or a leading positional (`2497`, `#2497`) goes to main(). Any unrecognized
+// `--` flag exits 2 — a typo must never fall through to main(), which would
+// reset session.json mid-Step 13.
 function usageError(msg) {
   process.stderr.write(`${msg}\nUsage: preflight.js [--init-scratchpad [--exclude <id,...>] | --scratchpad-briefing <task-id> | --scratchpad-post <task-id> <category> <message> [files...] | --scratchpad-done <task-id>]\n`);
   return 2;
 }
 
 function cli(argv) {
-  if (argv.length === 0) { main(); return 0; }
+  const tokens = argv.flatMap((a) => a.split(/\s+/)).filter(Boolean);
+  if (tokens.length === 0 || !tokens[0].startsWith('--')) { main(); return 0; }
   const [mode, ...rest] = argv;
   switch (mode) {
     case '--init-scratchpad': {
