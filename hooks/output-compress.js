@@ -46,6 +46,9 @@ const ALLOWED_INVOCATIONS = {
  */
 const FAILURE_SIGNAL = /: error |\berror [A-Z]+\d+:|\berror :|aborted|host process crashed/i;
 
+/** jest (`Tests: 3 passed`) and vitest (`Tests  3 passed`) summary lines. */
+const JEST_SUMMARY = /Tests?:\s+\d+|Tests\s+\d+ (passed|failed)/;
+
 /**
  * Failed-test identity markers: xUnit `<name> [FAIL]` and vstest
  * `Failed <name>`. The compressor rewrites these lines, so the guard checks
@@ -109,6 +112,10 @@ function buildOutput(event) {
   if (!invocation || !invocation.test(simple)) return null;
   if (compressed === stdout) return null;
   if (!keepsFailureSignals(stdout, compressed)) return null;
+  // jest-vitest falls back to "All tests passed." when it finds no FAIL and
+  // no summary line — also true of a run that died before reporting (config
+  // or transform error, missing module). Only trust it next to a summary.
+  if (savings.pattern === 'jest-vitest' && !JEST_SUMMARY.test(stdout)) return null;
 
   return {
     hookSpecificOutput: {
