@@ -512,6 +512,22 @@ test('loss guard applies to every allowlisted entry (cargo drops indented code-l
   assert.strictEqual(out, '');
 });
 
+// jest-vitest falls back to "All tests passed." when it sees no FAIL line and
+// no summary line. A run that dies before reporting (config/transform error,
+// missing module) has neither, and short output slips under the 95% safeguard.
+const noSummaryCases = [
+  ['npx jest', '● Validation Error:\n\n  Module ts-jest in the transform option was not found.\n'],
+  ['npx vitest run', "Error: Cannot find module './setup'\n  at resolve (node:internal)\n"],
+];
+
+for (const [cmd, stdout] of noSummaryCases) {
+  test(`loss guard: ${cmd} without a test summary is never reported as passed`, () => {
+    assert.strictEqual(compress(stdout, cmd).compressed, 'All tests passed.', 'precondition: compressor false-green');
+    const { out } = runHook(hook, JSON.stringify(bashEvent(cmd, stdout)));
+    assert.strictEqual(out, '');
+  });
+}
+
 test('allowlist: jest-vitest only for direct jest/vitest; cargo excludes test; npm/playwright removed', () => {
   const A = hook.ALLOWED_INVOCATIONS;
   assert.ok(A['jest-vitest'].test('npx jest --ci') && A['jest-vitest'].test('vitest run'));
