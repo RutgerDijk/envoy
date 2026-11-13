@@ -16,7 +16,7 @@ brainstorm → pickup → review → finalize → cleanup
 - **Review**: 5-layer local review (Cleanup, Lint, Sonnet AI, Visual, Docs) with complexity tiers
 - **Finalization**: Create PR, handle GitHub CodeRabbit comments, verify, ship
 - **Cleanup**: Remove worktrees and branches, clear session state, sync wiki
-- **Hooks**: Config protection, batch lint, cost tracking, learning extraction
+- **Hooks**: Config protection, batch lint, build/test output compression, cost tracking, learning extraction
 - **Self-learning**: Graduated patterns, cross-PR CodeRabbit aggregation, user correction detection
 - **Token optimization**: ~60% cost savings via Sonnet AI review, selective stack loading, regex-first parsing
 - **Advanced patterns**: Eval harness, search-first, iterative retrieval, completion signals
@@ -68,6 +68,7 @@ envoy/
 │   ├── post-edit-accumulator.js # Tracks edits for batched lint
 │   ├── stop-batch-lint.js      # Runs lint once across all edits
 │   ├── post-pr-poll.js         # Triggers CodeRabbit polling
+│   ├── output-compress.js      # Compresses noisy build/test output
 │   ├── cost-tracker.js         # Async JSONL token logging
 │   └── learning-extractor.js   # Async review pattern learning
 ├── memory/                # Team learnings (committed, shared via git)
@@ -240,6 +241,7 @@ Envoy uses hooks for automation without polluting the context window:
 | `config-protection` | PreToolUse | Blocks linter/formatter config modifications |
 | `post-edit-accumulator` | PostToolUse | Tracks edited files for batched processing |
 | `post-pr-poll` | PostToolUse | Triggers CodeRabbit polling after PR creation |
+| `output-compress` | PostToolUse | Compresses noisy `dotnet build`/`test`, `jest`/`vitest` and `cargo build`/`check`/`clippy` output; leaves it unchanged if a failure line would be lost |
 | `stop-batch-lint` | Stop | Runs lint once across all session edits |
 | `cost-tracker` | Stop (async) | Logs token usage to JSONL for optimization |
 | `learning-extractor` | Stop (async) | Saves recurring review patterns to memory |
@@ -257,6 +259,12 @@ Control which hooks run via `ENVOY_HOOK_PROFILE`:
 | `strict` | All hooks + verification gates | Maximum safety |
 
 Override individual hooks: `ENVOY_DISABLED_HOOKS=cost-tracker,learning-extractor`
+
+### Context Efficiency
+
+The `output-compress` hook (`hooks/output-compress.js`, `standard` and `strict` profiles) runs `lib/output-compressor.js` over Bash output. It only compresses simple `dotnet build`/`test`, direct `jest`/`vitest` and `cargo build`/`check`/`clippy` commands, and passes the original through whenever a failure line would be lost. Disable it with `ENVOY_DISABLED_HOOKS=output-compress`.
+
+The other context-efficiency modules are wired through skill preflights and CLI steps: pickup preflight prints known patterns, task complexity and (for parallel work) a shared scratchpad; review preflight prints known patterns and file relevance; finalize and hotfix run `lib/compliance.js --pr-body` to append an Envoy trail to the PR body. See the Context Efficiency wiki page for details.
 
 ## Self-Learning System
 

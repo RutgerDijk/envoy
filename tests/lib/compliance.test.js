@@ -62,24 +62,6 @@ function fullFlowLedger() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Exports
-// ═══════════════════════════════════════════════════════════════════
-
-section('exports');
-
-test('buildTrail is exported', () => {
-  assert.strictEqual(typeof compliance.buildTrail, 'function');
-});
-
-test('renderTrail is exported', () => {
-  assert.strictEqual(typeof compliance.renderTrail, 'function');
-});
-
-test('compliance is exported', () => {
-  assert.strictEqual(typeof compliance.compliance, 'function');
-});
-
-// ═══════════════════════════════════════════════════════════════════
 // buildTrail — pure, over already-parsed arrays
 // ═══════════════════════════════════════════════════════════════════
 
@@ -97,6 +79,22 @@ test('marks pickup/review/finalize/cleanup ran with their ts', () => {
 
 test('carries branch + issue label from ledger events', () => {
   const m = compliance.buildTrail({ ledger: fullFlowLedger(), observeLog: [] });
+  assert.strictEqual(m.branch, 'feature/41-compliance');
+  assert.strictEqual(m.issue, 41);
+});
+
+test('labels the trail with the latest branch, not the pre-worktree main checkout', () => {
+  // Brainstorm and pickup preflight run in the main checkout before the
+  // worktree exists, so their events carry branch "main"; the PR's branch
+  // only appears on later events.
+  const m = compliance.buildTrail({
+    ledger: [
+      { ts: '2026-07-21T09:00:00.000Z', branch: 'main', type: 'skill-started', skill: 'brainstorm' },
+      { ts: '2026-07-21T10:00:00.000Z', branch: 'main', issue: 41, type: 'skill-started', skill: 'pickup' },
+      { ts: '2026-07-21T11:00:00.000Z', branch: 'feature/41-compliance', type: 'handoff-written', from: 'pickup', to: 'review' },
+    ],
+    observeLog: [],
+  });
   assert.strictEqual(m.branch, 'feature/41-compliance');
   assert.strictEqual(m.issue, 41);
 });
@@ -359,6 +357,119 @@ test('readObserveLog missing file → []', () => {
   } finally {
     cleanup(dir);
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Pending vs skipped (render-time phase) + hotfix brainstorm
+// ═══════════════════════════════════════════════════════════════════
+
+section('pending: steps that cannot have run yet');
+
+function preMergeLedger() {
+  return fullFlowLedger().filter((e) => !(e.type === 'skill-started' && e.skill === 'cleanup'));
+}
+
+test('buildTrail marks a not-yet-run step listed in pending as pending', () => {
+  const m = compliance.buildTrail({ ledger: preMergeLedger(), observeLog: [], pending: ['cleanup'] });
+  const c = m.steps.find((s) => s.skill === 'cleanup');
+  assert.strictEqual(c.ran, false);
+  assert.strictEqual(c.pending, true);
+});
+
+test('pending never overrides a step that did run', () => {
+  const m = compliance.buildTrail({ ledger: fullFlowLedger(), observeLog: [], pending: ['cleanup'] });
+  const c = m.steps.find((s) => s.skill === 'cleanup');
+  assert.strictEqual(c.ran, true);
+  assert.ok(!c.pending);
+});
+
+test('without a pending option, a missing cleanup stays skipped (opt-in)', () => {
+  const m = compliance.buildTrail({ ledger: preMergeLedger(), observeLog: [] });
+  assert.ok(!m.steps.find((s) => s.skill === 'cleanup').pending);
+});
+
+test('renderTrail shows pending distinctly from skipped', () => {
+  const out = compliance.renderTrail(
+    compliance.buildTrail({ ledger: preMergeLedger(), observeLog: [], pending: ['cleanup'] })
+  );
+  const line = out.split('\n').find((l) => /\bcleanup\b/.test(l));
+  assert.ok(/pending/.test(line), `cleanup line says pending: ${line}`);
+  assert.ok(!/skipped/.test(line), 'cleanup line does not say skipped');
+  assert.ok(!/✗\s+cleanup/.test(out), 'pending is not rendered with ✗');
+});
+
+test('compliance(dir, {pending}) forwards the pending option', () => {
+  const dir = makeTmp('compliance-pending-');
+  try {
+    writeLines(dir, '.envoy/ledger.jsonl', preMergeLedger());
+    const out = compliance.compliance(dir, { pending: ['cleanup'] });
+    assert.ok(/cleanup\s+pending/.test(out), out);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+section('hotfix: brainstorm shown as a sanctioned skip');
+
+test('brainstorm present + sanctionedSkip when hotfix ran without brainstorm', () => {
+  const ledger = [
+    { ts: '2026-07-22T08:00:00.000Z', branch: 'hotfix/99-crash', issue: 99, type: 'skill-started', skill: 'hotfix' },
+  ];
+  const m = compliance.buildTrail({ ledger, observeLog: [] });
+  const b = m.steps.find((s) => s.skill === 'brainstorm');
+  assert.ok(b, 'brainstorm step present under hotfix');
+  assert.strictEqual(b.ran, false);
+  assert.strictEqual(b.sanctionedSkip, true);
+});
+
+test('hotfix render lists brainstorm and review as sanctioned skips', () => {
+  const ledger = [
+    { ts: '2026-07-22T08:00:00.000Z', branch: 'hotfix/99-crash', issue: 99, type: 'skill-started', skill: 'hotfix' },
+  ];
+  const out = compliance.renderTrail(compliance.buildTrail({ ledger, observeLog: [] }));
+  assert.ok(/brainstorm\s+skipped \(sanctioned/.test(out), out);
+  assert.ok(/review\s+skipped \(sanctioned/.test(out), out);
+});
+
+section('hotfix: no unsanctioned skips (hotfix does pickup + finalize jobs itself)');
+
+test('hotfix trail has no plain unsanctioned skipped lines', () => {
+  const ledger = [
+    { ts: '2026-07-22T08:00:00.000Z', branch: 'hotfix/99-crash', issue: 99, type: 'skill-started', skill: 'hotfix' },
+  ];
+  const m = compliance.buildTrail({ ledger, observeLog: [], pending: ['cleanup'] });
+  for (const skill of ['brainstorm', 'pickup', 'review', 'finalize']) {
+    assert.strictEqual(m.steps.find((s) => s.skill === skill).sanctionedSkip, true, `${skill} sanctioned`);
+  }
+  const out = compliance.renderTrail(m);
+  const plain = out.split('\n').filter((l) => /✗/.test(l) && /skipped\s*$/.test(l));
+  assert.deepStrictEqual(plain, [], `unsanctioned skip lines: ${plain.join(' | ')}`);
+  assert.ok(/pickup/.test(out.split('Hotfix:')[1]), 'hotfix prose mentions pickup');
+  assert.ok(/finalize/.test(out.split('Hotfix:')[1]), 'hotfix prose mentions finalize');
+});
+
+test('pickup/finalize skips NOT sanctioned without a hotfix', () => {
+  const m = compliance.buildTrail({ ledger: [
+    { ts: 't', branch: 'b', type: 'skill-started', skill: 'review' },
+  ], observeLog: [] });
+  assert.ok(!m.steps.find((s) => s.skill === 'pickup').sanctionedSkip);
+  assert.ok(!m.steps.find((s) => s.skill === 'finalize').sanctionedSkip);
+});
+
+section('sanitizeForPrBody hardening');
+
+test('strips bidi, zero-width and C1 control characters', () => {
+  const dirty = 'a\u200Bb\u200Fc\u202Ad\u202Ee\u2066f\u2069g\u0080h\u009Fi\nj';
+  assert.strictEqual(compliance.sanitizeForPrBody(dirty, '/nohome'), 'abcdefghi\nj');
+});
+
+test('home replacement respects a path boundary', () => {
+  const home = '/Users/rutger';
+  const out = compliance.sanitizeForPrBody(
+    '/Users/rutger/x /Users/rutgerX/y /Users/rutger end /Users/rutger',
+    home
+  );
+  assert.strictEqual(out, '~/x /Users/rutgerX/y ~ end ~');
 });
 
 // ═══════════════════════════════════════════════════════════════════

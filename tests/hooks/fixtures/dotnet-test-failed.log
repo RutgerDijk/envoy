@@ -1,0 +1,29 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+/home/dev/Fx/Lib/Class1.cs(6,44): warning CS0168: The variable 'unused' is declared but never used [/home/dev/Fx/Lib/Lib.csproj]
+  Lib -> /home/dev/Fx/Lib/bin/Debug/net10.0/Lib.dll
+  Lib.Tests -> /home/dev/Fx/Lib.Tests/bin/Debug/net10.0/Lib.Tests.dll
+Test run for /home/dev/Fx/Lib.Tests/bin/Debug/net10.0/Lib.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.63]     Lib.Tests.OrderServiceTests.Total_MultipliesQuantityByPrice [FAIL]
+[xUnit.net 00:00:00.64]     Lib.Tests.OrderServiceTests.Total_ZeroQuantity_IsZero [FAIL]
+  Failed Lib.Tests.OrderServiceTests.Total_MultipliesQuantityByPrice [4 ms]
+  Error Message:
+   Assert.Equal() Failure: Values differ
+Expected: 30
+Actual:   31
+  Stack Trace:
+     at Lib.Tests.OrderServiceTests.Total_MultipliesQuantityByPrice() in /home/dev/Fx/Lib.Tests/CalculatorTests.cs:line 14
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Failed Lib.Tests.OrderServiceTests.Total_ZeroQuantity_IsZero [< 1 ms]
+  Error Message:
+   Assert.Equal() Failure: Values differ
+Expected: 0
+Actual:   1
+  Stack Trace:
+     at Lib.Tests.OrderServiceTests.Total_ZeroQuantity_IsZero() in /home/dev/Fx/Lib.Tests/CalculatorTests.cs:line 17
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+Failed!  - Failed:     2, Passed:    11, Skipped:     0, Total:    13, Duration: 184 ms - Lib.Tests.dll (net10.0)
