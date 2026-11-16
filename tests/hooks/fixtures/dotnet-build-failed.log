@@ -1,0 +1,17 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+/home/dev/Fx/Lib/Class1.cs(6,44): warning CS0168: The variable 'unused' is declared but never used [/home/dev/Fx/Lib/Lib.csproj]
+/home/dev/Fx/Lib/Broken.cs(6,21): error CS0266: Cannot implicitly convert type 'decimal' to 'int'. An explicit conversion exists (are you missing a cast?) [/home/dev/Fx/Lib/Lib.csproj]
+/home/dev/Fx/Lib/Broken.cs(7,16): error CS0103: The name 'totl' does not exist in the current context [/home/dev/Fx/Lib/Lib.csproj]
+/home/dev/Fx/Lib/Broken.cs(9,26): error CS0103: The name 'Repository' does not exist in the current context [/home/dev/Fx/Lib/Lib.csproj]
+
+Build FAILED.
+
+/home/dev/Fx/Lib/Class1.cs(6,44): warning CS0168: The variable 'unused' is declared but never used [/home/dev/Fx/Lib/Lib.csproj]
+/home/dev/Fx/Lib/Broken.cs(6,21): error CS0266: Cannot implicitly convert type 'decimal' to 'int'. An explicit conversion exists (are you missing a cast?) [/home/dev/Fx/Lib/Lib.csproj]
+/home/dev/Fx/Lib/Broken.cs(7,16): error CS0103: The name 'totl' does not exist in the current context [/home/dev/Fx/Lib/Lib.csproj]
+/home/dev/Fx/Lib/Broken.cs(9,26): error CS0103: The name 'Repository' does not exist in the current context [/home/dev/Fx/Lib/Lib.csproj]
+    1 Warning(s)
+    3 Error(s)
+
+Time Elapsed 00:00:02.85

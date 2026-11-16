@@ -1,0 +1,12 @@
+  Determining projects to restore...
+  Restored /home/dev/Fx/Lib/Lib.csproj (in 166 ms).
+  Restored /home/dev/Fx/Lib.Tests/Lib.Tests.csproj (in 371 ms).
+  Restored /home/dev/Fx/B.Tests/B.Tests.csproj (in 371 ms).
+/home/dev/Fx/Lib/Class1.cs(6,44): warning CS0168: The variable 'unused' is declared but never used [/home/dev/Fx/Lib/Lib.csproj]
+  Lib -> /home/dev/Fx/Lib/bin/Debug/net10.0/Lib.dll
+/home/dev/Fx/B.Tests/CalculatorTests.cs(2,56): error CS0103: The name 'undefinedName' does not exist in the current context [/home/dev/Fx/B.Tests/B.Tests.csproj]
+  Lib.Tests -> /home/dev/Fx/Lib.Tests/bin/Debug/net10.0/Lib.Tests.dll
+Test run for /home/dev/Fx/Lib.Tests/bin/Debug/net10.0/Lib.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    13, Skipped:     0, Total:    13, Duration: 141 ms - Lib.Tests.dll (net10.0)

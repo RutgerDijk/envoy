@@ -1,0 +1,14 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+/home/dev/Fx/Lib/Class1.cs(6,44): warning CS0168: The variable 'unused' is declared but never used [/home/dev/Fx/Lib/Lib.csproj]
+  Lib -> /home/dev/Fx/Lib/bin/Debug/net10.0/Lib.dll
+/home/dev/Fx/Lib/Lib.csproj(9,54): error : Required env var API_KEY is not set
+
+Build FAILED.
+
+/home/dev/Fx/Lib/Class1.cs(6,44): warning CS0168: The variable 'unused' is declared but never used [/home/dev/Fx/Lib/Lib.csproj]
+/home/dev/Fx/Lib/Lib.csproj(9,54): error : Required env var API_KEY is not set
+    1 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:01.40
